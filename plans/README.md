@@ -1,16 +1,16 @@
-# Piani di Implementazione: Registrazione con Passkey e Tenant Personale
+# Implementation Plans: Passkey Signup and Personal Tenant Provisioning
 
-Questa cartella contiene i piani dettagliati per l'implementazione della registrazione self-service con passkey e creazione automatica del tenant personale in Nocturne.
+This directory contains the detailed implementation plans for self-service passkey registration and automatic personal tenant provisioning in Nocturne.
 
-## Stato di Avanzamento
+## Progress Tracking
 
-| PR / Fase | Documento | Stato | Descrizione |
+| PR / Phase | Document | Status | Description |
 |---|---|:---:|---|
-| **Verifiche** | [06-verifiche-tecniche.md](file:///C:/git/nocturne/plans/06-verifiche-tecniche.md) | `DONE` | Riscontro sui 6 punti tecnici verificati nel codice |
-| **PR 1** | [01-fase-0-preparazione.md](file:///C:/git/nocturne/plans/01-fase-0-preparazione.md) | `TODO` | Correzione `getAuthStatus` su apex ed estrazione `IUsernameValidator` |
-| **PR 2** | [02-fasi-1-e-2-backend.md](file:///C:/git/nocturne/plans/02-fasi-1-e-2-backend.md) | `TODO` | Configurazione operatore, controller `SignupController`, pipeline e test |
-| **PR 3** | [03-fase-3-frontend.md](file:///C:/git/nocturne/plans/03-fase-3-frontend.md) | `TODO` | Client NSwag, nuova route `/signup/`, wizard a 3 step, test integrazione ed e2e |
-| **PR 4** | [04-fase-2.4-approvazione.md](file:///C:/git/nocturne/plans/04-fase-2.4-approvazione.md) | `TODO` | Approvazione tenant da platform admin (`/activate`), notifiche in-app e badge UI |
-| **PR 5** | [05-fase-2.5-pulizia-account.md](file:///C:/git/nocturne/plans/05-fase-2.5-pulizia-account.md) | `TODO` | Background service per pulizia periodica degli account abbandonati |
+| **Verifications** | [06-technical-verifications.md](file:///C:/git/nocturne/plans/06-technical-verifications.md) | `DONE` | Findings on the 6 preliminary technical points verified against active code |
+| **PR 1** | [01-phase-0-preparation.md](file:///C:/git/nocturne/plans/01-phase-0-preparation.md) | `IN PROGRESS` | Fix `getAuthStatus` on tenantless hosts & extract `IUsernameValidator` |
+| **PR 2** | [02-phases-1-and-2-backend.md](file:///C:/git/nocturne/plans/02-phases-1-and-2-backend.md) | `TODO` | Operator configuration, `SignupController`, pipeline & guard tests |
+| **PR 3** | [03-phase-3-frontend.md](file:///C:/git/nocturne/plans/03-phase-3-frontend.md) | `TODO` | NSwag client, new `/signup/` route, 3-step wizard, integration & e2e tests |
+| **PR 4** | [04-phase-2.4-approval.md](file:///C:/git/nocturne/plans/04-phase-2.4-approval.md) | `TODO` | Tenant approval by platform admin (`/activate`), in-app notifications & admin UI |
+| **PR 5** | [05-phase-2.5-account-cleanup.md](file:///C:/git/nocturne/plans/05-phase-2.5-account-cleanup.md) | `TODO` | Background service for periodic pruning of abandoned enrolling accounts |
 
-Piano generale di riferimento: [00-piano-completo.md](file:///C:/git/nocturne/plans/00-piano-completo.md) (`TODO`)
+Master plan: [00-master-plan.md](file:///C:/git/nocturne/plans/00-master-plan.md) (`IN PROGRESS`)
