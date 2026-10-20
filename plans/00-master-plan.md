@@ -18,9 +18,9 @@ A visitor arriving at the apex domain (`https://nocturne.cgmsim.com/signup`) cho
 
 ## Implementation Phases
 
-### - [ ] Phase 0: Preparation (PR 1) — `IN PROGRESS`
+### - [x] Phase 0: Preparation (PR 1) — `DONE`
 - [x] 1. Reapply `getAuthStatus` fix on the apex login page: do not invoke it when the host has no tenant (`page.data.tenantless === true`).
-- [ ] 2. Extract username validation from `SetupController` into a shared `IUsernameValidator` service in `Services/Identity/`. Ensure `SetupControllerTests` remain 100% green without modification.
+- [x] 2. Extract username validation from `SetupController` into a shared `IUsernameValidator` service in `Services/Identity/`. Ensure `SetupControllerTests` remain 100% green without modification.
 
 ### - [ ] Phase 1: Configuration (PR 2) — `TODO`
 - [ ] Add `OperatorSignupConfiguration` (`Enabled = false`, `RequiresApproval = false`) to `OperatorConfiguration`.

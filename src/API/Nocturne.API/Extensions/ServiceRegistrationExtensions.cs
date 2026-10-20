@@ -475,6 +475,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITenantOverviewService, TenantOverviewService>();
         services.AddScoped<IGlucoseStatusClassifier, GlucoseStatusClassifier>();
         services.AddScoped<IInstanceSetupState, InstanceSetupState>();
+        services.AddScoped<IUsernameValidator, UsernameValidator>();
         services.AddScoped<DemoTenantService>();
         services.AddScoped<ScalarAuthProvider>();
 

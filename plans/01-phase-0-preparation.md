@@ -1,6 +1,6 @@
 # PR 1: Phase 0 — Preparation
 
-> **Status**: `IN PROGRESS`
+> **Status**: `DONE`
 
 ## Objective
 A preliminary, self-contained refactoring without breaking changes or behavioral shifts:
@@ -17,12 +17,12 @@ A preliminary, self-contained refactoring without breaking changes or behavioral
   - [x] Verify that `allowAccessRequests` derives to `false` on tenantless hosts
   - [x] Verify frontend type check (`pnpm run check`)
 
-- [ ] **2. Extract `IUsernameValidator`**
-  - [ ] Define `IUsernameValidator` interface in `src/API/Nocturne.API/Services/Identity/IUsernameValidator.cs`
-  - [ ] Implement `UsernameValidator.cs` encapsulating regex, reserved usernames, operator webhook, and availability checks
-  - [ ] Register `IUsernameValidator` as scoped in `ServiceRegistrationExtensions.cs`
-  - [ ] Inject `IUsernameValidator` into `SetupController.cs` and delegate validation
-  - [ ] Run `SetupControllerTests` to guarantee 100% green tests without modification
+- [x] **2. Extract `IUsernameValidator`**
+  - [x] Define `IUsernameValidator` interface in `src/API/Nocturne.API/Services/Identity/IUsernameValidator.cs`
+  - [x] Implement `UsernameValidator.cs` encapsulating regex, reserved usernames, operator webhook, and availability checks
+  - [x] Register `IUsernameValidator` as scoped in `ServiceRegistrationExtensions.cs`
+  - [x] Inject `IUsernameValidator` into `SetupController.cs` and delegate validation
+  - [x] Run `SetupControllerTests` to guarantee 100% green tests without modification
 
 ---
 
@@ -58,5 +58,5 @@ public interface IUsernameValidator
 ---
 
 ## Acceptance Criteria
-- [ ] `dotnet test --filter "FullyQualifiedName~SetupControllerTests"` passes with zero failures.
+- [x] `dotnet test --filter "FullyQualifiedName~SetupControllerTests"` passes with zero failures.
 - [x] `cd src/Web/packages/app && pnpm run check` passes with zero errors.

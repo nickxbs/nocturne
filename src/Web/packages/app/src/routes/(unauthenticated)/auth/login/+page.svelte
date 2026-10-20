@@ -22,9 +22,12 @@
   // Check auth state and redirect if already logged in
   const authStateQuery = getAuthState();
 
-  // Check if tenant allows access requests
-  const authStatusQuery = getAuthStatus();
-  const allowAccessRequests = $derived(authStatusQuery.current?.allowAccessRequests ?? false);
+  // Resolved once by the root layout; here it decides which sign-in methods can work at all.
+  const tenantless = page.data.tenantless === true;
+
+  // Check if tenant allows access requests (tenant-scoped; skip on tenantless host)
+  const authStatusQuery = tenantless ? null : getAuthStatus();
+  const allowAccessRequests = $derived(authStatusQuery?.current?.allowAccessRequests ?? false);
 
   let showRequestDialog = $state(false);
 
@@ -37,9 +40,6 @@
 
   // Get return URL from query params
   const returnUrl = $derived(page.url.searchParams.get("returnUrl") || "/");
-
-  // Resolved once by the root layout; here it decides which sign-in methods can work at all.
-  const tenantless = $derived(page.data.tenantless === true);
 
   // Redirect if already authenticated
   $effect(() => {

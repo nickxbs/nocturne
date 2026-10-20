@@ -51,6 +51,7 @@ public partial class SetupController : ControllerBase
     private readonly PlatformAdminBootstrapService _platformAdminBootstrap;
     private readonly IInstanceSetupState _setupState;
     private readonly ILogger<SetupController> _logger;
+    private readonly IUsernameValidator _usernameValidator;
 
     public SetupController(
         ITenantService tenantService,
@@ -65,7 +66,8 @@ public partial class SetupController : ControllerBase
         IHttpClientFactory httpClientFactory,
         PlatformAdminBootstrapService platformAdminBootstrap,
         IInstanceSetupState setupState,
-        ILogger<SetupController> logger)
+        ILogger<SetupController> logger,
+        IUsernameValidator? usernameValidator = null)
     {
         _tenantService = tenantService;
         _passkeyService = passkeyService;
@@ -80,18 +82,9 @@ public partial class SetupController : ControllerBase
         _platformAdminBootstrap = platformAdminBootstrap;
         _setupState = setupState;
         _logger = logger;
+        _usernameValidator = usernameValidator ?? new UsernameValidator(
+            dbFactory, _operatorConfig, httpClientFactory, logger);
     }
-
-    [GeneratedRegex(@"^[a-z0-9][a-z0-9._\-]{1,30}[a-z0-9]$")]
-    private static partial Regex UsernamePattern();
-
-    private static readonly HashSet<string> ReservedUsernames = ["admin", "system"];
-
-    /// <summary>
-    /// Whether the username webhook's last attempt has already been reported. See
-    /// <see cref="AskUsernameWebhookAsync"/>.
-    /// </summary>
-    private static int _usernameWebhookOutageReported;
 
     /// <summary>
     /// Create the first tenant on a fresh install. Only succeeds when zero tenants exist.
@@ -134,36 +127,8 @@ public partial class SetupController : ControllerBase
     public async Task<IActionResult> ValidateUsername(
         [FromQuery] string username, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(username))
-            return Ok(new SlugValidationResult(false, "Username is required"));
-
-        var normalized = username.Trim().ToLowerInvariant();
-
-        if (!UsernamePattern().IsMatch(normalized))
-            return Ok(new SlugValidationResult(false,
-                "Username must be 3-32 characters: letters, numbers, dots, underscores, and hyphens"));
-
-        if (ReservedUsernames.Contains(normalized))
-            return Ok(new SlugValidationResult(false, "This username is reserved"));
-
-        await using var context = await _dbFactory.CreatePlatformAsync(ct);
-
-        var tenant = await context.Tenants.AsNoTracking().ExcludeDemo().FirstOrDefaultAsync(ct);
-        if (tenant == null)
-            return Ok(new SlugValidationResult(false, "No tenant exists"));
-
-        await context.PinTenantAsync(tenant.Id, ct);
-
-        var exists = await context.TenantMembers.AsNoTracking()
-            .AnyAsync(m => m.TenantId == tenant.Id && m.Username == normalized, ct);
-
-        if (exists)
-            return Ok(new SlugValidationResult(false, "This username is already taken"));
-
-        if (await AskUsernameWebhookAsync(normalized, ct) is { IsValid: false } refusal)
-            return Ok(refusal);
-
-        return Ok(new SlugValidationResult(true));
+        var result = await _usernameValidator.ValidateForSetupAsync(username, ct);
+        return Ok(result);
     }
 
     /// <summary>
@@ -189,13 +154,11 @@ public partial class SetupController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.DisplayName))
             return Problem(detail: "Username and display name are required", statusCode: 400, title: "Bad Request");
 
-        var normalizedUsername = request.Username.Trim().ToLowerInvariant();
-        if (!UsernamePattern().IsMatch(normalizedUsername))
-            return Problem(detail: "Username must be 3-32 characters: letters, numbers, dots, underscores, and hyphens",
-                statusCode: 400, title: "Bad Request");
+        var format = _usernameValidator.ValidateFormat(request.Username);
+        if (!format.IsValid)
+            return Problem(detail: format.Message, statusCode: 400, title: "Bad Request");
 
-        if (ReservedUsernames.Contains(normalizedUsername))
-            return Problem(detail: "This username is reserved", statusCode: 400, title: "Bad Request");
+        var normalizedUsername = request.Username.Trim().ToLowerInvariant();
 
         var subjectId = await EnsureOwnerSubjectAsync(
             tenant!, request.DisplayName.Trim(), normalizedUsername, ct);
@@ -298,13 +261,11 @@ public partial class SetupController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.DisplayName))
             return Problem(detail: "Username and display name are required", statusCode: 400, title: "Bad Request");
 
-        var normalizedUsername = request.Username.Trim().ToLowerInvariant();
-        if (!UsernamePattern().IsMatch(normalizedUsername))
-            return Problem(detail: "Username must be 3-32 characters: letters, numbers, dots, underscores, and hyphens",
-                statusCode: 400, title: "Bad Request");
+        var format = _usernameValidator.ValidateFormat(request.Username);
+        if (!format.IsValid)
+            return Problem(detail: format.Message, statusCode: 400, title: "Bad Request");
 
-        if (ReservedUsernames.Contains(normalizedUsername))
-            return Problem(detail: "This username is reserved", statusCode: 400, title: "Bad Request");
+        var normalizedUsername = request.Username.Trim().ToLowerInvariant();
 
         if (request.ProviderId == Guid.Empty)
             return Problem(detail: "Provider ID is required", statusCode: 400, title: "Bad Request");
@@ -407,63 +368,7 @@ public partial class SetupController : ControllerBase
 
     #region Private Helpers
 
-    /// <summary>
-    /// The operator's username-validation webhook's verdict, or <see langword="null"/> when no
-    /// webhook is configured or it could not answer.
-    /// </summary>
-    /// <remarks>
-    /// Fails open. The webhook is an operator's extra restriction layered on the checks above, and
-    /// only this advisory probe consults it — the owner-creation steps never do, so refusing here
-    /// would not keep the name from being taken. An outage that refused every username instead
-    /// would strand the operator on the one screen with no way past it, on an instance that has no
-    /// account yet to correct the configuration from.
-    /// <para>
-    /// The endpoint is anonymous, so a caller sets the request volume; one log line per outage
-    /// keeps that from being a log-volume lever. The latch reopens when the webhook next answers.
-    /// </para>
-    /// </remarks>
-    private async Task<SlugValidationResult?> AskUsernameWebhookAsync(string username, CancellationToken ct)
-    {
-        if (string.IsNullOrEmpty(_operatorConfig.UsernameValidationWebhookUrl))
-            return null;
 
-        Exception? failure = null;
-        int? statusCode = null;
-
-        try
-        {
-            var client = _httpClientFactory.CreateClient("username-validation");
-            var response = await client.PostAsJsonAsync(
-                _operatorConfig.UsernameValidationWebhookUrl,
-                new { username },
-                ct);
-
-            if (response.IsSuccessStatusCode)
-            {
-                Interlocked.Exchange(ref _usernameWebhookOutageReported, 0);
-                return await response.Content.ReadFromJsonAsync<SlugValidationResult>(ct);
-            }
-
-            statusCode = (int)response.StatusCode;
-        }
-        catch (Exception ex)
-        {
-            if (ct.IsCancellationRequested)
-                return null;
-
-            failure = ex;
-        }
-
-        if (Interlocked.Exchange(ref _usernameWebhookOutageReported, 1) == 0)
-        {
-            _logger.LogWarning(
-                failure,
-                "Username validation webhook did not answer ({Outcome}); usernames are being accepted without it",
-                statusCode?.ToString() ?? "unreachable");
-        }
-
-        return null;
-    }
 
     /// <summary>
     /// Returns the sole tenant if exactly one exists and it has no non-system members,
