@@ -92,6 +92,28 @@ public class SignupController : ControllerBase
     }
 
     /// <summary>
+    /// Check whether a tenant slug is available for self-service registration.
+    /// </summary>
+    [HttpGet("validate-slug")]
+    [EnableRateLimiting("name-availability")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(SlugValidationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ValidateSlug(
+        [FromQuery] string slug, CancellationToken ct)
+    {
+        if (await CheckSignupDisabledOrSetupIncompleteAsync(ct) is { } guardResult)
+            return guardResult;
+
+        if (string.IsNullOrWhiteSpace(slug))
+            return Ok(new SlugValidationResult(false, "Slug is required"));
+
+        var result = await _tenantService.ValidateSlugAsync(slug, ct);
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Initiate passkey registration ceremony for public signup.
     /// Creates or updates an inactive enrolling subject and issues WebAuthn registration options.
     /// </summary>

@@ -151,6 +151,30 @@ public class SignupControllerTests : IDisposable
             .Which.IsValid.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task ValidateSlug_WhenSignupDisabled_Returns404()
+    {
+        var controller = BuildController(enabled: false);
+
+        var result = await controller.ValidateSlug("my-tenant", CancellationToken.None);
+
+        result.Should().BeOfType<NotFoundObjectResult>();
+    }
+
+    [Fact]
+    public async Task ValidateSlug_WhenAllowed_DelegatesToTenantService()
+    {
+        _tenantService.Setup(t => t.ValidateSlugAsync("my-tenant", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugValidationResult(true));
+        var controller = BuildController();
+
+        var result = await controller.ValidateSlug("my-tenant", CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<SlugValidationResult>()
+            .Which.IsValid.Should().BeTrue();
+    }
+
     // ── Options ───────────────────────────────────────────────────────────
 
     [Fact]
