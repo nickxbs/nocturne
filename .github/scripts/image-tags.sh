@@ -29,8 +29,12 @@ elif [[ "$GITHUB_REF" == refs/heads/main ]]; then
   version="develop"
   app_version=""
   extra="main-${GITHUB_SHA::7}"
+elif [[ "$GITHUB_REF" == refs/heads/cgmsim ]]; then
+  version="cgmsim"
+  app_version=""
+  extra="cgmsim-${GITHUB_SHA::7}"
 else
-  echo "::error::images are published from main and v* tags only, not ${GITHUB_REF}"
+  echo "::error::images are published from main, cgmsim, and v* tags only, not ${GITHUB_REF}"
   exit 1
 fi
 
