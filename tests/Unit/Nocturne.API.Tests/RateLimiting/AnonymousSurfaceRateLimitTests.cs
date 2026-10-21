@@ -62,6 +62,19 @@ public class AnonymousSurfaceRateLimitTests
     }
 
     /// <summary>
+    /// The public self-service signup controller is [AllowAnonymous], so every action on it carries a ceiling.
+    /// </summary>
+    [Fact]
+    public void EverySignupAction_CarriesAClientAddressPolicy()
+    {
+        var actions = Actions(typeof(SignupController));
+
+        actions.Should().HaveCount(3, "the scan should discover the signup actions");
+
+        Uncovered(actions).Should().BeEmpty();
+    }
+
+    /// <summary>
     /// Each of these answers from the database on a caller-supplied string with no session, so the
     /// anonymous request has to cost a permit.
     /// </summary>
@@ -93,6 +106,9 @@ public class AnonymousSurfaceRateLimitTests
     [InlineData(typeof(MemberInviteController), nameof(MemberInviteController.GetInviteInfo), "invite-lookup")]
     [InlineData(typeof(AlertInvitesController), nameof(AlertInvitesController.ValidateInvite), "invite-lookup")]
     [InlineData(typeof(LoginHandoffController), nameof(LoginHandoffController.ExchangeLoginCode), "login-handoff")]
+    [InlineData(typeof(SignupController), nameof(SignupController.Options), "signup")]
+    [InlineData(typeof(SignupController), nameof(SignupController.Complete), "signup")]
+    [InlineData(typeof(SignupController), nameof(SignupController.ValidateUsername), "name-availability")]
     public void EachAnonymousAction_CarriesItsOwnPolicy(Type controller, string action, string policy)
     {
         PolicyOn(Action(controller, action)).Should().Be(policy);

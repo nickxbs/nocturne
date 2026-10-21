@@ -13,6 +13,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Models.Services;
 
 namespace Nocturne.API.Controllers;
@@ -189,19 +190,28 @@ public class MetadataController : ControllerBase
     /// </summary>
     [HttpGet("multitenancy")]
     [RemoteQuery]
+    [ApiExplorerSettings(IgnoreApi = false)]
     [ProducesResponseType(typeof(MultitenancyInfo), 200)]
-    public ActionResult<MultitenancyInfo> GetMultitenancyInfo(
+    public async Task<ActionResult<MultitenancyInfo>> GetMultitenancyInfo(
         [FromServices] IOptions<BaseDomainOptions> config,
         [FromServices] IOptions<OperatorConfiguration> operatorConfig,
-        [FromServices] ITenantAccessor tenantAccessor)
+        [FromServices] ITenantAccessor tenantAccessor,
+        [FromServices] IInstanceSetupState setupState,
+        CancellationToken ct = default)
     {
         var tenantContext = tenantAccessor.Context;
+        var setupComplete = await setupState.IsSetupCompleteAsync(ct);
+        var signupActive = operatorConfig.Value.Signup.Enabled
+            && operatorConfig.Value.AllowSelfServiceCreation
+            && setupComplete;
 
         return Ok(new MultitenancyInfo
         {
             BaseDomain = config.Value.BaseDomain,
             SubdomainResolution = true,
             AllowSelfServiceCreation = operatorConfig.Value.AllowSelfServiceCreation,
+            SignupEnabled = signupActive,
+            SignupRequiresApproval = operatorConfig.Value.Signup.RequiresApproval,
             CurrentTenantSlug = tenantContext?.Slug,
             CurrentTenantId = tenantContext?.TenantId,
             CurrentTenantDisplayName = tenantContext?.DisplayName,
@@ -502,6 +512,17 @@ public class MultitenancyInfo
     /// Whether self-service tenant creation is allowed
     /// </summary>
     public bool AllowSelfServiceCreation { get; set; }
+
+    /// <summary>
+    /// Whether public self-service signup is currently active and allowed.
+    /// Requires Signup.Enabled, AllowSelfServiceCreation, and setup completion.
+    /// </summary>
+    public bool SignupEnabled { get; set; }
+
+    /// <summary>
+    /// Whether self-service signup requires platform admin approval.
+    /// </summary>
+    public bool SignupRequiresApproval { get; set; }
 }
 
 /// <summary>

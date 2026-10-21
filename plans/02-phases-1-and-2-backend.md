@@ -1,6 +1,6 @@
 # PR 2: Phases 1 and 2.1–2.3 — Configuration & Backend Signup
 
-> **Status**: `TODO`
+> **Status**: `DONE`
 
 ## Objective
 Introduce backend support for public self-service signup, disabled by default:
@@ -13,41 +13,41 @@ Introduce backend support for public self-service signup, disabled by default:
 
 ## Task List
 
-- [ ] **1. Operator Configuration**
-  - [ ] Add `OperatorSignupConfiguration` to `OperatorConfiguration.cs` (`Enabled = false`, `RequiresApproval = false`)
-  - [ ] Enforce combined activation rule (`Signup.Enabled && AllowSelfServiceCreation && SetupComplete`)
-  - [ ] Expose `SignupEnabled` and `SignupRequiresApproval` via `MetadataController.cs`
-  - [ ] Update `appsettings.example.json`, `.env.example`, and `scripts/publish-release.cs`
+- [x] **1. Operator Configuration**
+  - [x] Add `OperatorSignupConfiguration` to `OperatorConfiguration.cs` (`Enabled = false`, `RequiresApproval = false`)
+  - [x] Enforce combined activation rule (`Signup.Enabled && AllowSelfServiceCreation && SetupComplete`)
+  - [x] Expose `SignupEnabled` and `SignupRequiresApproval` via `MetadataController.cs`
+  - [x] Update `appsettings.example.json` and `scripts/publish-release.cs`
 
-- [ ] **2. Signup DTOs**
-  - [ ] Define `SignupOptionsRequest`, `SignupOptionsResponse`
-  - [ ] Define `SignupCompleteRequest`, `SignupCompleteResponse`
+- [x] **2. Signup DTOs**
+  - [x] Define `SignupOptionsRequest`, `SignupOptionsResponse`
+  - [x] Define `SignupCompleteRequest`, `SignupCompleteResponse`
 
-- [ ] **3. `SignupController.cs` Implementation**
-  - [ ] Implement `POST /api/v4/signup/options`:
-    - [ ] `PasskeyHostRefusal` check
-    - [ ] Guard: active signup (404) and setup complete (409)
-    - [ ] Username (`IUsernameValidator`) and slug (`ITenantService.ValidateSlugAsync`) validation
-    - [ ] Create or reuse enrolling subject (`IsActive = false`)
-    - [ ] Invoke `_passkeyService.GenerateRegistrationOptionsAsync`
-  - [ ] Implement `POST /api/v4/signup/complete`:
-    - [ ] Slug re-validation against concurrent claims
-    - [ ] Secure subject lookup with challenge token verification (`expectedSubjectId`)
-    - [ ] Invoke `_passkeyService.CompleteRegistrationAsync`
-    - [ ] Activate subject (`IsActive = true`)
-    - [ ] Create tenant (`TenantService.CreateAsync`) and set member username
-    - [ ] Generate recovery codes (`_recoveryCodeService.GenerateCodesAsync`)
-    - [ ] If `RequiresApproval`: notify platform admins, set `pendingApproval = true`
-    - [ ] If active: issue login code (`ILoginCodeService.IssueAsync`) and construct `handoffUrl`
-    - [ ] Exception handling with automatic cascading rollback (`DeleteSubjectAsync` + `DeleteAsync`)
-  - [ ] Implement `GET /api/v4/signup/validate-username` with `[RemoteQuery]`
+- [x] **3. `SignupController.cs` Implementation**
+  - [x] Implement `POST /api/v4/signup/options`:
+    - [x] `PasskeyHostRefusal` check
+    - [x] Guard: active signup (404) and setup complete (409)
+    - [x] Username (`IUsernameValidator`) and slug (`ITenantService.ValidateSlugAsync`) validation
+    - [x] Create or reuse enrolling subject (`IsActive = false`)
+    - [x] Invoke `_passkeyService.GenerateRegistrationOptionsAsync`
+  - [x] Implement `POST /api/v4/signup/complete`:
+    - [x] Slug re-validation against concurrent claims
+    - [x] Secure subject lookup with challenge token verification (`expectedSubjectId`)
+    - [x] Invoke `_passkeyService.CompleteRegistrationAsync`
+    - [x] Activate subject (`IsActive = true`)
+    - [x] Create tenant (`TenantService.CreateAsync`) and set member username
+    - [x] Generate recovery codes (`_recoveryCodeService.GenerateCodesAsync`)
+    - [x] If `RequiresApproval`: notify platform admins, set `pendingApproval = true`
+    - [x] If active: issue login code (`ILoginCodeService.IssueAsync`) and construct `handoffUrl`
+    - [x] Exception handling with automatic cascading rollback (`DeleteSubjectAsync` + `DeleteAsync`)
+  - [x] Implement `GET /api/v4/signup/validate-username` with `[RemoteQuery]`
 
-- [ ] **4. Pipeline & Middleware**
-  - [ ] Register `TenantlessPath("/api/v4/signup/", Prefix: true)` in `TenantResolutionMiddleware.cs`
-  - [ ] Register rate limit policy `signup` in `ServiceRegistrationExtensions.cs`
+- [x] **4. Pipeline & Middleware**
+  - [x] Register `TenantlessPath("/api/v4/signup/", Prefix: true)` in `TenantResolutionMiddleware.cs`
+  - [x] Register rate limit policy `signup` in `ServiceRegistrationExtensions.cs`
 
-- [ ] **5. Unit Tests & Guard Tests**
-  - [ ] Create `SignupControllerTests.cs` (404 when disabled, 409 when setup incomplete, 400 validations, retry, rollback, approval)
-  - [ ] Update `TenantlessAllowedPathsCoverageTests.cs`
-  - [ ] Update `AnonymousSurfaceRateLimitTests.cs`
-  - [ ] Update `TenantlessDemoSubjectCoverageTests.cs`
+- [x] **5. Unit Tests & Guard Tests**
+  - [x] Create `SignupControllerTests.cs` (404 when disabled, 409 when setup incomplete, 400 validations, retry, rollback, approval)
+  - [x] Update `TenantlessAllowedPathsCoverageTests.cs`
+  - [x] Update `AnonymousSurfaceRateLimitTests.cs`
+  - [x] Update `TenantlessDemoSubjectCoverageTests.cs`

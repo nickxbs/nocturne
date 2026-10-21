@@ -191,6 +191,8 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
             builder.UseSetting("INSTANCE_KEY", InstanceKey);
             builder.UseSetting("BASE_DOMAIN", $"localhost:{port}");
             builder.UseSetting("DemoService:Enabled", "false");
+            builder.UseSetting("Operator:AllowSelfServiceCreation", "true");
+            builder.UseSetting("Operator:Signup:Enabled", "true");
             builder.ConfigureTestServices(services =>
                 services.AddSingleton<IDemoModeService>(DemoModeService));
         });

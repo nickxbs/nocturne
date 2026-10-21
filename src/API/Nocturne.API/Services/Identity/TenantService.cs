@@ -92,8 +92,12 @@ public partial class TenantService : ITenantService
         _logger = logger;
     }
 
+    public Task<TenantCreatedDto> CreateAsync(
+        string slug, string displayName, Guid creatorSubjectId, CancellationToken ct = default) =>
+        CreateAsync(slug, displayName, creatorSubjectId, isActive: true, ct);
+
     public async Task<TenantCreatedDto> CreateAsync(
-        string slug, string displayName, Guid creatorSubjectId, CancellationToken ct = default)
+        string slug, string displayName, Guid creatorSubjectId, bool isActive, CancellationToken ct = default)
     {
         await using var context = await _factory.CreatePlatformAsync(ct);
 
@@ -101,7 +105,7 @@ public partial class TenantService : ITenantService
         {
             Slug = slug.ToLowerInvariant(),
             DisplayName = displayName,
-            IsActive = true,
+            IsActive = isActive,
         };
 
         context.Tenants.Add(tenant);

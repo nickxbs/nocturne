@@ -11,9 +11,19 @@ export const load: PageServerLoad = async ({ url, locals, cookies, parent }) => 
   const endpoint = await resolveAutoLoginEndpoint(locals);
   if (!endpoint) {
     const { tenantless } = await parent();
+    let signupEnabled = false;
+    if (tenantless) {
+      try {
+        const info = await locals.apiClient.metadata.getMultitenancyInfo();
+        signupEnabled = info?.signupEnabled === true;
+      } catch {
+        signupEnabled = false;
+      }
+    }
     return {
       guestCodePending: await hasPendingGuestCode(locals, tenantless),
       guestCodeDismissed: cookies.get(GUEST_CODE_DISMISSED_COOKIE) === "1",
+      signupEnabled,
     };
   }
 

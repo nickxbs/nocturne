@@ -106,6 +106,8 @@ public class TenantlessDemoSubjectCoverageTests
             ["DevAuthController.Login"] = DevOnly,
             ["DevAuthController.LoginJson"] = DevOnly,
 
+            ["MetadataController.GetMultitenancyInfo"] = "returns deployment multitenancy and self-service registration configuration; reads no session",
+
             ["OidcController.GetProviders"] = "lists the deployment's enabled identity providers so the sign-in page can render its buttons; reads no session",
             ["OidcController.Login"] = "starts the identity-provider sign-in and redirects to the provider; reads no session",
             ["OidcController.Callback"] = "mints the session; the subject comes from the provider's token response, not from any session on the request",

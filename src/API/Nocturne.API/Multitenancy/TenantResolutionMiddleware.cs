@@ -91,6 +91,7 @@ public class TenantResolutionMiddleware
         // Answers for the tenant: tenantless only so a fresh apex reports setup_required instead
         // of a 404, and served as the sole tenant so a configured install is not sent to /setup.
         new TenantlessPath("/api/v4/status", SoleTenantAtApex: true),
+        new TenantlessPath("/api/metadata/multitenancy", HttpMethods.Get),
         "/api/v4/me/tenants/validate-slug",
         // Cross-tenant caregiver overview: aggregates across the subject's tenants,
         // so it must be reachable from the apex in multi-tenant deployments. The
@@ -199,6 +200,7 @@ public class TenantResolutionMiddleware
         new TenantlessPath("/api/v4/dev-only/", Prefix: true),
         new TenantlessPath("/api/v4/platform/", Prefix: true),
         new TenantlessPath("/api/v4/setup/", Prefix: true),
+        new TenantlessPath("/api/v4/signup/", Prefix: true),
         // Cross-tenant overview hub: authorizes a subject in-band and joins per-tenant groups
         // itself, so the connection is negotiated from the apex with no tenant. Prefix, not
         // exact path: SignalR appends /negotiate to the hub path.

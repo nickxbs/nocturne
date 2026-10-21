@@ -27,7 +27,26 @@ public class OperatorConfiguration
     /// </summary>
     public string? UsernameValidationWebhookUrl { get; set; }
 
+    /// <summary>
+    /// Self-service passkey registration configuration.
+    /// </summary>
+    public OperatorSignupConfiguration Signup { get; set; } = new();
+
     public OperatorSupportConfiguration Support { get; set; } = new();
+}
+
+public class OperatorSignupConfiguration
+{
+    /// <summary>
+    /// Whether public self-service passkey registration is enabled.
+    /// Disabled by default; requires AllowSelfServiceCreation and setup completion.
+    /// </summary>
+    public bool Enabled { get; set; } = false;
+
+    /// <summary>
+    /// Whether newly registered tenants start inactive and require platform admin approval.
+    /// </summary>
+    public bool RequiresApproval { get; set; } = false;
 }
 
 public class OperatorSupportConfiguration

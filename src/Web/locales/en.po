@@ -1660,6 +1660,8 @@ msgstr "Or continue with"
 #: src/routes/(unauthenticated)/auth/recovery/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
 #: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
+#: src/routes/(unauthenticated)/signup/+page.svelte
+#: src/routes/(unauthenticated)/signup/+page.svelte
 msgid "Username"
 msgstr "Username"
 
@@ -2010,6 +2012,8 @@ msgstr "Select tracker"
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/routes/(unauthenticated)/clock/[id]/+page@.svelte
 #: src/routes/(unauthenticated)/setup/+page@.svelte
+#: src/routes/(unauthenticated)/signup/+page.svelte
+#: src/routes/(unauthenticated)/signup/+page.svelte
 msgid "<0/> Back"
 msgstr "<0/> Back"
 
@@ -4509,6 +4513,7 @@ msgstr "Setup"
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/account/+page.svelte
 #: src/routes/(unauthenticated)/setup/+page@.svelte
+#: src/routes/(unauthenticated)/signup/+page.svelte
 msgid "Account"
 msgstr "Account"
 
@@ -8883,6 +8888,7 @@ msgstr "Set up a new Nocturne instance"
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/TenantIdentity.svelte
 #: src/routes/(unauthenticated)/setup/steps/TenantIdentity.svelte
+#: src/routes/(unauthenticated)/signup/+page.svelte
 msgid "Slug"
 msgstr "Slug"
 
@@ -9794,6 +9800,7 @@ msgid "Instance"
 msgstr "Instance"
 
 #: src/routes/(unauthenticated)/setup/+page@.svelte
+#: src/routes/(unauthenticated)/signup/+page.svelte
 msgid "Create your account"
 msgstr "Create your account"
 
@@ -27033,3 +27040,107 @@ msgstr "{0} of {1} connectors synced"
 #: src/lib/components/connectors/ManualSyncDialog.svelte
 msgid "{0}ms"
 msgstr "{0}ms"
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "We couldn't register your passkey. Please try again."
+msgstr "We couldn't register your passkey. Please try again."
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Sign Up - Nocturne"
+msgstr "Sign Up - Nocturne"
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Name your workspace"
+msgstr "Name your workspace"
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Register your passkey"
+msgstr "Register your passkey"
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Choose your display name and username."
+msgstr "Choose your display name and username."
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Choose an address for your personal Nocturne workspace."
+msgstr "Choose an address for your personal Nocturne workspace."
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Register a secure passkey to protect your account and data."
+msgstr "Register a secure passkey to protect your account and data."
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Workspace Pending Approval"
+msgstr "Workspace Pending Approval"
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Workspace Created"
+msgstr "Workspace Created"
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Your account and workspace were registered. An administrator must approve your workspace before you can sign in."
+msgstr "Your account and workspace were registered. An administrator must approve your workspace before you can sign in."
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Your personal workspace is ready. Save your recovery codes to proceed."
+msgstr "Your personal workspace is ready. Save your recovery codes to proceed."
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Full Name"
+msgstr "Full Name"
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "<0/> Sign in instead"
+msgstr "<0/> Sign in instead"
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Next: Workspace <0/>"
+msgstr "Next: Workspace <0/>"
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Workspace Name"
+msgstr "Workspace Name"
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Workspace Address (Slug)"
+msgstr "Workspace Address (Slug)"
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "https://<0/>"
+msgstr "https://<0/>"
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Next: Passkey <0/>"
+msgstr "Next: Passkey <0/>"
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Workspace"
+msgstr "Workspace"
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Subdomain"
+msgstr "Subdomain"
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "<0/> Creating Passkey..."
+msgstr "<0/> Creating Passkey..."
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "<0/> Create Passkey"
+msgstr "<0/> Create Passkey"
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Passkeys use your device's biometric sensor (Face ID, Touch ID, Windows Hello) or a security key."
+msgstr "Passkeys use your device's biometric sensor (Face ID, Touch ID, Windows Hello) or a security key."
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Return to Sign In"
+msgstr "Return to Sign In"
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Proceed to Workspace"
+msgstr "Proceed to Workspace"
+
+#: src/routes/(unauthenticated)/auth/login/+page.svelte
+msgid "<0/> Don't have an account? Create one"
+msgstr "<0/> Don't have an account? Create one"

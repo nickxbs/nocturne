@@ -145,6 +145,7 @@ public static class ServiceRegistrationExtensions
         // reachable while no member of the instance holds a credential, so the ceiling covers one
         // operator retrying a ceremony rather than a population signing in.
         ("setup", 20, TimeSpan.FromMinutes(1)),
+        ("signup", 10, TimeSpan.FromMinutes(1)),
         // The "is this name free?" probes — owner username and tenant slug — which a form issues
         // per keystroke behind a 400ms debounce, so a hunt-and-peck typist spends a permit per
         // character. Sized for a full name typed that way plus a retry; past that the frontend

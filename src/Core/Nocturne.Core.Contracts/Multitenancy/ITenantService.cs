@@ -14,6 +14,9 @@ public interface ITenantService
     /// <summary>Creates a new tenant with the specified subject as its owner.</summary>
     Task<TenantCreatedDto> CreateAsync(string slug, string displayName, Guid creatorSubjectId, CancellationToken ct = default);
 
+    /// <summary>Creates a new tenant with the specified subject as its owner and explicit active state.</summary>
+    Task<TenantCreatedDto> CreateAsync(string slug, string displayName, Guid creatorSubjectId, bool isActive, CancellationToken ct = default);
+
     /// <summary>Creates a new tenant without assigning an owner.</summary>
     Task<TenantCreatedDto> CreateWithoutOwnerAsync(string slug, string displayName, CancellationToken ct = default);
 

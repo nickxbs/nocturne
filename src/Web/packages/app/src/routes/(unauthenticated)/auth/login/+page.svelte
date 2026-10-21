@@ -4,6 +4,7 @@
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Fingerprint from "@lucide/svelte/icons/fingerprint-pattern";
   import KeyRound from "@lucide/svelte/icons/key-round";
+  import UserPlus from "@lucide/svelte/icons/user-plus";
   import { getAuthState } from "../auth.remote";
   import { getAuthStatus } from "$lib/api/generated";
   import { page } from "$app/state";
@@ -119,6 +120,18 @@
             >
               <KeyRound class="mr-1 h-4 w-4" />
               Have a one-time guest code?
+            </Button>
+          </div>
+        {/if}
+        {#if data.signupEnabled}
+          <div class="text-center">
+            <Button
+              variant="link"
+              href={resolve("/signup")}
+              data-testid="signup-link"
+            >
+              <UserPlus class="mr-1 h-4 w-4" />
+              Don't have an account? Create one
             </Button>
           </div>
         {/if}
