@@ -1,6 +1,6 @@
 # PR 4: Phase 2.4 — Platform Admin Approval
 
-> **Status**: `TODO`
+> **Status**: `IN PROGRESS`
 
 ## Objective
 Support the `RequiresApproval = true` mode, where newly registered tenants start inactive (`IsActive = false`) and require explicit approval by a platform admin before the user can sign in.

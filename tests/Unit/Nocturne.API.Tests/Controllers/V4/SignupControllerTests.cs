@@ -12,6 +12,8 @@ using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared;
@@ -29,6 +31,7 @@ public class SignupControllerTests : IDisposable
     private readonly Mock<IRecoveryCodeService> _recoveryCodeService;
     private readonly Mock<ILoginCodeService> _loginCodeService;
     private readonly Mock<ISubjectService> _subjectService;
+    private readonly Mock<IInAppNotificationService> _notificationService;
     private readonly Mock<IInstanceSetupState> _setupState;
     private readonly Mock<IUsernameValidator> _usernameValidator;
     private readonly BaseDomainOptions _baseDomainOptions;
@@ -43,6 +46,7 @@ public class SignupControllerTests : IDisposable
         _recoveryCodeService = new Mock<IRecoveryCodeService>();
         _loginCodeService = new Mock<ILoginCodeService>();
         _subjectService = new Mock<ISubjectService>();
+        _notificationService = new Mock<IInAppNotificationService>();
         _setupState = new Mock<IInstanceSetupState>();
         _usernameValidator = new Mock<IUsernameValidator>();
 
@@ -97,6 +101,7 @@ public class SignupControllerTests : IDisposable
             _recoveryCodeService.Object,
             _loginCodeService.Object,
             _subjectService.Object,
+            _notificationService.Object,
             _db.ContextFactory.AsNocturneFactory(),
             Options.Create(operatorConfig),
             Options.Create(_baseDomainOptions),
@@ -454,5 +459,81 @@ public class SignupControllerTests : IDisposable
 
         _tenantService.Verify(t => t.DeleteAsync(tenantId, It.IsAny<CancellationToken>()), Times.Once());
         _subjectService.Verify(s => s.DeleteSubjectAsync(subjectId), Times.Once());
+    }
+
+    [Fact]
+    public async Task Complete_WhenRequiresApproval_DispatchesNotificationToPlatformAdmins()
+    {
+        var adminId = Guid.NewGuid();
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = adminId,
+            Name = "Platform Admin",
+            IsPlatformAdmin = true,
+            IsActive = true,
+            IsSystemSubject = false,
+        });
+
+        var subjectId = Guid.NewGuid();
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = subjectId,
+            Name = "Enrolling User",
+            Username = "enrollinguser",
+            IsActive = false,
+            IsSystemSubject = false,
+            CreatedAt = DateTime.UtcNow,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var tenantId = Guid.NewGuid();
+        _tenantService
+            .Setup(t => t.CreateAsync("mytenant", "My Tenant", subjectId, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantCreatedDto(tenantId, "mytenant", "My Tenant", false, DateTime.UtcNow));
+
+        _passkeyService
+            .Setup(p => p.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), tenantId, subjectId, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WebAuthnRegistrationResult(true, "credential-id"));
+
+        _recoveryCodeService
+            .Setup(r => r.GenerateCodesAsync(subjectId))
+            .ReturnsAsync(["code-1", "code-2"]);
+
+        var controller = BuildController(requiresApproval: true);
+
+        var request = new SignupCompleteRequest
+        {
+            Username = "enrollinguser",
+            TenantSlug = "mytenant",
+            TenantDisplayName = "My Tenant",
+            AttestationResponseJson = "{}",
+            ChallengeToken = "token-123",
+        };
+
+        var result = await controller.Complete(request, CancellationToken.None);
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        var response = okResult.Value.Should().BeOfType<SignupCompleteResponse>().Subject;
+        response.Success.Should().BeTrue();
+        response.PendingApproval.Should().BeTrue();
+        response.HandoffUrl.Should().BeNull();
+
+        _notificationService.Verify(
+            n => n.CreateNotificationAsync(
+                adminId.ToString(),
+                "tenant.approval_requested",
+                "Tenant approval requested: My Tenant",
+                It.IsAny<NotificationCategory?>(),
+                It.IsAny<NotificationUrgency?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                "Slug: mytenant, Owner: enrollinguser",
+                tenantId.ToString(),
+                It.IsAny<List<NotificationActionDto>?>(),
+                It.IsAny<ResolutionConditions?>(),
+                It.IsAny<Dictionary<string, object>?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 }

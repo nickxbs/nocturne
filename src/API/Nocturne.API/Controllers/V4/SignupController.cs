@@ -12,6 +12,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
@@ -35,6 +36,7 @@ public class SignupController : ControllerBase
     private readonly IRecoveryCodeService _recoveryCodeService;
     private readonly ILoginCodeService _loginCodeService;
     private readonly ISubjectService _subjectService;
+    private readonly IInAppNotificationService _notificationService;
     private readonly INocturneDbContextFactory _dbFactory;
     private readonly OperatorConfiguration _operatorConfig;
     private readonly BaseDomainOptions _baseDomainOptions;
@@ -48,6 +50,7 @@ public class SignupController : ControllerBase
         IRecoveryCodeService recoveryCodeService,
         ILoginCodeService loginCodeService,
         ISubjectService subjectService,
+        IInAppNotificationService notificationService,
         INocturneDbContextFactory dbFactory,
         IOptions<OperatorConfiguration> operatorConfig,
         IOptions<BaseDomainOptions> baseDomainOptions,
@@ -60,6 +63,7 @@ public class SignupController : ControllerBase
         _recoveryCodeService = recoveryCodeService;
         _loginCodeService = loginCodeService;
         _subjectService = subjectService;
+        _notificationService = notificationService;
         _dbFactory = dbFactory;
         _operatorConfig = operatorConfig.Value;
         _baseDomainOptions = baseDomainOptions.Value;
@@ -261,6 +265,24 @@ public class SignupController : ControllerBase
                 var hostWithSubdomain = $"{tenant.Slug}.{host}" + (port.HasValue ? $":{port}" : "");
                 var scheme = Request.Scheme;
                 handoffUrl = $"{scheme}://{hostWithSubdomain}/auth/handoff?code={Uri.EscapeDataString(issued.Code)}";
+            }
+            else
+            {
+                var adminSubjectIds = await platformCtx.Subjects
+                    .Where(s => s.IsPlatformAdmin && s.IsActive && !s.IsSystemSubject)
+                    .Select(s => s.Id)
+                    .ToListAsync(ct);
+
+                foreach (var adminId in adminSubjectIds)
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        adminId.ToString(),
+                        "tenant.approval_requested",
+                        $"Tenant approval requested: {tenant.DisplayName}",
+                        subtitle: $"Slug: {tenant.Slug}, Owner: {normalizedUsername}",
+                        sourceId: tenant.Id.ToString(),
+                        cancellationToken: ct);
+                }
             }
 
             _logger.LogInformation(

@@ -121,6 +121,15 @@ public static class BuiltInNotificationTemplates
             Source = "membership"
         });
 
+        registry.Register(new NotificationTemplate
+        {
+            Type = "tenant.approval_requested",
+            Category = NotificationCategory.ActionRequired,
+            DefaultUrgency = NotificationUrgency.Info,
+            Icon = "building",
+            Source = "signup"
+        });
+
         return registry;
     }
 }

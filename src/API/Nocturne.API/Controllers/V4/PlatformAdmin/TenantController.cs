@@ -1,12 +1,16 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
@@ -83,6 +87,54 @@ public class TenantController : ControllerBase
 
         var tenant = await _tenantService.UpdateAsync(id, request.DisplayName, request.IsActive, request.AllowAccessRequests, ct);
         return Ok(tenant);
+    }
+
+    /// <summary>
+    /// Activates a pending or inactive tenant, allowing users to sign in.
+    /// Also archives any pending approval notifications associated with this tenant.
+    /// </summary>
+    [HttpPost("{id:guid}/activate")]
+    [RemoteCommand(Invalidates = ["GetAll", "GetById"])]
+    [ProducesResponseType(typeof(TenantDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Activate(
+        Guid id,
+        [FromServices] IInAppNotificationService notificationService,
+        [FromServices] INocturneDbContextFactory dbContextFactory,
+        CancellationToken ct)
+    {
+        TenantDetailDto? tenant;
+        try
+        {
+            tenant = await _tenantService.GetByIdAsync(id, ct);
+        }
+        catch (KeyNotFoundException)
+        {
+            tenant = null;
+        }
+
+        if (tenant == null)
+            return NotFound();
+
+        var updated = await _tenantService.UpdateAsync(id, tenant.DisplayName, isActive: true, ct: ct);
+
+        await using var platformCtx = await dbContextFactory.CreatePlatformAsync(ct);
+        var adminSubjectIds = await platformCtx.Subjects
+            .Where(s => s.IsPlatformAdmin && !s.IsSystemSubject)
+            .Select(s => s.Id)
+            .ToListAsync(ct);
+
+        foreach (var adminId in adminSubjectIds)
+        {
+            await notificationService.ArchiveBySourceAsync(
+                adminId.ToString(),
+                "tenant.approval_requested",
+                id.ToString(),
+                NotificationArchiveReason.Completed,
+                ct);
+        }
+
+        return Ok(updated);
     }
 
     /// <inheritdoc cref="ITenantService.AddMemberAsync"/>
