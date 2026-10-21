@@ -10,7 +10,7 @@ This directory contains the detailed implementation plans for self-service passk
 | **PR 1** | [01-phase-0-preparation.md](file:///C:/git/nocturne/plans/01-phase-0-preparation.md) | `DONE` | Fix `getAuthStatus` on tenantless hosts & extract `IUsernameValidator` |
 | **PR 2** | [02-phases-1-and-2-backend.md](file:///C:/git/nocturne/plans/02-phases-1-and-2-backend.md) | `DONE` | Operator configuration, `SignupController`, pipeline & guard tests |
 | **PR 3** | [03-phase-3-frontend.md](file:///C:/git/nocturne/plans/03-phase-3-frontend.md) | `DONE` | NSwag client, new `/signup/` route, 3-step wizard, integration & e2e tests |
-| **PR 4** | [04-phase-2.4-approval.md](file:///C:/git/nocturne/plans/04-phase-2.4-approval.md) | `IN PROGRESS` | Tenant approval by platform admin (`/activate`), in-app notifications & admin UI |
-| **PR 5** | [05-phase-2.5-account-cleanup.md](file:///C:/git/nocturne/plans/05-phase-2.5-account-cleanup.md) | `TODO` | Background service for periodic pruning of abandoned enrolling accounts |
+| **PR 4** | [04-phase-2.4-approval.md](file:///C:/git/nocturne/plans/04-phase-2.4-approval.md) | `DONE` | Tenant approval by platform admin (`/activate`), in-app notifications & admin UI |
+| **PR 5** | [05-phase-2.5-account-cleanup.md](file:///C:/git/nocturne/plans/05-phase-2.5-account-cleanup.md) | `DONE` | Background service for periodic pruning of abandoned enrolling accounts |
 
-Master plan: [00-master-plan.md](file:///C:/git/nocturne/plans/00-master-plan.md) (`IN PROGRESS`)
+Master plan: [00-master-plan.md](file:///C:/git/nocturne/plans/00-master-plan.md) (`DONE`)

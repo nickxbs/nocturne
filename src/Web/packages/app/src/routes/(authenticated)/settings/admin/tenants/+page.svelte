@@ -29,7 +29,7 @@
     validateSlug,
   } from "$api/generated/myTenants.generated.remote";
   import * as adminSubjectsRemote from "../admin-subjects.remote";
-  import type { TenantDetailDto, TenantMemberDto } from "$api";
+  import type { TenantDetailDto, TenantMemberDto, TenantDto } from "$api";
   import { getCurrentTenantId } from "../../current-tenant.remote";
   import { getTransitionStatus } from "$api/generated/platforms.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
@@ -86,8 +86,45 @@
     }
   }
 
+  // All tenants state
+  let allTenants = $state<TenantDto[]>([]);
+  let allTenantsLoading = $state(true);
+  let allTenantsError = $state<string | null>(null);
+  let activatingId = $state<string | null>(null);
+  let activateError = $state<string | null>(null);
+  let activateSuccess = $state<string | null>(null);
+
+  async function loadAllTenants() {
+    allTenantsLoading = true;
+    allTenantsError = null;
+    try {
+      allTenants = (await tenantRemote.getAll().run()) ?? [];
+    } catch (err) {
+      allTenantsError = remoteErrorMessage(err, "Failed to load tenants list.");
+    } finally {
+      allTenantsLoading = false;
+    }
+  }
+
+  async function activateTenant(id: string | undefined) {
+    if (!id) return;
+    activatingId = id;
+    activateError = null;
+    activateSuccess = null;
+    try {
+      await tenantRemote.activate(id);
+      activateSuccess = "Tenant activated successfully.";
+      await Promise.all([loadAllTenants(), loadTenant()]);
+    } catch (err) {
+      activateError = describeSubmitError(err, "Failed to activate tenant.");
+    } finally {
+      activatingId = null;
+    }
+  }
+
   $effect(() => {
     // `.run()` rejects during the render/effect flush, so defer out of it.
+    queueMicrotask(loadAllTenants);
     if (currentTenantId) {
       queueMicrotask(loadTenant);
     }
@@ -109,7 +146,7 @@
         request: { displayName: editDisplayName, isActive: editIsActive },
       });
       isEditDialogOpen = false;
-      await loadTenant();
+      await Promise.all([loadTenant(), loadAllTenants()]);
     } catch {
       // error is handled by remote
     } finally {
@@ -229,6 +266,7 @@
       });
       createdSlug = normalizedSlug;
       isCreateDialogOpen = false;
+      await loadAllTenants();
     } catch (err) {
       createError = describeSubmitError(
         err,
@@ -319,11 +357,22 @@
         <div class="grid grid-cols-2 gap-4">
           <div>
             <p class="text-sm font-medium text-muted-foreground">Status</p>
-            <div class="mt-1">
+            <div class="mt-1 flex items-center gap-2">
               {#if tenant.isActive}
                 <Badge variant="default">Active</Badge>
               {:else}
-                <Badge variant="destructive">Inactive</Badge>
+                <Badge variant="secondary">Pending</Badge>
+                <Button
+                  size="xs"
+                  variant="outline"
+                  disabled={!tenant?.id || activatingId === tenant.id}
+                  onclick={() => activateTenant(tenant?.id)}
+                >
+                  {#if activatingId === tenant?.id}
+                    <Loader2 class="mr-1 h-3 w-3 animate-spin" />
+                  {/if}
+                  Activate
+                </Button>
               {/if}
             </div>
           </div>
@@ -340,6 +389,82 @@
             </p>
           </div>
         </div>
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader>
+        <CardTitle class="flex items-center gap-2">
+          <Building2 class="h-5 w-5" />
+          All Tenants
+        </CardTitle>
+        <CardDescription>
+          Overview of all registered tenants on this instance.
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-3">
+        {#if activateError}
+          <Alert.Root variant="destructive">
+            <AlertTriangle class="h-4 w-4" />
+            <Alert.Description>{activateError}</Alert.Description>
+          </Alert.Root>
+        {/if}
+        {#if activateSuccess}
+          <Alert.Root>
+            <Info class="h-4 w-4" />
+            <Alert.Description>{activateSuccess}</Alert.Description>
+          </Alert.Root>
+        {/if}
+        {#if allTenantsLoading && allTenants.length === 0}
+          <div class="flex items-center justify-center py-6">
+            <Loader2 class="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        {:else if allTenantsError}
+          <Alert.Root variant="destructive">
+            <AlertTriangle class="h-4 w-4" />
+            <Alert.Description>{allTenantsError}</Alert.Description>
+          </Alert.Root>
+        {:else if allTenants.length === 0}
+          <p class="text-sm text-muted-foreground">No tenants found.</p>
+        {:else}
+          <div class="space-y-2">
+            {#each allTenants as t (t.id)}
+              <div
+                class="flex items-center justify-between gap-4 rounded-md border p-3"
+              >
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2">
+                    <p class="text-sm font-medium truncate">
+                      {t.displayName}
+                    </p>
+                    {#if t.id === currentTenantId}
+                      <Badge variant="outline">Current</Badge>
+                    {/if}
+                  </div>
+                  <p class="text-xs font-mono text-muted-foreground">{t.slug}</p>
+                </div>
+                <div class="flex items-center gap-3 shrink-0">
+                  {#if t.isActive}
+                    <Badge variant="default">Active</Badge>
+                  {:else}
+                    <Badge variant="secondary">Pending</Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={activatingId === t.id}
+                      onclick={() => activateTenant(t.id)}
+                    >
+                      {#if activatingId === t.id}
+                        <Loader2 class="mr-1 h-3 w-3 animate-spin" />
+                      {/if}
+                      Activate
+                    </Button>
+                  {/if}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
       </CardContent>
     </Card>
 

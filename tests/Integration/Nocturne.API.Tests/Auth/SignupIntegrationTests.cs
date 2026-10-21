@@ -2,8 +2,13 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -95,5 +100,33 @@ public class SignupIntegrationTests : ApiIntegrationTestBase
         using var optionsDoc = JsonDocument.Parse(result.Options);
         optionsDoc.RootElement.TryGetProperty("challenge", out var challenge).Should().BeTrue();
         challenge.GetString().Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task InactiveTenant_WhenActivatedByAdmin_BecomesAccessible()
+    {
+        var tenantService = Fixture.Services.GetRequiredService<ITenantService>();
+        var slug = $"inactive-{Guid.NewGuid():N}"[..18];
+        var creatorSubjectId = Guid.CreateVersion7();
+        var created = await tenantService.CreateAsync(slug, "Inactive Clinic", creatorSubjectId, isActive: false);
+
+        var baseDomain = Fixture.Services.GetRequiredService<IOptions<BaseDomainOptions>>().Value.BaseDomain;
+        using (var tenantClient = AuthTestHelpers.CreateTenantClient(Fixture, slug, baseDomain))
+        {
+            var inactiveRes = await tenantClient.GetAsync("/api/v1/status");
+            inactiveRes.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        }
+
+        var activateRes = await AuthenticatedClient.PostAsync($"/api/v4/admin/tenants/{created.Id}/activate", null);
+        activateRes.StatusCode.Should().Be(HttpStatusCode.OK);
+        var activatedDto = await activateRes.Content.ReadFromJsonAsync<TenantDto>();
+        activatedDto.Should().NotBeNull();
+        activatedDto!.IsActive.Should().BeTrue();
+
+        using (var tenantClient = AuthTestHelpers.CreateTenantClient(Fixture, slug, baseDomain))
+        {
+            var activeRes = await tenantClient.GetAsync("/api/v1/status");
+            activeRes.StatusCode.Should().Be(HttpStatusCode.OK);
+        }
     }
 }

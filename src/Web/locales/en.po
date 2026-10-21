@@ -2679,6 +2679,7 @@ msgstr "No server-side connectors are registered in this installation."
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
+#: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -2696,7 +2697,6 @@ msgstr "Stale"
 
 #: src/lib/components/connectors/ConnectorSetup.svelte
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
-#: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 msgid "Inactive"
 msgstr "Inactive"
 
@@ -4866,6 +4866,8 @@ msgstr "<0/> Create Link"
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
+#: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
+#: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Pending"
 msgstr "Pending"
@@ -5183,6 +5185,7 @@ msgstr "No devices added yet. Add your first device to get started."
 
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/patient/PatientInsulinManager.svelte
+#: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 msgid "Current"
 msgstr "Current"
 
@@ -27144,3 +27147,32 @@ msgstr "Proceed to Workspace"
 #: src/routes/(unauthenticated)/auth/login/+page.svelte
 msgid "<0/> Don't have an account? Create one"
 msgstr "<0/> Don't have an account? Create one"
+
+#: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
+msgid "Failed to load tenants list."
+msgstr "Failed to load tenants list."
+
+#: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
+msgid "Tenant activated successfully."
+msgstr "Tenant activated successfully."
+
+#: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
+msgid "Failed to activate tenant."
+msgstr "Failed to activate tenant."
+
+#: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
+#: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
+msgid "<0/> Activate"
+msgstr "<0/> Activate"
+
+#: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
+msgid "<0/> All Tenants"
+msgstr "<0/> All Tenants"
+
+#: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
+msgid "Overview of all registered tenants on this instance."
+msgstr "Overview of all registered tenants on this instance."
+
+#: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
+msgid "No tenants found."
+msgstr "No tenants found."

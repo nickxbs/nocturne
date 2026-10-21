@@ -493,8 +493,8 @@ public class SignupControllerTests : IDisposable
 
         _passkeyService
             .Setup(p => p.CompleteRegistrationAsync(
-                It.IsAny<string>(), It.IsAny<string>(), tenantId, subjectId, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new WebAuthnRegistrationResult(true, "credential-id"));
+                It.IsAny<string>(), It.IsAny<string>(), tenantId, subjectId, null))
+            .ReturnsAsync(new PasskeyCredentialResult(Guid.NewGuid(), subjectId));
 
         _recoveryCodeService
             .Setup(r => r.GenerateCodesAsync(subjectId))

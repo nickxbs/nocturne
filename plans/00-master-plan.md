@@ -1,6 +1,6 @@
 # Master Plan: Passkey Signup and Personal Tenant Provisioning
 
-> **Overall Status**: `IN PROGRESS` (Technical verifications `DONE`, Phase 0 `IN PROGRESS`)
+> **Overall Status**: `DONE` (All 5 PRs and Technical Verifications completed)
 
 ## Objective and Core Decisions
 
@@ -40,13 +40,13 @@ A visitor arriving at the apex domain (`https://nocturne.cgmsim.com/signup`) cho
 - [x] Add "Create an account" link on the apex login page when signup is enabled.
 - [x] Integration tests (`ApiFactory` + Postgres) and e2e tests (Playwright + CDP virtual authenticator).
 
-### - [ ] Phase 2.4: Platform Admin Approval (PR 4) — `TODO`
-- [ ] Dedicated endpoint `POST /api/v4/admin/tenants/{id}/activate` for platform admins.
-- [ ] In-app notification `TenantApprovalRequested` for platform admins when registration requires approval.
-- [ ] Admin UI on `/settings/admin/tenants`: "Pending" status badge and "Activate" action.
+### - [x] Phase 2.4: Platform Admin Approval (PR 4) — `DONE`
+- [x] Dedicated endpoint `POST /api/v4/admin/tenants/{id}/activate` for platform admins.
+- [x] In-app notification `tenant.approval_requested` for platform admins when registration requires approval.
+- [x] Admin UI on `/settings/admin/tenants`: "Pending" status badge and "Activate" action.
 
-### - [ ] Phase 2.5: Abandoned Account Cleanup (PR 5) — `TODO`
-- [ ] Hourly background service `EnrolmentPruningService` to purge unactivated subjects (`IsActive = false`, older than 24 hours, no credentials, no OIDC identities, no memberships) and orphaned access requests.
+### - [x] Phase 2.5: Abandoned Account Cleanup (PR 5) — `DONE`
+- [x] Hourly background service `EnrolmentPruningService` to purge unactivated subjects (`IsActive = false`, older than 24 hours, no credentials, no OIDC identities, no memberships) and orphaned access requests.
 
 ---
 

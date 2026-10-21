@@ -405,6 +405,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IGuestLinkService, GuestLinkService>();
         services.AddSingleton<IOAuthTokenRevocationCache, OAuthTokenRevocationCache>();
         services.AddHostedService<OAuthCodeCleanupService>();
+        services.AddHostedService<EnrolmentPruningService>();
 
         services.AddHostedService<AuthorizationSeedService>();
 
