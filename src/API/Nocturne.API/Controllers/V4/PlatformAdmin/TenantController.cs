@@ -137,6 +137,32 @@ public class TenantController : ControllerBase
         return Ok(updated);
     }
 
+    /// <summary>
+    /// Deactivates an active tenant, preventing users from signing in.
+    /// </summary>
+    [HttpPost("{id:guid}/deactivate")]
+    [RemoteCommand(Invalidates = ["GetAll", "GetById"])]
+    [ProducesResponseType(typeof(TenantDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Deactivate(Guid id, CancellationToken ct)
+    {
+        TenantDetailDto? tenant;
+        try
+        {
+            tenant = await _tenantService.GetByIdAsync(id, ct);
+        }
+        catch (KeyNotFoundException)
+        {
+            tenant = null;
+        }
+
+        if (tenant == null)
+            return NotFound();
+
+        var updated = await _tenantService.UpdateAsync(id, tenant.DisplayName, isActive: false, ct: ct);
+        return Ok(updated);
+    }
+
     /// <inheritdoc cref="ITenantService.AddMemberAsync"/>
     [HttpPost("{id:guid}/members")]
     [RemoteCommand(Invalidates = ["GetById"])]
@@ -364,10 +390,10 @@ public class TenantController : ControllerBase
     {
         var authContext = HttpContext.GetAuthContext();
 
-        // Instance-key / platform-admin callers bypass ownership checks —
+        // Platform-admin callers bypass ownership checks —
         // they already passed [Authorize(Roles = "platform_admin")] and have
         // full admin permissions.
-        if (authContext is { IsPlatformAdmin: true, AuthType: AuthType.InstanceKey })
+        if (authContext?.IsPlatformAdmin == true)
             return true;
 
         if (authContext?.SubjectId is not { } subjectId)

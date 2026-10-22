@@ -179,9 +179,36 @@ public partial class TenantService : ITenantService
     public async Task<List<TenantDto>> GetAllAsync(CancellationToken ct = default)
     {
         await using var context = await _factory.CreatePlatformAsync(ct);
-        return await context.Tenants.AsNoTracking()
-            .Select(t => new TenantDto(t.Id, t.Slug, t.DisplayName, t.IsActive, t.SysCreatedAt))
+        var tenants = await context.Tenants.AsNoTracking()
+            .Include(t => t.Members)
+                .ThenInclude(m => m.Subject)
+                    .ThenInclude(s => s!.OidcIdentities)
+            .Include(t => t.Members)
+                .ThenInclude(m => m.MemberRoles)
+                    .ThenInclude(mr => mr.TenantRole)
+            .OrderByDescending(t => t.SysCreatedAt)
             .ToListAsync(ct);
+
+        return tenants.Select(t =>
+        {
+            var ownerMember = t.Members.FirstOrDefault(m =>
+                m.Subject != null &&
+                !m.Subject.IsSystemSubject &&
+                m.MemberRoles.Any(mr => mr.TenantRole?.Slug == RoleSeeds.Owner));
+
+            var ownerSubject = ownerMember?.Subject;
+            var ownerEmail = ownerSubject?.Email
+                ?? ownerSubject?.OidcIdentities.FirstOrDefault()?.Email;
+
+            return new TenantDto(
+                t.Id,
+                t.Slug,
+                t.DisplayName,
+                t.IsActive,
+                t.SysCreatedAt,
+                ownerSubject?.Name,
+                ownerEmail);
+        }).ToList();
     }
 
     public async Task<TenantDetailDto?> GetByIdAsync(Guid id, CancellationToken ct = default)
@@ -270,10 +297,37 @@ public partial class TenantService : ITenantService
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
         await using var context = await _factory.CreatePlatformAsync(ct);
-        var tenant = await context.Tenants.FindAsync([id], ct)
+        var tenant = await context.Tenants
+            .Include(t => t.Members)
+                .ThenInclude(m => m.Subject)
+            .FirstOrDefaultAsync(t => t.Id == id, ct)
             ?? throw new KeyNotFoundException($"Tenant {id} not found");
 
+        var subjectIdsToCheck = tenant.Members
+            .Where(m => m.Subject != null && !m.Subject.IsSystemSubject)
+            .Select(m => m.SubjectId)
+            .Distinct()
+            .ToList();
+
         context.Tenants.Remove(tenant);
+        await context.SaveChangesAsync(ct);
+
+        foreach (var subjectId in subjectIdsToCheck)
+        {
+            var hasOtherTenants = await context.TenantMembers
+                .AnyAsync(tm => tm.SubjectId == subjectId, ct);
+
+            if (!hasOtherTenants)
+            {
+                var orphanedSubject = await context.Subjects
+                    .FirstOrDefaultAsync(s => s.Id == subjectId, ct);
+
+                if (orphanedSubject != null)
+                {
+                    context.Subjects.Remove(orphanedSubject);
+                }
+            }
+        }
         await context.SaveChangesAsync(ct);
 
         // Invalidate cached tenant context

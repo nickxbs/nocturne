@@ -66,7 +66,14 @@ public interface ITenantService
         CancellationToken ct = default);
 }
 
-public record TenantDto(Guid Id, string Slug, string DisplayName, bool IsActive, DateTime SysCreatedAt);
+public record TenantDto(
+    Guid Id,
+    string Slug,
+    string DisplayName,
+    bool IsActive,
+    DateTime SysCreatedAt,
+    string? OwnerName = null,
+    string? OwnerEmail = null);
 
 public record TenantSettingsDto(bool AllowPublicDocs);
 

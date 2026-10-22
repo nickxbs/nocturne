@@ -69,7 +69,7 @@ public class AnonymousSurfaceRateLimitTests
     {
         var actions = Actions(typeof(SignupController));
 
-        actions.Should().HaveCount(3, "the scan should discover the signup actions");
+        actions.Should().HaveCount(4, "the scan should discover the signup actions");
 
         Uncovered(actions).Should().BeEmpty();
     }

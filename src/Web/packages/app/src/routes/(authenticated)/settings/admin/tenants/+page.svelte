@@ -21,6 +21,12 @@
   import X from "@lucide/svelte/icons/x";
   import Plus from "@lucide/svelte/icons/plus";
   import ShieldCheck from "@lucide/svelte/icons/shield-check";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import User from "@lucide/svelte/icons/user";
+  import Search from "@lucide/svelte/icons/search";
+  import Power from "@lucide/svelte/icons/power";
+  import PowerOff from "@lucide/svelte/icons/power-off";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Debounced } from "runed";
   import * as Alert from "$lib/components/ui/alert";
   import * as tenantRemote from "$api/generated/tenants.generated.remote";
@@ -91,8 +97,27 @@
   let allTenantsLoading = $state(true);
   let allTenantsError = $state<string | null>(null);
   let activatingId = $state<string | null>(null);
+  let deactivatingId = $state<string | null>(null);
+  let deletingId = $state<string | null>(null);
   let activateError = $state<string | null>(null);
   let activateSuccess = $state<string | null>(null);
+  let searchQuery = $state("");
+  let statusFilter = $state<"all" | "active" | "pending">("all");
+
+  const filteredTenants = $derived(
+    allTenants.filter((t) => {
+      if (statusFilter === "active" && !t.isActive) return false;
+      if (statusFilter === "pending" && t.isActive) return false;
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.trim().toLowerCase();
+      return (
+        (t.displayName?.toLowerCase().includes(q) ?? false) ||
+        (t.slug?.toLowerCase().includes(q) ?? false) ||
+        (t.ownerName?.toLowerCase().includes(q) ?? false) ||
+        (t.ownerEmail?.toLowerCase().includes(q) ?? false)
+      );
+    })
+  );
 
   async function loadAllTenants() {
     allTenantsLoading = true;
@@ -119,6 +144,38 @@
       activateError = describeSubmitError(err, "Failed to activate tenant.");
     } finally {
       activatingId = null;
+    }
+  }
+
+  async function deactivateTenant(id: string | undefined) {
+    if (!id) return;
+    deactivatingId = id;
+    activateError = null;
+    activateSuccess = null;
+    try {
+      await tenantRemote.deactivate(id);
+      activateSuccess = "Tenant deactivated successfully.";
+      await Promise.all([loadAllTenants(), loadTenant()]);
+    } catch (err) {
+      activateError = describeSubmitError(err, "Failed to deactivate tenant.");
+    } finally {
+      deactivatingId = null;
+    }
+  }
+
+  async function deleteTenant(id: string | undefined) {
+    if (!id) return;
+    deletingId = id;
+    activateError = null;
+    activateSuccess = null;
+    try {
+      await tenantRemote.remove(id);
+      activateSuccess = "Tenant and associated user account deleted successfully.";
+      await Promise.all([loadAllTenants(), loadTenant()]);
+    } catch (err) {
+      activateError = describeSubmitError(err, "Failed to delete tenant.");
+    } finally {
+      deletingId = null;
     }
   }
 
@@ -399,10 +456,10 @@
           All Tenants
         </CardTitle>
         <CardDescription>
-          Overview of all registered tenants on this instance.
+          Overview of all registered tenants and their owners on this instance.
         </CardDescription>
       </CardHeader>
-      <CardContent class="space-y-3">
+      <CardContent class="space-y-4">
         {#if activateError}
           <Alert.Root variant="destructive">
             <AlertTriangle class="h-4 w-4" />
@@ -415,6 +472,43 @@
             <Alert.Description>{activateSuccess}</Alert.Description>
           </Alert.Root>
         {/if}
+
+        <!-- Search and status filter bar -->
+        <div class="flex flex-col gap-3 @sm:flex-row @sm:items-center @sm:justify-between">
+          <div class="relative flex-1">
+            <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search by tenant name, slug, owner, or email..."
+              bind:value={searchQuery}
+              class="pl-9"
+            />
+          </div>
+          <div class="flex items-center gap-1.5 shrink-0 flex-wrap">
+            <Button
+              variant={statusFilter === "all" ? "secondary" : "ghost"}
+              size="sm"
+              onclick={() => (statusFilter = "all")}
+            >
+              All ({allTenants.length})
+            </Button>
+            <Button
+              variant={statusFilter === "active" ? "secondary" : "ghost"}
+              size="sm"
+              onclick={() => (statusFilter = "active")}
+            >
+              Active ({allTenants.filter((t) => t.isActive).length})
+            </Button>
+            <Button
+              variant={statusFilter === "pending" ? "secondary" : "ghost"}
+              size="sm"
+              onclick={() => (statusFilter = "pending")}
+            >
+              Pending ({allTenants.filter((t) => !t.isActive).length})
+            </Button>
+          </div>
+        </div>
+
         {#if allTenantsLoading && allTenants.length === 0}
           <div class="flex items-center justify-center py-6">
             <Loader2 class="h-6 w-6 animate-spin text-muted-foreground" />
@@ -424,30 +518,74 @@
             <AlertTriangle class="h-4 w-4" />
             <Alert.Description>{allTenantsError}</Alert.Description>
           </Alert.Root>
-        {:else if allTenants.length === 0}
-          <p class="text-sm text-muted-foreground">No tenants found.</p>
+        {:else if filteredTenants.length === 0}
+          <div class="rounded-lg border border-dashed p-6 text-center text-muted-foreground">
+            {#if searchQuery.trim() || statusFilter !== "all"}
+              No tenants match your search and filter criteria.
+            {:else}
+              No tenants found on this instance.
+            {/if}
+          </div>
         {:else}
-          <div class="space-y-2">
-            {#each allTenants as t (t.id)}
+          <div class="space-y-2.5">
+            {#each filteredTenants as t (t.id)}
               <div
-                class="flex items-center justify-between gap-4 rounded-md border p-3"
+                class="flex flex-col gap-3 rounded-lg border p-4 @sm:flex-row @sm:items-center @sm:justify-between hover:bg-muted/30 transition-colors"
               >
-                <div class="min-w-0">
-                  <div class="flex items-center gap-2">
-                    <p class="text-sm font-medium truncate">
+                <div class="min-w-0 space-y-1.5">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <p class="text-sm font-semibold truncate">
                       {t.displayName}
                     </p>
                     {#if t.id === currentTenantId}
-                      <Badge variant="outline">Current</Badge>
+                      <Badge variant="outline" class="text-xs">Current</Badge>
+                    {/if}
+                    {#if t.isActive}
+                      <Badge variant="default" class="text-xs">Active</Badge>
+                    {:else}
+                      <Badge variant="secondary" class="text-xs">Pending</Badge>
                     {/if}
                   </div>
-                  <p class="text-xs font-mono text-muted-foreground">{t.slug}</p>
+
+                  <div class="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+                    <span class="font-mono bg-muted px-1.5 py-0.5 rounded text-foreground/80">
+                      {t.slug}
+                    </span>
+
+                    {#if t.ownerEmail || t.ownerName}
+                      <div class="flex items-center gap-1.5 text-foreground/90">
+                        <User class="h-3.5 w-3.5 text-primary" />
+                        <span class="font-medium">{t.ownerName ?? "Owner"}</span>
+                        {#if t.ownerEmail}
+                          <span class="text-muted-foreground">({t.ownerEmail})</span>
+                        {/if}
+                      </div>
+                    {:else}
+                      <span class="text-muted-foreground italic">No owner assigned</span>
+                    {/if}
+
+                    {#if t.sysCreatedAt}
+                      <span>Created {formatNumericDate(new Date(t.sysCreatedAt))}</span>
+                    {/if}
+                  </div>
                 </div>
-                <div class="flex items-center gap-3 shrink-0">
+
+                <div class="flex items-center gap-2 shrink-0 pt-2 @sm:pt-0 border-t @sm:border-t-0">
                   {#if t.isActive}
-                    <Badge variant="default">Active</Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={deactivatingId === t.id}
+                      onclick={() => deactivateTenant(t.id)}
+                    >
+                      {#if deactivatingId === t.id}
+                        <Loader2 class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      {:else}
+                        <PowerOff class="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
+                      {/if}
+                      Deactivate
+                    </Button>
                   {:else}
-                    <Badge variant="secondary">Pending</Badge>
                     <Button
                       size="sm"
                       variant="outline"
@@ -455,11 +593,40 @@
                       onclick={() => activateTenant(t.id)}
                     >
                       {#if activatingId === t.id}
-                        <Loader2 class="mr-1 h-3 w-3 animate-spin" />
+                        <Loader2 class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      {:else}
+                        <Power class="mr-1.5 h-3.5 w-3.5 text-primary" />
                       {/if}
                       Activate
                     </Button>
                   {/if}
+
+                  <ConfirmDialog
+                    title="Delete tenant"
+                    confirmLabel="Delete tenant"
+                    destructive
+                    onConfirm={() => deleteTenant(t.id)}
+                  >
+                    {#snippet trigger(props)}
+                      <Button
+                        {...props}
+                        variant="outline-destructive"
+                        size="sm"
+                        disabled={deletingId === t.id}
+                        aria-label={`Delete tenant ${t.displayName}`}
+                      >
+                        {#if deletingId === t.id}
+                          <Loader2 class="h-3.5 w-3.5 animate-spin" />
+                        {:else}
+                          <Trash2 class="h-3.5 w-3.5" />
+                        {/if}
+                      </Button>
+                    {/snippet}
+                    {#snippet description()}
+                      Are you sure you want to delete tenant <strong>{t.displayName}</strong> ({t.slug})?
+                      This will permanently remove the tenant, its clinical data, and the associated user account. This action cannot be undone.
+                    {/snippet}
+                  </ConfirmDialog>
                 </div>
               </div>
             {/each}
