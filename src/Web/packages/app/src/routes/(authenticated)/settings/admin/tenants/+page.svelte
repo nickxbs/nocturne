@@ -27,6 +27,7 @@
   import Power from "@lucide/svelte/icons/power";
   import PowerOff from "@lucide/svelte/icons/power-off";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
+  import { toast } from "svelte-sonner";
   import { Debounced } from "runed";
   import * as Alert from "$lib/components/ui/alert";
   import * as tenantRemote from "$api/generated/tenants.generated.remote";
@@ -99,8 +100,6 @@
   let activatingId = $state<string | null>(null);
   let deactivatingId = $state<string | null>(null);
   let deletingId = $state<string | null>(null);
-  let activateError = $state<string | null>(null);
-  let activateSuccess = $state<string | null>(null);
   let searchQuery = $state("");
   let statusFilter = $state<"all" | "active" | "pending">("all");
 
@@ -134,14 +133,12 @@
   async function activateTenant(id: string | undefined) {
     if (!id) return;
     activatingId = id;
-    activateError = null;
-    activateSuccess = null;
     try {
       await tenantRemote.activate(id);
-      activateSuccess = "Tenant activated successfully.";
+      toast.success("Tenant activated successfully.");
       await Promise.all([loadAllTenants(), loadTenant()]);
     } catch (err) {
-      activateError = describeSubmitError(err, "Failed to activate tenant.");
+      toast.error(describeSubmitError(err, "Failed to activate tenant."));
     } finally {
       activatingId = null;
     }
@@ -150,14 +147,12 @@
   async function deactivateTenant(id: string | undefined) {
     if (!id) return;
     deactivatingId = id;
-    activateError = null;
-    activateSuccess = null;
     try {
       await tenantRemote.deactivate(id);
-      activateSuccess = "Tenant deactivated successfully.";
+      toast.success("Tenant deactivated successfully.");
       await Promise.all([loadAllTenants(), loadTenant()]);
     } catch (err) {
-      activateError = describeSubmitError(err, "Failed to deactivate tenant.");
+      toast.error(describeSubmitError(err, "Failed to deactivate tenant."));
     } finally {
       deactivatingId = null;
     }
@@ -166,14 +161,12 @@
   async function deleteTenant(id: string | undefined) {
     if (!id) return;
     deletingId = id;
-    activateError = null;
-    activateSuccess = null;
     try {
       await tenantRemote.remove(id);
-      activateSuccess = "Tenant and associated user account deleted successfully.";
+      toast.success("Tenant and associated user account deleted successfully.");
       await Promise.all([loadAllTenants(), loadTenant()]);
     } catch (err) {
-      activateError = describeSubmitError(err, "Failed to delete tenant.");
+      toast.error(describeSubmitError(err, "Failed to delete tenant."));
     } finally {
       deletingId = null;
     }
@@ -203,9 +196,10 @@
         request: { displayName: editDisplayName, isActive: editIsActive },
       });
       isEditDialogOpen = false;
+      toast.success("Tenant updated successfully.");
       await Promise.all([loadTenant(), loadAllTenants()]);
-    } catch {
-      // error is handled by remote
+    } catch (err) {
+      toast.error(describeSubmitError(err, "Failed to update tenant."));
     } finally {
       editSaving = false;
     }
@@ -238,11 +232,15 @@
           m.subjectId === member.subjectId ? { ...m, isPlatformAdmin: next } : m,
         ),
       };
-    } catch (err: unknown) {
-      platformAdminError = describeSubmitError(
-        err,
-        "Failed to update platform admin status."
+      toast.success(
+        next
+          ? `Platform admin granted to ${member.name ?? "user"}.`
+          : `Platform admin revoked from ${member.name ?? "user"}.`
       );
+    } catch (err: unknown) {
+      const msg = describeSubmitError(err, "Failed to update platform admin status.");
+      platformAdminError = msg;
+      toast.error(msg);
     } finally {
       platformAdminSavingId = null;
     }
@@ -323,6 +321,7 @@
       });
       createdSlug = normalizedSlug;
       isCreateDialogOpen = false;
+      toast.success(`Tenant ${normalizedSlug} created successfully.`);
       await loadAllTenants();
     } catch (err) {
       createError = describeSubmitError(
@@ -460,19 +459,6 @@
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
-        {#if activateError}
-          <Alert.Root variant="destructive">
-            <AlertTriangle class="h-4 w-4" />
-            <Alert.Description>{activateError}</Alert.Description>
-          </Alert.Root>
-        {/if}
-        {#if activateSuccess}
-          <Alert.Root>
-            <Info class="h-4 w-4" />
-            <Alert.Description>{activateSuccess}</Alert.Description>
-          </Alert.Root>
-        {/if}
-
         <!-- Search and status filter bar -->
         <div class="flex flex-col gap-3 @sm:flex-row @sm:items-center @sm:justify-between">
           <div class="relative flex-1">
