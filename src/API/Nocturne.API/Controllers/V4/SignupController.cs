@@ -42,6 +42,7 @@ public class SignupController : ControllerBase
     private readonly BaseDomainOptions _baseDomainOptions;
     private readonly IInstanceSetupState _setupState;
     private readonly IUsernameValidator _usernameValidator;
+    private readonly ITenantMemberService _tenantMemberService;
     private readonly ILogger<SignupController> _logger;
 
     public SignupController(
@@ -56,6 +57,7 @@ public class SignupController : ControllerBase
         IOptions<BaseDomainOptions> baseDomainOptions,
         IInstanceSetupState setupState,
         IUsernameValidator usernameValidator,
+        ITenantMemberService tenantMemberService,
         ILogger<SignupController> logger)
     {
         _tenantService = tenantService;
@@ -69,6 +71,7 @@ public class SignupController : ControllerBase
         _baseDomainOptions = baseDomainOptions.Value;
         _setupState = setupState;
         _usernameValidator = usernameValidator;
+        _tenantMemberService = tenantMemberService;
         _logger = logger;
     }
 
@@ -348,6 +351,134 @@ public class SignupController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Provision a personal tenant for an already-authenticated subject (e.g., following OIDC sign-in).
+    /// </summary>
+    [HttpPost("onboarding")]
+    [EnableRateLimiting("signup")]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(SignupCompleteResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Onboarding(
+        [FromBody] OnboardingRequest request, CancellationToken ct)
+    {
+        if (await CheckSignupDisabledOrSetupIncompleteAsync(ct) is { } guardResult)
+            return guardResult;
+
+        var authContext = HttpContext.GetAuthContext();
+        if (authContext == null || !authContext.IsAuthenticated || authContext.SubjectId == null)
+            return Unauthorized();
+
+        var subjectId = authContext.SubjectId.Value;
+
+        if (string.IsNullOrWhiteSpace(request.TenantSlug) || string.IsNullOrWhiteSpace(request.TenantDisplayName))
+            return Problem(detail: "Tenant slug and display name are required", statusCode: 400, title: "Bad Request");
+
+        var slugValidation = await _tenantService.ValidateSlugAsync(request.TenantSlug, ct);
+        if (!slugValidation.IsValid)
+            return Problem(detail: slugValidation.Message, statusCode: 400, title: "Bad Request");
+
+        var existingTenants = await _tenantMemberService.GetTenantIdsForSubjectAsync(subjectId, ct);
+        if (existingTenants.Count > 0)
+            return Conflict(new { error = "already_has_tenant", message = "Subject already has an active workspace." });
+
+        await using var platformCtx = await _dbFactory.CreatePlatformAsync(ct);
+        var subject = await platformCtx.Subjects.FirstOrDefaultAsync(s => s.Id == subjectId, ct);
+        if (subject == null)
+            return Unauthorized();
+
+        Guid? createdTenantId = null;
+
+        try
+        {
+            var requiresApproval = _operatorConfig.Signup.RequiresApproval;
+
+            var tenant = await _tenantService.CreateAsync(
+                request.TenantSlug.Trim(),
+                request.TenantDisplayName.Trim(),
+                subjectId,
+                isActive: !requiresApproval,
+                ct: ct);
+            createdTenantId = tenant.Id;
+
+            if (!subject.IsActive)
+            {
+                subject.IsActive = true;
+                await platformCtx.SaveChangesAsync(ct);
+            }
+
+            string? handoffUrl = null;
+
+            if (!requiresApproval)
+            {
+                await using var tenantCtx = await _dbFactory.CreateForTenantAsync(tenant.Id, ct);
+                var issued = await _loginCodeService.IssueAsync(
+                    tenantCtx,
+                    subjectId,
+                    HttpContext.Connection.RemoteIpAddress?.ToString(),
+                    Request.Headers.UserAgent.ToString(),
+                    new AuthAuditActor(subjectId, null),
+                    ct);
+
+                var (host, port) = _baseDomainOptions.SplitHostPort();
+                var hostWithSubdomain = $"{tenant.Slug}.{host}" + (port.HasValue ? $":{port}" : "");
+                var scheme = Request.Scheme;
+                handoffUrl = $"{scheme}://{hostWithSubdomain}/auth/handoff?code={Uri.EscapeDataString(issued.Code)}";
+            }
+            else
+            {
+                var adminSubjectIds = await platformCtx.Subjects
+                    .Where(s => s.IsPlatformAdmin && s.IsActive && !s.IsSystemSubject)
+                    .Select(s => s.Id)
+                    .ToListAsync(ct);
+
+                foreach (var adminId in adminSubjectIds)
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        adminId.ToString(),
+                        "tenant.approval_requested",
+                        $"Tenant approval requested: {tenant.DisplayName}",
+                        subtitle: $"Slug: {tenant.Slug}, Owner: {subject.Name}",
+                        sourceId: tenant.Id.ToString(),
+                        cancellationToken: ct);
+                }
+            }
+
+            _logger.LogInformation(
+                "Onboarding completed: subject {SubjectId} ({Name}) provisioned tenant {TenantId} ({Slug}), approval={Approval}",
+                subjectId, subject.Name, tenant.Id, tenant.Slug, requiresApproval);
+
+            return Ok(new SignupCompleteResponse
+            {
+                Success = true,
+                PendingApproval = requiresApproval,
+                HandoffUrl = handoffUrl,
+                RecoveryCodes = [],
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Onboarding failed for subject {SubjectId}", subjectId);
+
+            if (createdTenantId.HasValue)
+            {
+                try
+                {
+                    await _tenantService.DeleteAsync(createdTenantId.Value, CancellationToken.None);
+                }
+                catch (Exception rollbackEx)
+                {
+                    _logger.LogError(rollbackEx, "Failed to rollback tenant {TenantId}", createdTenantId.Value);
+                }
+            }
+
+            return Problem(detail: "Tenant provisioning failed", statusCode: 400, title: "Onboarding Failed");
+        }
+    }
+
     private async Task<IActionResult?> CheckSignupDisabledOrSetupIncompleteAsync(CancellationToken ct)
     {
         if (!_operatorConfig.Signup.Enabled || !_operatorConfig.AllowSelfServiceCreation)
@@ -365,6 +496,12 @@ public class SignupController : ControllerBase
 }
 
 #region Request/Response DTOs
+
+public class OnboardingRequest
+{
+    public string TenantSlug { get; set; } = string.Empty;
+    public string TenantDisplayName { get; set; } = string.Empty;
+}
 
 public class SignupOptionsRequest
 {

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4;
+using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
@@ -14,6 +15,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared;
@@ -34,6 +36,7 @@ public class SignupControllerTests : IDisposable
     private readonly Mock<IInAppNotificationService> _notificationService;
     private readonly Mock<IInstanceSetupState> _setupState;
     private readonly Mock<IUsernameValidator> _usernameValidator;
+    private readonly Mock<ITenantMemberService> _tenantMemberService;
     private readonly BaseDomainOptions _baseDomainOptions;
 
     public SignupControllerTests()
@@ -49,13 +52,14 @@ public class SignupControllerTests : IDisposable
         _notificationService = new Mock<IInAppNotificationService>();
         _setupState = new Mock<IInstanceSetupState>();
         _usernameValidator = new Mock<IUsernameValidator>();
+        _tenantMemberService = new Mock<ITenantMemberService>();
 
         _baseDomainOptions = new BaseDomainOptions
         {
             BaseDomain = "nocturne.test",
         };
 
-        // Defaults: setup is complete, username and slug are valid
+        // Defaults: setup is complete, username and slug are valid, no existing memberships
         _setupState.Setup(s => s.IsSetupCompleteAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
@@ -64,6 +68,9 @@ public class SignupControllerTests : IDisposable
 
         _tenantService.Setup(t => t.ValidateSlugAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SlugValidationResult(true));
+
+        _tenantMemberService.Setup(m => m.GetTenantIdsForSubjectAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Guid>());
     }
 
     public void Dispose()
@@ -107,6 +114,7 @@ public class SignupControllerTests : IDisposable
             Options.Create(_baseDomainOptions),
             _setupState.Object,
             _usernameValidator.Object,
+            _tenantMemberService.Object,
             NullLogger<SignupController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
@@ -553,6 +561,176 @@ public class SignupControllerTests : IDisposable
                 It.IsAny<string?>(),
                 It.IsAny<string?>(),
                 "Slug: mytenant, Owner: enrollinguser",
+                tenantId.ToString(),
+                It.IsAny<List<NotificationActionDto>?>(),
+                It.IsAny<ResolutionConditions?>(),
+                It.IsAny<Dictionary<string, object>?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    // ── Onboarding ────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Onboarding_WhenSignupDisabled_Returns404()
+    {
+        var controller = BuildController(enabled: false);
+
+        var result = await controller.Onboarding(new OnboardingRequest
+        {
+            TenantSlug = "myslug",
+            TenantDisplayName = "My Workspace",
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<NotFoundObjectResult>();
+    }
+
+    [Fact]
+    public async Task Onboarding_WhenUnauthenticated_Returns401()
+    {
+        var controller = BuildController(enabled: true);
+
+        var result = await controller.Onboarding(new OnboardingRequest
+        {
+            TenantSlug = "myslug",
+            TenantDisplayName = "My Workspace",
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<UnauthorizedResult>();
+    }
+
+    [Fact]
+    public async Task Onboarding_WhenUserAlreadyHasTenant_Returns409()
+    {
+        var subjectId = Guid.NewGuid();
+        var controller = BuildController(enabled: true);
+        controller.HttpContext.SetAuthContext(new AuthContext
+        {
+            IsAuthenticated = true,
+            SubjectId = subjectId,
+            AuthType = AuthType.SessionCookie,
+        });
+
+        _tenantMemberService.Setup(m => m.GetTenantIdsForSubjectAsync(subjectId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Guid.NewGuid()]);
+
+        var result = await controller.Onboarding(new OnboardingRequest
+        {
+            TenantSlug = "myslug",
+            TenantDisplayName = "My Workspace",
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<ConflictObjectResult>();
+    }
+
+    [Fact]
+    public async Task Onboarding_WhenValid_ProvisionsTenantAndReturnsHandoffUrl()
+    {
+        var subjectId = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = subjectId,
+            Name = "Google User",
+            Username = "googleuser",
+            IsActive = true,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        _tenantService
+            .Setup(t => t.CreateAsync("myworkspace", "My Workspace", subjectId, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantCreatedDto(tenantId, "myworkspace", "My Workspace", true, DateTime.UtcNow));
+
+        _loginCodeService
+            .Setup(l => l.IssueAsync(
+                It.IsAny<NocturneDbContext>(),
+                subjectId,
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<AuthAuditActor>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new LoginCode("code-xyz", DateTime.UtcNow.AddMinutes(5)));
+
+        var controller = BuildController(enabled: true);
+        controller.HttpContext.SetAuthContext(new AuthContext
+        {
+            IsAuthenticated = true,
+            SubjectId = subjectId,
+            AuthType = AuthType.SessionCookie,
+        });
+
+        var result = await controller.Onboarding(new OnboardingRequest
+        {
+            TenantSlug = "myworkspace",
+            TenantDisplayName = "My Workspace",
+        }, CancellationToken.None);
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        var response = okResult.Value.Should().BeOfType<SignupCompleteResponse>().Subject;
+        response.Success.Should().BeTrue();
+        response.PendingApproval.Should().BeFalse();
+        response.HandoffUrl.Should().Be("https://myworkspace.nocturne.test/auth/handoff?code=code-xyz");
+    }
+
+    [Fact]
+    public async Task Onboarding_WhenRequiresApproval_ReturnsPendingApproval()
+    {
+        var subjectId = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var adminId = Guid.NewGuid();
+
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = subjectId,
+            Name = "Google User",
+            Username = "googleuser",
+            IsActive = true,
+        });
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = adminId,
+            Name = "Platform Admin",
+            Username = "admin",
+            IsActive = true,
+            IsPlatformAdmin = true,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        _tenantService
+            .Setup(t => t.CreateAsync("myworkspace", "My Workspace", subjectId, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantCreatedDto(tenantId, "myworkspace", "My Workspace", false, DateTime.UtcNow));
+
+        var controller = BuildController(enabled: true, requiresApproval: true);
+        controller.HttpContext.SetAuthContext(new AuthContext
+        {
+            IsAuthenticated = true,
+            SubjectId = subjectId,
+            AuthType = AuthType.SessionCookie,
+        });
+
+        var result = await controller.Onboarding(new OnboardingRequest
+        {
+            TenantSlug = "myworkspace",
+            TenantDisplayName = "My Workspace",
+        }, CancellationToken.None);
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        var response = okResult.Value.Should().BeOfType<SignupCompleteResponse>().Subject;
+        response.Success.Should().BeTrue();
+        response.PendingApproval.Should().BeTrue();
+        response.HandoffUrl.Should().BeNull();
+
+        _notificationService.Verify(
+            n => n.CreateNotificationAsync(
+                adminId.ToString(),
+                "tenant.approval_requested",
+                "Tenant approval requested: My Workspace",
+                It.IsAny<NotificationCategory?>(),
+                It.IsAny<NotificationUrgency?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                "Slug: myworkspace, Owner: Google User",
                 tenantId.ToString(),
                 It.IsAny<List<NotificationActionDto>?>(),
                 It.IsAny<ResolutionConditions?>(),

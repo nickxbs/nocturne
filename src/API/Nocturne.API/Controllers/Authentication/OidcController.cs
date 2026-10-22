@@ -272,6 +272,14 @@ public class OidcController : ControllerBase
 
         // Redirect to return URL
         var returnUrl = result.ReturnUrl ?? "/";
+        if (currentTenantId == null && (string.IsNullOrEmpty(result.ReturnUrl) || result.ReturnUrl == "/") && result.Tokens?.SubjectId is { } subjectId)
+        {
+            var tenantIds = await _tenantMemberService.GetTenantIdsForSubjectAsync(subjectId);
+            if (tenantIds.Count == 0)
+            {
+                return Redirect("/onboarding");
+            }
+        }
         return Redirect(returnUrl);
     }
 

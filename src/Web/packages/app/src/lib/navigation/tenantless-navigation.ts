@@ -20,6 +20,8 @@ export const TENANTLESS_NAV_HREFS: readonly string[] = [
   // Passkeys, authenticators, linked identities, sessions and avatar — all keyed on the subject,
   // none carrying a tenant column.
   "/settings/account",
+  // Personal workspace setup for authenticated users with 0 tenants
+  "/onboarding",
 ];
 
 interface NavLike {

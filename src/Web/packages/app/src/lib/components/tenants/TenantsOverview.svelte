@@ -5,6 +5,7 @@
   import { Button } from "$lib/components/ui/button";
   import { sortTenantsByUrgency } from "$lib/utils/glucose-status";
   import { pollWhileVisible } from "$lib/utils/poll-while-visible.svelte";
+  import Building2 from "@lucide/svelte/icons/building-2";
 
   /** How often to re-read the cross-tenant overview while the tab is visible. */
   const POLL_MS = 60_000;
@@ -50,9 +51,20 @@
   {:else if data}
     {@const tenants = sortTenantsByUrgency(data.tenants ?? [])}
     {#if tenants.length === 0}
-      <p class="text-sm text-muted-foreground">
-        No tenants with glucose access.
-      </p>
+      <div class="rounded-xl border border-dashed p-8 text-center">
+        <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <Building2 class="h-6 w-6" />
+        </div>
+        <h2 class="text-lg font-semibold">No workspaces yet</h2>
+        <p class="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+          You don't have access to any workspaces yet. You can create your own personal workspace to start logging and monitoring glucose.
+        </p>
+        <div class="mt-4">
+          <Button href="/onboarding">
+            Set up your workspace
+          </Button>
+        </div>
+      </div>
     {:else}
       <div class="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
         {#each tenants as tenant (tenant.tenantId)}

@@ -41,6 +41,7 @@ describe("filterTenantlessNav", () => {
   it("admits the subject's own settings pages as routes", () => {
     expect(isTenantlessRoute("/settings/appearance")).toBe(true);
     expect(isTenantlessRoute("/settings/account")).toBe(true);
+    expect(isTenantlessRoute("/onboarding")).toBe(true);
   });
 
   it("keeps the rest of settings off a tenantless host", () => {
