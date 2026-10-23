@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Routing;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Tests.Authorization;
@@ -188,6 +189,7 @@ public class V4WriteScopeGatingTests
             // the class.
             ["CompatibilityController"] = NotDataCategory.SuperuserAttribute,
             ["ServicesController"] = NotDataCategory.TenantSettingsScope,
+            ["RejectedUploadsController"] = NotDataCategory.TenantSettingsScope,
 
             ["ChatIdentityDirectoryController"] = NotDataCategory.InstanceKey,
 
@@ -203,6 +205,7 @@ public class V4WriteScopeGatingTests
             ["ConnectedAppsController"] = NotDataCategory.IdentityAndDelegation,
             ["GuestLinkController"] = NotDataCategory.IdentityAndDelegation,
             ["MemberInviteController"] = NotDataCategory.IdentityAndDelegation,
+            ["MemberRecoveryController"] = NotDataCategory.IdentityAndDelegation,
             ["MembershipRequestController"] = NotDataCategory.IdentityAndDelegation,
             ["RoleController"] = NotDataCategory.IdentityAndDelegation,
             ["SessionsController"] = NotDataCategory.IdentityAndDelegation,
@@ -341,6 +344,9 @@ public class V4WriteScopeGatingTests
             // schedules are the therapy category (therapy.read on the read side); v1 and v3 profile
             // writes require therapy.readwrite.
             ["ProfileController"] = Scope.TherapyReadWrite,
+            // therapy: an activation runs a stored profile, so recording, ending and deleting a
+            // person's profile switch takes therapy.readwrite, as writing the profile does.
+            ["ProfileActivationsController"] = Scope.TherapyReadWrite,
 
             // treatments: carb_intakes sits under treatments.read, POST /meals also writes a bolus,
             // and treatment_foods is keyed by carb intake (the food catalog is only read).
@@ -569,7 +575,7 @@ public class V4WriteScopeGatingTests
                 if (IsGateExempt(controller, action))
                     continue;
 
-                var attributes = action.GetCustomAttributes(inherit: true);
+                var attributes = AppliedAttributes(controller, action);
                 var gated = attributes.Any(a => a is RequireDeclaredWriteScopeAttribute
                                                      or RequireScopeAttribute
                                                      or RequirePermissionAttribute);
@@ -599,7 +605,7 @@ public class V4WriteScopeGatingTests
 
         violations.Should().BeEmpty(
             "every write action under " + V4Namespace + " must carry [RequireDeclaredWriteScope] "
-            + "(base CRUD actions and their overrides), an explicit [RequireScope], or an entry in "
+            + "(base CRUD actions and their overrides), a [RequireScope] on it or its controller, or an entry in "
             + "GateExemptWriteActions stating why. Unprotected: " + string.Join("; ", violations));
 
         readSatisfiable.Should().BeEmpty(
@@ -929,43 +935,13 @@ public class V4WriteScopeGatingTests
         return context.Result;
     }
 
-    /// <summary>
-    /// Runs the filters an action actually declares (authorization filters first, as MVC does), so
-    /// the assertion covers both which gate is present and the scope it names.
-    /// </summary>
     private static IActionResult? EvaluateAction(
-        Type controller, string actionName, bool authenticated, params string[] grantedScopes)
-    {
-        var action = controller.GetMethod(actionName, BindingFlags.Public | BindingFlags.Instance)
-            ?? throw new InvalidOperationException($"{controller.Name} has no action named {actionName}");
-        var filters = action.GetCustomAttributes(inherit: true);
-
-        var actionContext = new ActionContext(
-            NewHttpContext(authenticated, grantedScopes), new RouteData(), new ActionDescriptor());
-
-        foreach (var filter in filters.OfType<IAuthorizationFilter>())
-        {
-            var authorizationContext = new AuthorizationFilterContext(actionContext, new List<IFilterMetadata>());
-            filter.OnAuthorization(authorizationContext);
-            if (authorizationContext.Result is not null)
-                return authorizationContext.Result;
-        }
-
-        var executingContext = new ActionExecutingContext(
-            actionContext,
-            new List<IFilterMetadata>(),
-            new Dictionary<string, object?>(),
-            ScopeDeclarationInstance(controller));
-
-        foreach (var filter in filters.OfType<IActionFilter>())
-        {
-            filter.OnActionExecuting(executingContext);
-            if (executingContext.Result is not null)
-                return executingContext.Result;
-        }
-
-        return null;
-    }
+        Type controller, string actionName, bool authenticated, params string[] grantedScopes) =>
+        ActionGate.Evaluate(
+            controller,
+            actionName,
+            new HashSet<string>(grantedScopes),
+            authenticated ? new AuthContext { IsAuthenticated = true } : null);
 
     private static DefaultHttpContext NewHttpContext(bool authenticated, string[] grantedScopes)
     {
@@ -976,10 +952,21 @@ public class V4WriteScopeGatingTests
         return httpContext;
     }
 
+    /// <summary>The attributes MVC applies to an action: its controller's, then its own.</summary>
+    private static object[] AppliedAttributes(Type controller, MethodInfo action) =>
+        [.. controller.GetCustomAttributes(inherit: true), .. action.GetCustomAttributes(inherit: true)];
+
     /// <summary>The scopes an action's gate requires: the controller's declaration, or the explicit list.</summary>
+    /// <remarks>
+    /// The action's own gate when it has one: a controller-wide read gate alongside it still leaves
+    /// the action requiring the write scope. Without one, the controller's gate is the action's.
+    /// </remarks>
     private static IEnumerable<string> RequiredScopes(Type controller, MethodInfo action)
     {
-        var attributes = action.GetCustomAttributes(inherit: true);
+        var own = action.GetCustomAttributes(inherit: true);
+        var attributes = own.Any(a => a is RequireDeclaredWriteScopeAttribute or RequireScopeAttribute)
+            ? own
+            : controller.GetCustomAttributes(inherit: true);
 
         if (attributes.Any(a => a is RequireDeclaredWriteScopeAttribute)
             && ScopeDeclarationInstance(controller) is IWriteScopedController declared)

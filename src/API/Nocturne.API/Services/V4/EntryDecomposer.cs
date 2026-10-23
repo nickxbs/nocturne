@@ -25,7 +25,6 @@ namespace Nocturne.API.Services.V4;
 /// <seealso cref="IDecomposer{T}"/>
 public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Entry>
 {
-    private readonly NocturneDbContext _dbContext;
     private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
     private readonly IMeterGlucoseRepository _meterGlucoseRepository;
     private readonly ICalibrationRepository _calibrationRepository;
@@ -34,7 +33,6 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
     private readonly IAuditContext _auditContext;
 
     public EntryDecomposer(
-        NocturneDbContext dbContext,
         ISensorGlucoseRepository sensorGlucoseRepository,
         IMeterGlucoseRepository meterGlucoseRepository,
         ICalibrationRepository calibrationRepository,
@@ -44,7 +42,6 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         ILogger<EntryDecomposer> logger)
         : base(logger)
     {
-        _dbContext = dbContext;
         _sensorGlucoseRepository = sensorGlucoseRepository;
         _meterGlucoseRepository = meterGlucoseRepository;
         _calibrationRepository = calibrationRepository;
@@ -53,12 +50,20 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         _auditContext = auditContext;
     }
 
+    /// <summary>The tables an entry decomposes into, all keyed by its legacy id.</summary>
+    private StoredCorrelationLookup[] EntryTables =>
+    [
+        _sensorGlucoseRepository.GetCorrelationIdsByLegacyIdAsync,
+        _meterGlucoseRepository.GetCorrelationIdsByLegacyIdAsync,
+        _calibrationRepository.GetCorrelationIdsByLegacyIdAsync,
+    ];
+
     /// <inheritdoc />
     public async Task<DecompositionResult> DecomposeAsync(Entry entry, WriteOrigin origin, CancellationToken ct = default)
     {
         var result = new DecompositionResult
         {
-            CorrelationId = Guid.CreateVersion7()
+            CorrelationId = CorrelationIdFor(entry.Id, await GetStoredCorrelationIdsAsync([entry.Id], EntryTables, ct))
         };
 
         var entryType = entry.Type?.ToLowerInvariant();
@@ -159,10 +164,11 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         var mbgList = new List<MeterGlucose>();
         var calList = new List<Calibration>();
         var unsupportedTypes = new HashSet<string>(StringComparer.Ordinal);
+        var correlationIds = await GetStoredCorrelationIdsAsync(entries.Select(e => e.Id), EntryTables, ct);
 
         foreach (var entry in entries)
         {
-            var correlationId = Guid.CreateVersion7();
+            var correlationId = CorrelationIdFor(entry.Id, correlationIds);
             switch (entry.Type?.ToLowerInvariant())
             {
                 case "sgv":
@@ -269,8 +275,6 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
     /// <inheritdoc />
     public async Task<long> BulkDeleteAsync(string? find, WriteOrigin origin, CancellationToken ct = default)
     {
-        // origin is accepted for interface uniformity; bulk clear-by-time-range stays a coarse op that
-        // does NOT route through the per-record chokepoint (it fires EntryService's OnBulkDeletedAsync).
         var findQuery = Core.Models.Queries.FindQuery.Parse(find);
         var (fromMills, toMills) = (findQuery.FromMills, findQuery.ToMills);
 
@@ -313,11 +317,11 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
             : null;
 
         var sgDeleted = typeFilter is null or "sgv"
-            ? await _sensorGlucoseRepository.DeleteByTimeRangeAsync(from, to, ct) : 0;
+            ? await _sensorGlucoseRepository.DeleteByTimeRangeAsync(from, to, origin, ct) : 0;
         var mgDeleted = typeFilter is null or "mbg"
-            ? await _meterGlucoseRepository.DeleteByTimeRangeAsync(from, to, ct) : 0;
+            ? await _meterGlucoseRepository.DeleteByTimeRangeAsync(from, to, origin, ct) : 0;
         var calDeleted = typeFilter is null or "cal"
-            ? await _calibrationRepository.DeleteByTimeRangeAsync(from, to, ct) : 0;
+            ? await _calibrationRepository.DeleteByTimeRangeAsync(from, to, origin, ct) : 0;
 
         var total = (long)sgDeleted + mgDeleted + calDeleted;
         Logger.LogInformation("BulkDelete: removed {Total} v4 records (sg={Sg}, mg={Mg}, cal={Cal}) from={From} to={To} type={Type}",
@@ -340,6 +344,10 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
             Direction = MapDirection(entry.Direction),
             TrendRate = entry.TrendRate,
             Noise = entry.Noise,
+            Filtered = entry.Filtered,
+            Unfiltered = entry.Unfiltered,
+            Delta = entry.Delta,
+            Rssi = entry.Rssi,
             Device = entry.Device,
             App = entry.App,
             DataSource = entry.DataSource,

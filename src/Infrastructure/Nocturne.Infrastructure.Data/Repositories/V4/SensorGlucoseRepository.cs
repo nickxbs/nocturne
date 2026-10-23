@@ -45,15 +45,30 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<SensorGlucose>> GetForEntriesAsync(
+    public Task<IEnumerable<SensorGlucose>> GetForEntriesAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit = 100, int offset = 0, bool descending = true, bool nativeOnly = false,
         DateTime? afterTimestamp = null, Guid? afterId = null,
-        CancellationToken ct = default, Guid? patientDeviceId = null)
+        CancellationToken ct = default, Guid? patientDeviceId = null) =>
+        ReadForEntriesAsync(from, to, device, source, limit, offset, descending, nativeOnly,
+            afterTimestamp, afterId, patientDeviceId, orderByValue: false, ct);
+
+    /// <inheritdoc />
+    public Task<IEnumerable<SensorGlucose>> GetForEntriesByValueAsync(
+        DateTime? from, DateTime? to, string? source, int limit, int offset, bool descending,
+        CancellationToken ct = default) =>
+        ReadForEntriesAsync(from, to, device: null, source, limit, offset, descending, nativeOnly: false,
+            afterTimestamp: null, afterId: null, patientDeviceId: null, orderByValue: true, ct);
+
+    private async Task<IEnumerable<SensorGlucose>> ReadForEntriesAsync(
+        DateTime? from, DateTime? to, string? device, string? source,
+        int limit, int offset, bool descending, bool nativeOnly,
+        DateTime? afterTimestamp, Guid? afterId, Guid? patientDeviceId,
+        bool orderByValue, CancellationToken ct)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await BuildReadQuery(ctx, from, to, device, source, limit, offset,
-                descending, nativeOnly, afterTimestamp, afterId, patientDeviceId)
+                descending, nativeOnly, afterTimestamp, afterId, patientDeviceId, orderByValue)
             .Select(e => new SensorGlucose
             {
                 Id = e.Id,
@@ -73,6 +88,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
                 Filtered = e.Filtered,
                 Unfiltered = e.Unfiltered,
                 Delta = e.Delta,
+                Rssi = e.Rssi,
             })
             .ToListAsync(ct);
     }
@@ -228,7 +244,8 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     private IQueryable<SensorGlucoseEntity> BuildReadQuery(
         NocturneDbContext ctx, DateTime? from, DateTime? to, string? device, string? source,
         int limit, int offset, bool descending, bool nativeOnly,
-        DateTime? afterTimestamp, Guid? afterId, Guid? patientDeviceId)
+        DateTime? afterTimestamp, Guid? afterId, Guid? patientDeviceId,
+        bool orderByValue = false)
     {
         var query = ctx.SensorGlucose.AsNoTracking().AsQueryable();
         if (from.HasValue)
@@ -257,9 +274,13 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
                     || (e.Timestamp == afterTimestamp.Value && e.Id > afterId.Value));
         }
 
-        query = descending
-            ? query.OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id)
-            : query.OrderBy(e => e.Timestamp).ThenBy(e => e.Id);
+        query = (orderByValue, descending) switch
+        {
+            (true, true) => query.OrderByDescending(e => e.Mgdl).ThenByDescending(e => e.Timestamp).ThenByDescending(e => e.Id),
+            (true, false) => query.OrderBy(e => e.Mgdl).ThenBy(e => e.Timestamp).ThenBy(e => e.Id),
+            (false, true) => query.OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id),
+            (false, false) => query.OrderBy(e => e.Timestamp).ThenBy(e => e.Id),
+        };
 
         if (!afterTimestamp.HasValue || !afterId.HasValue)
         {
@@ -434,13 +455,14 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     /// Deletes all sensor glucose records for the given data source.
     /// </summary>
     /// <param name="source">Data source identifier.</param>
+    /// <param name="origin">Whether the delete is a live event; see <see cref="V4RepositoryBase{TModel,TEntity}.RaiseBroadcastAsync"/>.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
-    public async Task<int> DeleteBySourceAsync(string source, CancellationToken ct = default)
+    public async Task<int> DeleteBySourceAsync(string source, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.AuditedSoftDeleteAsync(
-            ctx.SensorGlucose.FromSource(source), AuditContext, $"data_source={source}", ct);
+        return await AuditedSoftDeleteAndBroadcastAsync(
+            ctx, ctx.SensorGlucose.FromSource(source), $"data_source={source}", DuplicateDelete.PromoteSurvivor, origin, ct);
     }
 
     /// <inheritdoc />
@@ -499,9 +521,10 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     /// </summary>
     /// <param name="from">Inclusive start, or null for no lower bound.</param>
     /// <param name="to">Inclusive end, or null for no upper bound.</param>
+    /// <param name="origin">Whether the delete is a live event; see <see cref="V4RepositoryBase{TModel,TEntity}.RaiseBroadcastAsync"/>.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
-    public async Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
+    public async Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var query = ctx.SensorGlucose.AsQueryable();
@@ -511,6 +534,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         if (to.HasValue)
             query = query.Where(e => e.Timestamp <= to.Value);
 
-        return await ctx.AuditedSoftDeleteAsync(query, AuditContext, $"timestamp={from:O}..{to:O}", ct);
+        return await AuditedSoftDeleteAndBroadcastAsync(
+            ctx, query, $"timestamp={from:O}..{to:O}", DuplicateDelete.PromoteSurvivor, origin, ct);
     }
 }

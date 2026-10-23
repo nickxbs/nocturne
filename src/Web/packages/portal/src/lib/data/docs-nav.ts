@@ -72,6 +72,11 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
         ],
     },
     {
+        id: "reports",
+        title: "Reports",
+        items: [{ href: "/docs/reports/loop-analysis", label: "Loop Analysis" }],
+    },
+    {
         id: "trackers",
         title: "Trackers",
         items: [
@@ -105,6 +110,11 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
             { href: "/docs/bots/telegram", label: "Telegram" },
             { href: "/docs/bots/whatsapp", label: "WhatsApp" },
         ],
+    },
+    {
+        id: "data-sources",
+        title: "Data Sources",
+        items: [{ href: "/docs/data-sources/google-health", label: "Google Health" }],
     },
     {
         id: "configuration",

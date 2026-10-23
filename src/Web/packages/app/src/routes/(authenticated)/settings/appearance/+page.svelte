@@ -4,10 +4,14 @@
   import {
     getColorTheme,
     setColorTheme,
+    glucoseRangePalette,
+    setGlucoseRangePalette,
     type ColorTheme,
   } from "$lib/stores/appearance-store.svelte";
   import {
     glucoseUnits,
+    energyUnit,
+    getEnergyUnit,
     a1cName,
     a1cUnits,
     timeFormat,
@@ -26,12 +30,15 @@
     regionFormat,
     regionFormatLabel,
     REGION_FORMATS,
+    type AreaMode,
     type ColorScheme,
     type RegionFormat,
   } from "$lib/stores/appearance-store.svelte";
+  import { ENERGY_UNITS } from "@nocturne/ui/energy";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import TitleFaviconSettings from "$lib/components/settings/TitleFaviconSettings.svelte";
   import DashboardWidgetConfigurator from "$lib/components/settings/DashboardWidgetConfigurator.svelte";
+  import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
   import LanguageSelector from "$lib/components/LanguageSelector.svelte";
   import { updateLanguagePreference } from "$api/user-preferences.remote";
   import {
@@ -84,6 +91,7 @@
   import { WidgetId } from "$lib/api/generated/nocturne-api-client";
   import { page } from "$app/state";
   import { coachmark } from "@nocturne/coach";
+  import { coachFor } from "$lib/coach-marks/copy.svelte";
   import { describeSubmitError } from "$lib/forms/submit-error";
 
   const realtimeStore = getRealtimeStore();
@@ -389,6 +397,55 @@
 
         <Separator />
 
+        <div class="space-y-2">
+          <Label>Glucose range colors</Label>
+          <RadioGroup.Root
+            class="grid @xl:grid-cols-2"
+            aria-label="Glucose range colors"
+            value={glucoseRangePalette.current}
+            onValueChange={(palette) => {
+              if (palette === "theme" || palette === "clarity") setGlucoseRangePalette(palette);
+            }}
+          >
+            <RadioGroup.Card value="theme">
+              <div class="font-semibold">Theme</div>
+              <p class="text-sm text-muted-foreground">
+                The range colors of the selected color theme
+              </p>
+            </RadioGroup.Card>
+            <RadioGroup.Card value="clarity">
+              <div class="font-semibold">Distinct</div>
+              <p class="text-sm text-muted-foreground">
+                Maroon, red, yellow and orange for the four out-of-range bands on every theme
+              </p>
+            </RadioGroup.Card>
+          </RadioGroup.Root>
+          <ul class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm" aria-label="Range color preview">
+            <li class="flex items-center gap-1.5">
+              <TextureSwatch texture="very-high" />
+              Very high
+            </li>
+            <li class="flex items-center gap-1.5">
+              <TextureSwatch texture="high" />
+              High
+            </li>
+            <li class="flex items-center gap-1.5">
+              <TextureSwatch texture="in-range" />
+              In range
+            </li>
+            <li class="flex items-center gap-1.5">
+              <TextureSwatch texture="low" />
+              Low
+            </li>
+            <li class="flex items-center gap-1.5">
+              <TextureSwatch texture="very-low" />
+              Very low
+            </li>
+          </ul>
+        </div>
+
+        <Separator />
+
         <div class="grid gap-4 @sm:grid-cols-2">
           <div class="space-y-2">
             <Label>Color scheme</Label>
@@ -521,6 +578,28 @@
               <SelectContent>
                 <SelectItem value="mg/dl">mg/dL</SelectItem>
                 <SelectItem value="mmol">mmol/L</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div class="space-y-2">
+            <Label for="energy-unit">Food energy units</Label>
+            <Select
+              type="single"
+              value={getEnergyUnit()}
+              onValueChange={(value) => {
+                const unit = ENERGY_UNITS.find((u) => u === value);
+                if (unit) energyUnit.current = unit;
+              }}
+            >
+              <SelectTrigger id="energy-unit">
+                <span>
+                  {getEnergyUnit() === "kJ" ? "Kilojoules (kJ)" : "Calories (kcal)"}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="kJ">Kilojoules (kJ)</SelectItem>
+                <SelectItem value="kcal">Calories (kcal)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -702,8 +781,8 @@
                   </span>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="threshold">Threshold bands</SelectItem>
                   <SelectItem value="continuous">Continuous gradient</SelectItem>
+                  <SelectItem value="threshold">Threshold bands</SelectItem>
                   <SelectItem value="single">Single color</SelectItem>
                 </SelectContent>
               </Select>
@@ -755,8 +834,8 @@
                     </span>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="threshold">Threshold bands</SelectItem>
                     <SelectItem value="continuous">Continuous gradient</SelectItem>
+                    <SelectItem value="threshold">Threshold bands</SelectItem>
                     <SelectItem value="single">Single color</SelectItem>
                   </SelectContent>
                 </Select>
@@ -783,24 +862,36 @@
               value={chartAreaMode.current}
               onValueChange={(value: string) => {
                 // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- value is constrained to the area fill options by the sibling SelectItems
-                chartAreaMode.current = value as "off" | "baseline" | "deviation";
+                chartAreaMode.current = value as AreaMode;
               }}
             >
               <SelectTrigger>
                 <span>
                   {chartAreaMode.current === "off"
                     ? "Off"
-                    : chartAreaMode.current === "baseline"
-                      ? "Baseline"
-                      : "Deviation"}
+                    : chartAreaMode.current === "full"
+                      ? "Full"
+                      : chartAreaMode.current === "baseline"
+                        ? "Fade (Trio style)"
+                        : "Outside target only"}
                 </span>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="off">Off</SelectItem>
-                <SelectItem value="baseline">Baseline</SelectItem>
-                <SelectItem value="deviation">Deviation</SelectItem>
+                <SelectItem value="full">Full</SelectItem>
+                <SelectItem value="baseline">Fade (Trio style)</SelectItem>
+                <SelectItem value="deviation">Outside target only</SelectItem>
               </SelectContent>
             </Select>
+            <p class="text-sm text-muted-foreground">
+              {chartAreaMode.current === "off"
+                ? "No fill under the glucose line."
+                : chartAreaMode.current === "full"
+                  ? "Fills from the glucose line to the bottom of the chart at one opacity."
+                  : chartAreaMode.current === "baseline"
+                    ? "Fills from the glucose line to the bottom of the chart, fading out toward the bottom."
+                    : "Fills only between the glucose line and the target range when it is out of range."}
+            </p>
           </div>
         </div>
 
@@ -844,9 +935,7 @@
 
     <!-- Dashboard Widgets -->
     <div {@attach coachmark({
-      key: "feature-intro.appearance-widgets",
-      title: "Widget order",
-      description: "Drag to reorder your dashboard widgets.",
+      ...coachFor("feature-intro.appearance-widgets"),
       completeOn: { event: "dragend" },
     })}>
       <DashboardWidgetConfigurator

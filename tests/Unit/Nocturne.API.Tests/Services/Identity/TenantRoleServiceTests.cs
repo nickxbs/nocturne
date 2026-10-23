@@ -50,7 +50,37 @@ public class TenantRoleServiceTests : IDisposable
             DisplayName = "Test Tenant",
         });
         _context.SaveChanges();
-        _service = new TenantRoleService(_context, factory.AsNocturneFactory());
+        _service = new TenantRoleService(factory.AsNocturneFactory());
+    }
+
+    [Fact]
+    public async Task GetAssignableRolesAsync_ListsExactlyTheRolesValidateRoleGrantAsyncAccepts()
+    {
+        await _service.SeedRolesForTenantAsync(_tenantId);
+        var granter = new[] { Scope.MembersInvite, Scope.MembersManage, "glucose.read" };
+
+        var assignable = await _service.GetAssignableRolesAsync(_tenantId, granter);
+        var all = await _service.GetRolesAsync(_tenantId);
+
+        foreach (var role in all)
+        {
+            var validation = await _service.ValidateRoleGrantAsync(_tenantId, [role.Id], granter);
+            assignable.Any(r => r.Id == role.Id).Should().Be(validation.Ok, role.Slug);
+        }
+
+        assignable.Should().NotBeEmpty();
+        assignable.Should().NotContain(r => r.Slug == RoleSeeds.Owner);
+        assignable.Count.Should().BeLessThan(all.Count);
+    }
+
+    [Fact]
+    public async Task GetAssignableRolesAsync_ForSuperuser_ListsEveryRole()
+    {
+        await _service.SeedRolesForTenantAsync(_tenantId);
+
+        var assignable = await _service.GetAssignableRolesAsync(_tenantId, [Scope.FullAccess]);
+
+        assignable.Should().HaveCount(6);
     }
 
     [Fact]
@@ -77,7 +107,7 @@ public class TenantRoleServiceTests : IDisposable
         _factory.Handed.Should().ContainSingle("the seed takes exactly one context of its own");
         _factory.Handed[0].TenantId.Should().Be(_tenantId);
         _context.ChangeTracker.Entries<TenantRoleEntity>().Should().BeEmpty(
-            "the roles are written through that context, not the injected one");
+            "the roles are written through that context, not the test's own");
     }
 
     [Fact]

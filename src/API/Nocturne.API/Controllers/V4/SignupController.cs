@@ -281,6 +281,7 @@ public class SignupController : ControllerBase
                 var issued = await _loginCodeService.IssueAsync(
                     tenantCtx,
                     subjectId,
+                    LoginCodePurpose.Login,
                     HttpContext.Connection.RemoteIpAddress?.ToString(),
                     Request.Headers.UserAgent.ToString(),
                     new AuthAuditActor(subjectId, null),
@@ -418,6 +419,7 @@ public class SignupController : ControllerBase
                 var issued = await _loginCodeService.IssueAsync(
                     tenantCtx,
                     subjectId,
+                    LoginCodePurpose.Login,
                     HttpContext.Connection.RemoteIpAddress?.ToString(),
                     Request.Headers.UserAgent.ToString(),
                     new AuthAuditActor(subjectId, null),

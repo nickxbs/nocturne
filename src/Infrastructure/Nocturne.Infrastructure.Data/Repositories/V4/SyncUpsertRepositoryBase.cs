@@ -85,11 +85,12 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
 
             if (existing != null)
             {
+                var before = ToDomain(existing);
                 ApplySyncUpsert(existing, model);
                 await ctx.SaveChangesAsync(ct);
                 var upserted = ToDomain(existing);
                 // A single explicit upsert always broadcasts (no material-change gate on the single path).
-                await RaiseBroadcastAsync([], [upserted], [], origin, ct);
+                await RaiseBroadcastAsync([], [upserted], [], origin, ct, vacated: [before]);
                 return new SyncUpsert<TModel>(upserted, Created: false);
             }
         }
@@ -110,6 +111,31 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await FindGoverningRowAsync(ctx, dataSource, syncIdentifier, ct) is { DeletedAt: not null };
+    }
+
+    /// <inheritdoc cref="ISyncKeyedRepository{T}.GetUpsertTargetTimestampsAsync" />
+    public async Task<IReadOnlyList<DateTime>> GetUpsertTargetTimestampsAsync(
+        IReadOnlyCollection<TModel> records, CancellationToken ct = default)
+    {
+        var keys = records
+            .Select(ToEntity)
+            .Where(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier))
+            .Select(e => (DataSource: e.DataSource!, SyncIdentifier: e.SyncIdentifier!))
+            .ToHashSet();
+        if (keys.Count == 0)
+            return [];
+
+        var sources = keys.Select(k => k.DataSource).Distinct().ToList();
+        var syncIds = keys.Select(k => k.SyncIdentifier).Distinct().ToList();
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        // Over-fetches by a Cartesian amount, as SplitUpsertsAsync does, on the same index.
+        var rows = await ctx.Set<TEntity>().AsNoTracking()
+            .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
+            .Select(e => new { e.DataSource, e.SyncIdentifier, e.Timestamp })
+            .ToListAsync(ct);
+
+        return [.. rows.Where(r => keys.Contains((r.DataSource!, r.SyncIdentifier!))).Select(r => r.Timestamp)];
     }
 
     /// <summary>
@@ -153,8 +179,9 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
 
         var updatedEntities = new List<TEntity>();
         var materiallyChanged = new List<TEntity>();
+        var vacated = new List<TModel>();
         if (syncKeyed.Count == 0)
-            return new UpsertSplit(updatedEntities, materiallyChanged, entities, 0);
+            return new UpsertSplit(updatedEntities, materiallyChanged, vacated, entities, 0);
 
         var sources = syncKeyed.Select(e => e.DataSource!).Distinct().ToList();
         var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
@@ -186,11 +213,15 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
                     continue;
                 }
 
+                var before = ToDomain(existing);
                 ApplySyncUpsert(existing, ToDomain(entity));
                 updatedEntities.Add(existing);
                 // Capture material changes now, before SaveChanges clears the modified flags.
                 if (HasMaterialChange(ctx, existing))
+                {
                     materiallyChanged.Add(existing);
+                    vacated.Add(before);
+                }
             }
             else
             {
@@ -204,6 +235,6 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
             await ctx.SaveChangesAsync(ct);
         }
 
-        return new UpsertSplit(updatedEntities, materiallyChanged, toInsert, skippedDeleted);
+        return new UpsertSplit(updatedEntities, materiallyChanged, vacated, toInsert, skippedDeleted);
     }
 }

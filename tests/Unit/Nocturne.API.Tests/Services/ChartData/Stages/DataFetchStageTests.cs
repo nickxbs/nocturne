@@ -1,5 +1,7 @@
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
@@ -30,7 +32,9 @@ public class DataFetchStageTests
     private readonly Mock<IDeviceEventRepository> _mockDeviceEventRepo = new();
     private readonly Mock<ITempBasalRepository> _mockTempBasalRepo = new();
     private readonly Mock<IApsSnapshotRepository> _mockApsSnapshotRepo = new();
+    private readonly Mock<IPumpSnapshotRepository> _mockPumpSnapshotRepo = new();
     private readonly Mock<IStateSpanRepository> _mockStateSpanRepo;
+    private readonly Mock<IProfileActivationResolver> _mockProfileActivations = new();
     private readonly Mock<ISystemEventRepository> _mockSystemEventRepo;
     private readonly Mock<ITrackerRepository> _mockTrackerRepo;
     private readonly Mock<IBasalInjectionRepository> _mockBasalInjectionRepo = new();
@@ -46,8 +50,15 @@ public class DataFetchStageTests
         _mockTrackerRepo = new Mock<ITrackerRepository>();
 
         SetupDefaultMocks();
+        _mockProfileActivations
+            .Setup(r => r.GetRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
 
-        _stage = new DataFetchStage(
+        _stage = CreateStage(new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds(EndTime)));
+    }
+
+    private DataFetchStage CreateStage(TimeProvider now) =>
+        new(
             _mockSensorGlucoseRepo.Object,
             TestDoubles.CanonicalGlucosePassThrough.Create(),
             _mockBolusRepo.Object,
@@ -56,16 +67,18 @@ public class DataFetchStageTests
             _mockDeviceEventRepo.Object,
             _mockTempBasalRepo.Object,
             _mockApsSnapshotRepo.Object,
+            _mockPumpSnapshotRepo.Object,
             _mockStateSpanRepo.Object,
+            _mockProfileActivations.Object,
             _mockSystemEventRepo.Object,
             _mockTrackerRepo.Object,
             _mockBasalInjectionRepo.Object,
             NullLogger<DataFetchStage>.Instance,
             _mockHeartRateService.Object,
             _mockStepCountService.Object,
-            _mockSleepService.Object
+            _mockSleepService.Object,
+            now
         );
-    }
 
     private void SetupDefaultMocks()
     {
@@ -467,7 +480,32 @@ public class DataFetchStageTests
         requestedLimit.Should().Be(Nocturne.API.Services.Analytics.ChartDataService.TempBasalQueryLimit);
         requestedDescending.Should().BeFalse();
         result.TempBasalList.Should().BeEquivalentTo([beforeWindow, runningAcrossStart, atStart, inWindow]);
-        result.DisplayTempBasals.Should().BeEquivalentTo([runningAcrossStart, atStart, inWindow]);
+        result.DisplayTempBasals.Should().BeEquivalentTo([atStart, inWindow], "the temp at the window start cancels the one running across it");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WindowEndingAfterNow_DrawsARunningTempToNow()
+    {
+        var now = StartTime + 2 * 60 * 60 * 1000;
+        var running = new TempBasal
+        {
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(StartTime + 60 * 60 * 1000).UtcDateTime,
+            Rate = 2.0,
+            Origin = TempBasalOrigin.Algorithm,
+        };
+        _mockTempBasalRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([running]);
+
+        var result = await CreateStage(new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds(now)))
+            .ExecuteAsync(Window(includeHealthSeries: false), CancellationToken.None);
+
+        result.DisplayTempBasals.Should().ContainSingle()
+            .Which.EndMills.Should().Be(now);
     }
 
     [Fact]
