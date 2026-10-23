@@ -23,7 +23,7 @@ public class ShareDataCategoriesGuardTests
         // Configuration that applies to all of history rather than to rows of it: therapy and
         // profile schedules, alert and tracker setup, devices and connector settings.
         "alert_condition_timers", "alert_custom_sounds", "alert_rule_channels", "alert_rules", "alert_tracker_state",
-        "basal_schedules", "carb_ratio_schedules", "client_devices", "clock_faces", "coach_mark_states",
+        "basal_schedules", "carb_ratio_schedules", "cgmsim_settings", "client_devices", "clock_faces", "coach_mark_states",
         "connector_configurations", "data_source_metadata", "devices", "dnd_windows", "patient_devices",
         "patient_insulins", "patient_records", "sensitivity_schedules", "settings", "target_range_schedules",
         "tenant_alert_settings", "tenant_data_retention_config", "therapy_settings", "timezone_timeline",

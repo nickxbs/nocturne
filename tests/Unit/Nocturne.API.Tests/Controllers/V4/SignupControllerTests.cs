@@ -378,7 +378,7 @@ public class SignupControllerTests : IDisposable
             .ReturnsAsync(["code-1", "code-2"]);
 
         _loginCodeService.Setup(l => l.IssueAsync(
-                It.IsAny<NocturneDbContext>(), subjectId, It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<NocturneDbContext>(), subjectId, It.IsAny<Nocturne.Infrastructure.Data.Entities.LoginCodePurpose>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new LoginCode("secret-login-code", DateTime.UtcNow.AddMinutes(5)));
 
@@ -646,6 +646,7 @@ public class SignupControllerTests : IDisposable
             .Setup(l => l.IssueAsync(
                 It.IsAny<NocturneDbContext>(),
                 subjectId,
+                It.IsAny<Nocturne.Infrastructure.Data.Entities.LoginCodePurpose>(),
                 It.IsAny<string?>(),
                 It.IsAny<string?>(),
                 It.IsAny<AuthAuditActor>(),
