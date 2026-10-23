@@ -145,6 +145,17 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
 
   const showBackupSignInPrompt = !tenantless && !isDemo && (await backupSignInPrompt);
 
+  let isCgmSimInitialized = true;
+  if (!tenantless && !locals.isShareHost && locals.isAuthenticated && locals.user) {
+    try {
+      const cgmSettings = await locals.apiClient.cgmSim.getSettings();
+      isCgmSimInitialized = cgmSettings.isInitialized ?? false;
+    } catch (err) {
+      console.error("Failed to check cgmSim initialization:", err);
+      isCgmSimInitialized = true;
+    }
+  }
+
   return {
     user: locals.user ?? null,
     isGuestSession: locals.isGuestSession ?? false,
@@ -153,5 +164,6 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
     showBackupSignInPrompt,
     isDemo,
     nextResetAt,
+    isCgmSimInitialized,
   };
 };

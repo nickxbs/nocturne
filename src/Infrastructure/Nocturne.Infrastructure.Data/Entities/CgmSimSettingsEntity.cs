@@ -44,6 +44,9 @@ public class CgmSimSettingsEntity : ITenantScoped, IEntityTimestamped
     [Column("cr")]
     public double Cr { get; set; } = 10.0;
 
+    [Column("is_initialized")]
+    public bool IsInitialized { get; set; } = false;
+
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

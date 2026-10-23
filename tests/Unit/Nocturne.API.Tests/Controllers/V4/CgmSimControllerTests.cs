@@ -131,6 +131,51 @@ public class CgmSimControllerTests
         settings.Subject.Weight.Should().Be(80.0);
         settings.Parameters.Isf.Should().Be(50.0);
         settings.Parameters.Cr.Should().Be(12.0);
+        settings.IsInitialized.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Initialize_PersistsBothSubjectAndParametersAndSetsIsInitializedTrue()
+    {
+        var (controller, options) = NewController();
+
+        var request = new CgmSimInitializeRequest
+        {
+            Subject = new CgmSimSubject
+            {
+                Sex = "female",
+                Weight = 65.0,
+                Age = 25,
+                Height = 165.0,
+            },
+            Parameters = new CgmSimParameters
+            {
+                Isf = 40.0,
+                Dia = 3.5,
+                CarbsAbsTime = 150,
+                InsulinPeak = 60,
+                Cr = 9.0,
+            },
+        };
+
+        var result = await controller.Initialize(request, CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var settings = ok.Value.Should().BeOfType<CgmSimSettings>().Subject;
+        settings.IsInitialized.Should().BeTrue();
+        settings.Subject.Sex.Should().Be("female");
+        settings.Subject.Weight.Should().Be(65.0);
+        settings.Parameters.Isf.Should().Be(40.0);
+        settings.Parameters.Dia.Should().Be(3.5);
+
+        await using var db = new NocturneDbContext(options) { TenantId = Tenant };
+        var stored = await db.CgmSimSettings.FirstOrDefaultAsync();
+        stored.Should().NotBeNull();
+        stored!.IsInitialized.Should().BeTrue();
+        stored.Sex.Should().Be("female");
+        stored.Weight.Should().Be(65.0);
+        stored.Isf.Should().Be(40.0);
+        stored.Dia.Should().Be(3.5);
     }
 
     private static (CgmSimController Controller, DbContextOptions<NocturneDbContext> Options) NewController()

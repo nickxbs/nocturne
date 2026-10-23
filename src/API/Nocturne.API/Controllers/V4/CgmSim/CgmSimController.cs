@@ -136,6 +136,54 @@ public class CgmSimController : ControllerBase
                 InsulinPeak = entity.InsulinPeak,
                 Cr = entity.Cr,
             },
+            IsInitialized = entity.IsInitialized,
+            UpdatedAt = entity.UpdatedAt,
+        });
+    }
+
+    [HttpPost("initialize")]
+    [RemoteCommand(Invalidates = ["GetSettings", "GetSubject", "GetParameters"])]
+    [ProducesResponseType(typeof(CgmSimSettings), StatusCodes.Status200OK)]
+    public async Task<ActionResult<CgmSimSettings>> Initialize(
+        [FromBody] CgmSimInitializeRequest request,
+        CancellationToken ct)
+    {
+        await using var db = await _contextFactory.CreateAsync(ct);
+        var entity = await GetOrCreateSettingsAsync(db, ct);
+
+        entity.Sex = request.Subject.Sex;
+        entity.Weight = request.Subject.Weight;
+        entity.Age = request.Subject.Age;
+        entity.Height = request.Subject.Height;
+
+        entity.Isf = request.Parameters.Isf;
+        entity.Dia = request.Parameters.Dia;
+        entity.CarbsAbsTime = request.Parameters.CarbsAbsTime;
+        entity.InsulinPeak = request.Parameters.InsulinPeak;
+        entity.Cr = request.Parameters.Cr;
+
+        entity.IsInitialized = true;
+
+        await db.SaveChangesAsync(ct);
+
+        return Ok(new CgmSimSettings
+        {
+            Subject = new CgmSimSubject
+            {
+                Sex = entity.Sex,
+                Weight = entity.Weight,
+                Age = entity.Age,
+                Height = entity.Height,
+            },
+            Parameters = new CgmSimParameters
+            {
+                Isf = entity.Isf,
+                Dia = entity.Dia,
+                CarbsAbsTime = entity.CarbsAbsTime,
+                InsulinPeak = entity.InsulinPeak,
+                Cr = entity.Cr,
+            },
+            IsInitialized = entity.IsInitialized,
             UpdatedAt = entity.UpdatedAt,
         });
     }

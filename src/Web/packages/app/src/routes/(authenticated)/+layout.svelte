@@ -40,6 +40,7 @@
   import CoachParamHandler from "$lib/coach-marks/CoachParamHandler.svelte";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
   import ChartPrintPatterns from "$lib/components/charts/print/ChartPrintPatterns.svelte";
+  import CgmSimOnboardingDialog from "$lib/components/cgmsim/CgmSimOnboardingDialog.svelte";
 
   // LocalStorage key for title/favicon settings
   const SETTINGS_STORAGE_KEY = "nocturne-title-favicon-settings";
@@ -103,6 +104,22 @@
     () => import("$lib/components/command-palette/CommandPalette.svelte"),
   );
   let bannerStripHeight = $state(0);
+
+  const canWriteCgmSim = $derived(
+    (data.effectivePermissions ?? []).includes("*") ||
+    (data.effectivePermissions ?? []).includes("api:*") ||
+    (data.effectivePermissions ?? []).some((s: string) => s.endsWith(".readwrite") || s.includes(".write")) ||
+    (data.effectivePermissions ?? []).includes("tenant.settings")
+  );
+
+  let cgmSimOnboardingOpen = $state(false);
+  $effect(() => {
+    if (!tenantless && !data.isShareHost && data.isAuthenticated && data.isCgmSimInitialized === false) {
+      cgmSimOnboardingOpen = true;
+    } else {
+      cgmSimOnboardingOpen = false;
+    }
+  });
 
   const coachMarkAdapter = createCoachMarkAdapter(tenantless);
   const coachRouter: CoachRouter = { beforeNavigate, goto };
@@ -304,5 +321,15 @@
   </Sidebar.Provider>
   {#if commandPalette.component}
     <commandPalette.component bind:open={commandPalette.open} {tenantless} />
+  {/if}
+
+  {#if !tenantless && !data.isShareHost && data.isAuthenticated && data.isCgmSimInitialized === false}
+    <CgmSimOnboardingDialog
+      bind:open={cgmSimOnboardingOpen}
+      canWrite={canWriteCgmSim}
+      onCompleted={() => {
+        cgmSimOnboardingOpen = false;
+      }}
+    />
   {/if}
 </CoachMarkProvider>

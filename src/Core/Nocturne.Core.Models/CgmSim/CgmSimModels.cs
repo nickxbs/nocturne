@@ -57,5 +57,18 @@ public class CgmSimSettings
 {
     public CgmSimSubject Subject { get; set; } = new();
     public CgmSimParameters Parameters { get; set; } = new();
+    public bool IsInitialized { get; set; }
     public DateTime UpdatedAt { get; set; }
+}
+
+/// <summary>
+/// Atomic initialization request for setting up tenant CGM simulation.
+/// </summary>
+public class CgmSimInitializeRequest
+{
+    [Required]
+    public CgmSimSubject Subject { get; set; } = new();
+
+    [Required]
+    public CgmSimParameters Parameters { get; set; } = new();
 }
