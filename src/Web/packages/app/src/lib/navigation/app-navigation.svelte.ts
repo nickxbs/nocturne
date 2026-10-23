@@ -37,6 +37,8 @@ import Users from "@lucide/svelte/icons/users";
 import KeyRound from "@lucide/svelte/icons/key-round";
 import PlayCircle from "@lucide/svelte/icons/circle-play";
 import HistoryIcon from "@lucide/svelte/icons/history";
+import Activity from "@lucide/svelte/icons/activity";
+import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
 import { satisfiesScope } from "$lib/authorization/scopes";
 import { getSidebarReportItems } from "$lib/navigation/report-navigation.svelte";
 import { filterTenantlessNav } from "$lib/navigation/tenantless-navigation";
@@ -52,6 +54,7 @@ export type NavItemId =
   | "food"
   | "meals"
   | "tools"
+  | "cgmsim"
   | "alerts"
   | "dev-tools"
   | "settings";
@@ -195,6 +198,15 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
       title: "Tools",
       icon: Wrench,
       children: [{ title: "Packing", href: "/tools/packing", icon: Wrench }],
+    },
+    {
+      id: "cgmsim",
+      title: "CGMSIM",
+      icon: Activity,
+      children: [
+        { title: "Subject", href: "/cgmsim/subject", icon: User },
+        { title: "Parameters", href: "/cgmsim/parameters", icon: SlidersHorizontal },
+      ],
     }
   );
 

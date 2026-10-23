@@ -35,6 +35,7 @@ const OWNER_ONLY = [
   "Food",
   "Meals",
   "Tools",
+  "CGMSIM",
   "Alerts",
   "Dev Tools",
   "Settings",
