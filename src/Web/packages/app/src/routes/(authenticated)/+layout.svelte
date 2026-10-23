@@ -20,6 +20,7 @@
   import type { TitleFaviconSettings } from "$lib/stores/serverSettings";
   import { browser, dev } from "$app/environment";
   import { beforeNavigate, goto, invalidate } from "$app/navigation";
+  import { page } from "$app/state";
   import { refreshOnVisible } from "$lib/utils/refresh-on-return.svelte";
   import { SHELL_DATA_KEY, SHELL_REVALIDATE_INTERVAL_MS } from "$lib/constants/shell-data";
   import { createShellRevalidator } from "$lib/utils/shell-session";
@@ -114,9 +115,20 @@
     (data.effectivePermissions ?? []).includes("tenant.settings")
   );
 
+  const isOnboarding = $derived(
+    page.url.pathname.startsWith("/onboarding") ||
+    page.url.pathname.startsWith("/setup")
+  );
+
   let cgmSimOnboardingOpen = $state(false);
   $effect(() => {
-    if (!tenantless && !data.isShareHost && data.isAuthenticated && data.isCgmSimInitialized === false) {
+    if (
+      !tenantless &&
+      !data.isShareHost &&
+      data.isAuthenticated &&
+      data.isCgmSimInitialized === false &&
+      !isOnboarding
+    ) {
       cgmSimOnboardingOpen = true;
     } else {
       cgmSimOnboardingOpen = false;
@@ -325,7 +337,7 @@
     <commandPalette.component bind:open={commandPalette.open} {tenantless} />
   {/if}
 
-  {#if !tenantless && !data.isShareHost && data.isAuthenticated && data.isCgmSimInitialized === false}
+  {#if !tenantless && !data.isShareHost && data.isAuthenticated && data.isCgmSimInitialized === false && !isOnboarding}
     <CgmSimOnboardingDialog
       bind:open={cgmSimOnboardingOpen}
       canWrite={canWriteCgmSim}

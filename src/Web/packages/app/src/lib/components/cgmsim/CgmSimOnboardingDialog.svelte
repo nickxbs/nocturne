@@ -44,18 +44,18 @@
   let cr = $state<string>("");
 
   const sexOptions: Record<string, string> = {
-    male: "Maschio",
-    female: "Femmina",
-    other: "Altro / Non specificato",
+    male: "Male",
+    female: "Female",
+    other: "Other / Unspecified",
   };
 
   function randomizeSubject() {
     const sexes = ["male", "female", "other"];
     sex = sexes[Math.floor(Math.random() * sexes.length)]!;
     weight = (Math.random() * 35 + 55).toFixed(1); // 55.0 - 90.0 kg
-    age = Math.floor(Math.random() * 45 + 20).toString(); // 20 - 65 anni
+    age = Math.floor(Math.random() * 45 + 20).toString(); // 20 - 65 years
     height = (Math.random() * 35 + 155).toFixed(1); // 155.0 - 190.0 cm
-    toast.info("Valori paziente generati casualmente.");
+    toast.info("Patient values generated randomly.");
   }
 
   function randomizeParameters() {
@@ -64,7 +64,7 @@
     carbsAbsTime = (Math.floor(Math.random() * 8 + 8) * 15).toString(); // 120 - 225 min
     insulinPeak = (Math.floor(Math.random() * 7 + 10) * 5).toString(); // 50 - 80 min
     cr = (Math.random() * 7.0 + 8.0).toFixed(1); // 8.0 - 15.0 g/U
-    toast.info("Parametri di simulazione generati casualmente.");
+    toast.info("Simulation parameters generated randomly.");
   }
 
   const isStep1Valid = $derived.by(() => {
@@ -113,7 +113,7 @@
   function goToStep2(e: Event) {
     e.preventDefault();
     if (!isStep1Valid) {
-      toast.error("Compila tutti i dati paziente con valori validi prima di proseguire.");
+      toast.error("Please fill in all patient data with valid values before proceeding.");
       return;
     }
     currentStep = 2;
@@ -146,12 +146,12 @@
         },
       });
 
-      toast.success("Inizializzazione completata con successo! Benvenuto in CGMSIM.");
+      toast.success("Initialization completed successfully! Welcome to CGMSIM.");
       open = false;
       await invalidate(SHELL_DATA_KEY);
       onCompleted?.();
     } catch (err) {
-      toast.error(describeSubmitError(err, "Impossibile completare l'inizializzazione."));
+      toast.error(describeSubmitError(err, "Failed to complete initialization."));
     } finally {
       isSubmitting = false;
     }
@@ -171,20 +171,20 @@
         <div class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-warning/10 text-warning">
           <CircleAlert class="h-7 w-7" />
         </div>
-        <Dialog.Title class="text-xl font-bold">Inizializzazione Workspace Richiesta</Dialog.Title>
+        <Dialog.Title class="text-xl font-bold">Workspace Initialization Required</Dialog.Title>
         <Dialog.Description>
-          Questo workspace non è ancora stato configurato con i parametri del modello CGMSIM.
-          È necessario che un amministratore o un membro con permessi di scrittura completi la prima configurazione.
+          This workspace has not been configured with CGMSIM model parameters yet.
+          An administrator or member with write permissions must complete initial configuration.
         </Dialog.Description>
       </Dialog.Header>
 
       <div class="py-6 flex justify-center gap-3">
         <Button variant="outline" href="/auth/logout">
           <LogOut class="mr-2 h-4 w-4" />
-          Disconnetti
+          Sign out
         </Button>
         <Button variant="default" href="/">
-          Panoramica
+          Overview
         </Button>
       </div>
     {:else}
@@ -192,9 +192,9 @@
       <Dialog.Header>
         <div class="flex items-center justify-between border-b pb-3 mb-2">
           <div>
-            <Dialog.Title class="text-xl font-bold">Configurazione Iniziale CGMSIM</Dialog.Title>
+            <Dialog.Title class="text-xl font-bold">Initial CGMSIM Configuration</Dialog.Title>
             <Dialog.Description>
-              Imposta i parametri del paziente e della simulazione per attivare il workspace.
+              Set patient and simulation parameters to activate this workspace.
             </Dialog.Description>
           </div>
           <!-- Stepper indicator -->
@@ -205,7 +205,7 @@
                 : 'bg-muted text-muted-foreground'}"
             >
               <User class="h-3.5 w-3.5" />
-              1. Paziente
+              1. Patient
             </span>
             <span class="text-muted-foreground">→</span>
             <span
@@ -214,23 +214,23 @@
                 : 'bg-muted text-muted-foreground'}"
             >
               <SlidersHorizontal class="h-3.5 w-3.5" />
-              2. Parametri
+              2. Parameters
             </span>
           </div>
         </div>
       </Dialog.Header>
 
       {#if currentStep === 1}
-        <!-- STEP 1: Dati Paziente / Subject -->
+        <!-- STEP 1: Patient Data / Subject -->
         <form onsubmit={goToStep2} class="space-y-5">
           <div class="flex items-center justify-between bg-muted/40 p-3 rounded-lg border">
             <div class="space-y-0.5">
               <h4 class="text-sm font-semibold flex items-center gap-2">
                 <User class="h-4 w-4 text-primary" />
-                Passaggio 1: Dati Paziente (Subject)
+                Step 1: Patient Data (Subject)
               </h4>
               <p class="text-xs text-muted-foreground">
-                Tratti fisiologici del paziente virtuale nel modello di simulazione.
+                Physiological traits of the virtual patient in the simulation model.
               </p>
             </div>
             <Button
@@ -240,19 +240,19 @@
               onclick={randomizeSubject}
             >
               <Sparkles class="mr-1.5 h-3.5 w-3.5 text-warning" />
-              Genera valori casuali
+              Generate random values
             </Button>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <!-- Sesso -->
+            <!-- Sex -->
             <div class="space-y-1.5">
               <Label for="onboarding-subject-sex" size="sm">
-                Sesso biologico <span class="text-destructive">*</span>
+                Biological sex <span class="text-destructive">*</span>
               </Label>
               <Select.Root type="single" bind:value={sex} required>
                 <Select.Trigger id="onboarding-subject-sex" class="w-full">
-                  {sex ? (sexOptions[sex] ?? sex) : "Seleziona sesso..."}
+                  {sex ? (sexOptions[sex] ?? sex) : "Select sex..."}
                 </Select.Trigger>
                 <Select.Content>
                   {#each Object.entries(sexOptions) as [val, lbl] (val)}
@@ -262,10 +262,10 @@
               </Select.Root>
             </div>
 
-            <!-- Peso -->
+            <!-- Weight -->
             <div class="space-y-1.5">
               <Label for="onboarding-subject-weight" size="sm">
-                Peso corporeo (kg) <span class="text-destructive">*</span>
+                Body weight (kg) <span class="text-destructive">*</span>
               </Label>
               <div class="relative">
                 <Input
@@ -274,7 +274,7 @@
                   step="0.1"
                   min="1"
                   max="500"
-                  placeholder="Es. 70.0"
+                  placeholder="e.g. 70.0"
                   required
                   bind:value={weight}
                 />
@@ -284,10 +284,10 @@
               </div>
             </div>
 
-            <!-- Età -->
+            <!-- Age -->
             <div class="space-y-1.5">
               <Label for="onboarding-subject-age" size="sm">
-                Età (anni) <span class="text-destructive">*</span>
+                Age (years) <span class="text-destructive">*</span>
               </Label>
               <div class="relative">
                 <Input
@@ -296,20 +296,20 @@
                   step="1"
                   min="1"
                   max="150"
-                  placeholder="Es. 30"
+                  placeholder="e.g. 30"
                   required
                   bind:value={age}
                 />
                 <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
-                  anni
+                  years
                 </span>
               </div>
             </div>
 
-            <!-- Altezza -->
+            <!-- Height -->
             <div class="space-y-1.5">
               <Label for="onboarding-subject-height" size="sm">
-                Altezza (cm) <span class="text-destructive">*</span>
+                Height (cm) <span class="text-destructive">*</span>
               </Label>
               <div class="relative">
                 <Input
@@ -318,7 +318,7 @@
                   step="0.5"
                   min="20"
                   max="300"
-                  placeholder="Es. 170.0"
+                  placeholder="e.g. 170.0"
                   required
                   bind:value={height}
                 />
@@ -331,22 +331,22 @@
 
           <Dialog.Footer class="pt-3 border-t flex justify-end">
             <Button type="submit" disabled={!isStep1Valid}>
-              Avanti: Parametri Simulazione
+              Next: Simulation Parameters
               <ArrowRight class="ml-2 h-4 w-4" />
             </Button>
           </Dialog.Footer>
         </form>
       {:else}
-        <!-- STEP 2: Parametri di Simulazione -->
+        <!-- STEP 2: Simulation Parameters -->
         <form onsubmit={handleFinalSubmit} class="space-y-5">
           <div class="flex items-center justify-between bg-muted/40 p-3 rounded-lg border">
             <div class="space-y-0.5">
               <h4 class="text-sm font-semibold flex items-center gap-2">
                 <SlidersHorizontal class="h-4 w-4 text-primary" />
-                Passaggio 2: Parametri di Simulazione
+                Step 2: Simulation Parameters
               </h4>
               <p class="text-xs text-muted-foreground">
-                Cinetica dell'insulina, assorbimento carboidrati e sensibilità.
+                Insulin kinetics, carbohydrate absorption, and sensitivity.
               </p>
             </div>
             <Button
@@ -356,7 +356,7 @@
               onclick={randomizeParameters}
             >
               <Sparkles class="mr-1.5 h-3.5 w-3.5 text-warning" />
-              Genera valori casuali
+              Generate random values
             </Button>
           </div>
 
@@ -364,7 +364,7 @@
             <!-- ISF -->
             <div class="space-y-1.5">
               <Label for="onboarding-param-isf" size="sm">
-                ISF (Fattore Sensibilità Insulina) <span class="text-destructive">*</span>
+                ISF (Insulin Sensitivity Factor) <span class="text-destructive">*</span>
               </Label>
               <div class="relative">
                 <Input
@@ -373,7 +373,7 @@
                   step="0.5"
                   min="1"
                   max="1000"
-                  placeholder="Es. 50.0"
+                  placeholder="e.g. 50.0"
                   required
                   bind:value={isf}
                 />
@@ -386,7 +386,7 @@
             <!-- DIA -->
             <div class="space-y-1.5">
               <Label for="onboarding-param-dia" size="sm">
-                DIA (Durata Azione Insulina) <span class="text-destructive">*</span>
+                DIA (Duration of Insulin Action) <span class="text-destructive">*</span>
               </Label>
               <div class="relative">
                 <Input
@@ -395,12 +395,12 @@
                   step="0.1"
                   min="0.5"
                   max="24"
-                  placeholder="Es. 4.0"
+                  placeholder="e.g. 4.0"
                   required
                   bind:value={dia}
                 />
                 <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
-                  ore
+                  hours
                 </span>
               </div>
             </div>
@@ -408,7 +408,7 @@
             <!-- Carbs Absorption Time -->
             <div class="space-y-1.5">
               <Label for="onboarding-param-carbs" size="sm">
-                Tempo Assorbimento Carboidrati <span class="text-destructive">*</span>
+                Carb Absorption Time <span class="text-destructive">*</span>
               </Label>
               <div class="relative">
                 <Input
@@ -417,7 +417,7 @@
                   step="5"
                   min="5"
                   max="1440"
-                  placeholder="Es. 180"
+                  placeholder="e.g. 180"
                   required
                   bind:value={carbsAbsTime}
                 />
@@ -430,7 +430,7 @@
             <!-- Insulin Peak -->
             <div class="space-y-1.5">
               <Label for="onboarding-param-peak" size="sm">
-                Picco Insulinico <span class="text-destructive">*</span>
+                Insulin Peak <span class="text-destructive">*</span>
               </Label>
               <div class="relative">
                 <Input
@@ -439,7 +439,7 @@
                   step="5"
                   min="5"
                   max="360"
-                  placeholder="Es. 75"
+                  placeholder="e.g. 75"
                   required
                   bind:value={insulinPeak}
                 />
@@ -452,7 +452,7 @@
             <!-- CR -->
             <div class="space-y-1.5 sm:col-span-2">
               <Label for="onboarding-param-cr" size="sm">
-                CR (Rapporto Carboidrati / Insulina) <span class="text-destructive">*</span>
+                CR (Carb Ratio) <span class="text-destructive">*</span>
               </Label>
               <div class="relative sm:max-w-[50%]">
                 <Input
@@ -461,7 +461,7 @@
                   step="0.1"
                   min="0.1"
                   max="200"
-                  placeholder="Es. 10.0"
+                  placeholder="e.g. 10.0"
                   required
                   bind:value={cr}
                 />
@@ -480,7 +480,7 @@
               disabled={isSubmitting}
             >
               <ArrowLeft class="mr-2 h-4 w-4" />
-              Indietro
+              Back
             </Button>
             <Button
               type="submit"
@@ -489,10 +489,10 @@
             >
               {#if isSubmitting}
                 <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-                Inizializzazione...
+                Initializing...
               {:else}
                 <Check class="mr-2 h-4 w-4" />
-                Completa e Inizia
+                Complete and Start
               {/if}
             </Button>
           </Dialog.Footer>

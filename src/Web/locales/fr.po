@@ -2000,6 +2000,7 @@ msgstr ""
 #~ msgid "2d 4h"
 #~ msgstr ""
 
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
@@ -4444,6 +4445,7 @@ msgstr ""
 msgid "Clock"
 msgstr ""
 
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
 msgid "Overview"
@@ -5051,6 +5053,7 @@ msgstr ""
 msgid "Duration of Insulin Action"
 msgstr ""
 
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/lib/components/patient/InsulinFormFields.svelte
 #: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
 msgid "hours"
@@ -17762,6 +17765,7 @@ msgstr ""
 msgid "IP {0}"
 msgstr ""
 
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/lib/components/settings/ActiveSessions.svelte
 msgid "<0/> Sign out"
 msgstr ""
@@ -30539,206 +30543,160 @@ msgstr ""
 msgid "Parameters"
 msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Maschio"
-msgstr ""
+#~ msgid "Maschio"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Femmina"
-msgstr ""
+#~ msgid "Femmina"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Altro / Non specificato"
-msgstr ""
+#~ msgid "Altro / Non specificato"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Valori paziente generati casualmente."
-msgstr ""
+#~ msgid "Valori paziente generati casualmente."
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Parametri di simulazione generati casualmente."
-msgstr ""
+#~ msgid "Parametri di simulazione generati casualmente."
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Compila tutti i dati paziente con valori validi prima di proseguire."
-msgstr ""
+#~ msgid "Compila tutti i dati paziente con valori validi prima di proseguire."
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Inizializzazione completata con successo! Benvenuto in CGMSIM."
-msgstr ""
+#~ msgid "Inizializzazione completata con successo! Benvenuto in CGMSIM."
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Impossibile completare l'inizializzazione."
-msgstr ""
+#~ msgid "Impossibile completare l'inizializzazione."
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Inizializzazione Workspace Richiesta"
-msgstr ""
+#~ msgid "Inizializzazione Workspace Richiesta"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Questo workspace non è ancora stato configurato con i parametri del modello CGMSIM. È necessario che un amministratore o un membro con permessi di scrittura completi la prima configurazione."
-msgstr ""
+#~ msgid "Questo workspace non è ancora stato configurato con i parametri del modello CGMSIM. È necessario che un amministratore o un membro con permessi di scrittura completi la prima configurazione."
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "<0/> Disconnetti"
-msgstr ""
+#~ msgid "<0/> Disconnetti"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Panoramica"
-msgstr ""
+#~ msgid "Panoramica"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Configurazione Iniziale CGMSIM"
-msgstr ""
+#~ msgid "Configurazione Iniziale CGMSIM"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Imposta i parametri del paziente e della simulazione per attivare il workspace."
-msgstr ""
+#~ msgid "Imposta i parametri del paziente e della simulazione per attivare il workspace."
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "<0/> 1. Paziente"
-msgstr ""
+#~ msgid "<0/> 1. Paziente"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "<0/> 2. Parametri"
-msgstr ""
+#~ msgid "<0/> 2. Parametri"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "<0/> Passaggio 1: Dati Paziente (Subject)"
-msgstr ""
+#~ msgid "<0/> Passaggio 1: Dati Paziente (Subject)"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Tratti fisiologici del paziente virtuale nel modello di simulazione."
-msgstr ""
+#~ msgid "Tratti fisiologici del paziente virtuale nel modello di simulazione."
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "<0/> Genera valori casuali"
-msgstr ""
+#~ msgid "<0/> Genera valori casuali"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Seleziona sesso..."
-msgstr ""
+#~ msgid "Seleziona sesso..."
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Sesso biologico <0/>"
-msgstr ""
+#~ msgid "Sesso biologico <0/>"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Es. 70.0"
-msgstr ""
+#~ msgid "Es. 70.0"
+#~ msgstr ""
 
 #: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "kg"
 msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Peso corporeo (kg) <0/>"
-msgstr ""
+#~ msgid "Peso corporeo (kg) <0/>"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Es. 30"
-msgstr ""
+#~ msgid "Es. 30"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "anni"
-msgstr ""
+#~ msgid "anni"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Età (anni) <0/>"
-msgstr ""
+#~ msgid "Età (anni) <0/>"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Es. 170.0"
-msgstr ""
+#~ msgid "Es. 170.0"
+#~ msgstr ""
 
 #: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "cm"
 msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Altezza (cm) <0/>"
-msgstr ""
+#~ msgid "Altezza (cm) <0/>"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Avanti: Parametri Simulazione <0/>"
-msgstr ""
+#~ msgid "Avanti: Parametri Simulazione <0/>"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "<0/> Passaggio 2: Parametri di Simulazione"
-msgstr ""
+#~ msgid "<0/> Passaggio 2: Parametri di Simulazione"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Cinetica dell'insulina, assorbimento carboidrati e sensibilità."
-msgstr ""
+#~ msgid "Cinetica dell'insulina, assorbimento carboidrati e sensibilità."
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Es. 50.0"
-msgstr ""
+#~ msgid "Es. 50.0"
+#~ msgstr ""
 
 #: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
 msgid "mg/dL/U"
 msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "ISF (Fattore Sensibilità Insulina) <0/>"
-msgstr ""
+#~ msgid "ISF (Fattore Sensibilità Insulina) <0/>"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Es. 4.0"
-msgstr ""
+#~ msgid "Es. 4.0"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "ore"
-msgstr ""
+#~ msgid "ore"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "DIA (Durata Azione Insulina) <0/>"
-msgstr ""
+#~ msgid "DIA (Durata Azione Insulina) <0/>"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Es. 180"
-msgstr ""
+#~ msgid "Es. 180"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Tempo Assorbimento Carboidrati <0/>"
-msgstr ""
+#~ msgid "Tempo Assorbimento Carboidrati <0/>"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Es. 75"
-msgstr ""
+#~ msgid "Es. 75"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Picco Insulinico <0/>"
-msgstr ""
+#~ msgid "Picco Insulinico <0/>"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Es. 10.0"
-msgstr ""
+#~ msgid "Es. 10.0"
+#~ msgstr ""
 
 #: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
 msgid "g/U"
 msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "CR (Rapporto Carboidrati / Insulina) <0/>"
-msgstr ""
+#~ msgid "CR (Rapporto Carboidrati / Insulina) <0/>"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "<0/> Inizializzazione..."
-msgstr ""
+#~ msgid "<0/> Inizializzazione..."
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "<0/> Completa e Inizia"
-msgstr ""
+#~ msgid "<0/> Completa e Inizia"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "<0/> Indietro"
-msgstr ""
+#~ msgid "<0/> Indietro"
+#~ msgstr ""
 
 #: src/lib/components/tenants/TenantsOverview.svelte
 #: src/routes/(authenticated)/onboarding/+page.svelte
@@ -31010,6 +30968,7 @@ msgstr ""
 msgid "Effective duration of rapid-acting insulin activity."
 msgstr ""
 
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
 msgid "Carb Absorption Time <0/>"
 msgstr ""
@@ -31038,14 +30997,17 @@ msgstr ""
 msgid "<0/> Save Parameters"
 msgstr ""
 
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "Male"
 msgstr ""
 
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "Female"
 msgstr ""
 
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "Other / Unspecified"
 msgstr ""
@@ -31102,10 +31064,12 @@ msgstr ""
 msgid "Subject body weight in kilograms."
 msgstr ""
 
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "years"
 msgstr ""
 
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "Age (years) <0/>"
 msgstr ""
@@ -31114,6 +31078,7 @@ msgstr ""
 msgid "Subject age in years."
 msgstr ""
 
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "Height (cm) <0/>"
 msgstr ""
@@ -31246,4 +31211,109 @@ msgstr ""
 #. 0: t.slug
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 msgid "Are you sure you want to delete tenant <0/> ({0})? This will permanently remove the tenant, its clinical data, and the associated user account. This action cannot be undone."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Patient values generated randomly."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Simulation parameters generated randomly."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Please fill in all patient data with valid values before proceeding."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Initialization completed successfully! Welcome to CGMSIM."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Failed to complete initialization."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Workspace Initialization Required"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "This workspace has not been configured with CGMSIM model parameters yet. An administrator or member with write permissions must complete initial configuration."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Initial CGMSIM Configuration"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Set patient and simulation parameters to activate this workspace."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "<0/> 1. Patient"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "<0/> 2. Parameters"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "<0/> Step 1: Patient Data (Subject)"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Physiological traits of the virtual patient in the simulation model."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "<0/> Generate random values"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Select sex..."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Biological sex <0/>"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Body weight (kg) <0/>"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Next: Simulation Parameters <0/>"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "<0/> Step 2: Simulation Parameters"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Insulin kinetics, carbohydrate absorption, and sensitivity."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "ISF (Insulin Sensitivity Factor) <0/>"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "DIA (Duration of Insulin Action) <0/>"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Insulin Peak <0/>"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "CR (Carb Ratio) <0/>"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "<0/> Initializing..."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "<0/> Complete and Start"
 msgstr ""
