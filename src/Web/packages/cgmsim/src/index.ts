@@ -71,6 +71,22 @@ async function main() {
           // Fetch current blood glucose reading
           const currentEntry = await apiClient.getCurrentEntry(tenant.slug);
 
+          if (currentEntry) {
+            const entryTs =
+              currentEntry.mills ||
+              currentEntry.date ||
+              (currentEntry.dateString ? new Date(currentEntry.dateString).getTime() : 0);
+            const isRecent = entryTs > 0 && now.getTime() - entryTs < 15 * 60 * 1000;
+            const isExternalDevice = currentEntry.device && currentEntry.device !== "cgmsim-node";
+
+            if (isRecent && isExternalDevice) {
+              console.log(
+                `  [${tenant.slug}] Skipping simulation: tenant is receiving live data from external device '${currentEntry.device}'.`
+              );
+              continue;
+            }
+          }
+
           // Compute next simulated reading using @lsandini/cgmsim-lib
           const { entry: nextEntry, result: simResult } = engine.computeNextReading(
             now,

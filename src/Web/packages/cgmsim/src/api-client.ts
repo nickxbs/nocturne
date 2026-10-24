@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { SimulatorConfig } from "./config.js";
 import type {
   CgmSimSettings,
+  ConnectorSummary,
   CurrentEntry,
   SimulatedEntry,
   TenantSummary,
