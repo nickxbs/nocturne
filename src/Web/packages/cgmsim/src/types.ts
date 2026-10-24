@@ -1,8 +1,10 @@
 export interface ConnectorSummary {
-  connectorName: string;
-  isHealthy: boolean;
+  name?: string;
+  connectorName?: string;
+  isHealthy?: boolean;
   lastSuccessfulSync?: string | null;
   lastErrorMessage?: string | null;
+  lastError?: string | null;
 }
 
 export interface TenantSummary {
@@ -10,6 +12,8 @@ export interface TenantSummary {
   slug: string;
   displayName: string;
   isActive: boolean;
+  entries?: number;
+  latestEntry?: string | null;
   connectors?: ConnectorSummary[];
 }
 
@@ -69,4 +73,5 @@ export interface CurrentEntry {
   mills?: number;
   dateString?: string;
   direction?: TrendDirection;
+  device?: string;
 }

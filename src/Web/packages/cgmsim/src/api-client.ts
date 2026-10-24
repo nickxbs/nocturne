@@ -28,6 +28,19 @@ async function parseJson<T>(res: Response): Promise<T> {
   return json as T;
 }
 
+/**
+ * Detects whether a connector configuration represents Nightscout.
+ * Handles both dev-only DTOs ('name') and platform-admin DTOs ('connectorName').
+ */
+export function isNightscoutConnector(c: ConnectorSummary): boolean {
+  const name = (c.name || c.connectorName || "").toLowerCase().trim();
+  return (
+    name === "nightscout" ||
+    name === "nightscout-connector" ||
+    name.includes("nightscout")
+  );
+}
+
 export class NocturneApiClient {
   private readonly config: SimulatorConfig;
   private readonly instanceKeyHash: string | null;
@@ -157,11 +170,37 @@ export class NocturneApiClient {
         if (res.ok) {
           const tenants = await parseJson<TenantSummary[]>(res);
           const filtered = tenants.filter((t) => {
-            if (!t.isActive) return false;
-            const hasNightscout = t.connectors?.some(
-              (c) => c.connectorName?.toLowerCase() === "nightscout"
-            );
-            return !hasNightscout;
+            if (!t.isActive) {
+              console.log(`[Simulator] Tenant '${t.slug}' is inactive, skipping.`);
+              return false;
+            }
+
+            const nsConnector = t.connectors?.find(isNightscoutConnector);
+            if (nsConnector) {
+              const syncDetail = nsConnector.lastSuccessfulSync
+                ? `last sync: ${nsConnector.lastSuccessfulSync}`
+                : "configured (no successful sync yet)";
+              const healthDetail =
+                nsConnector.isHealthy === false
+                  ? ` [unhealthy: ${nsConnector.lastError || nsConnector.lastErrorMessage || "error"}]`
+                  : "";
+              console.log(
+                `[Simulator] Skipping tenant '${t.slug}': Nightscout integration active (${syncDetail}${healthDetail}).`
+              );
+              return false;
+            }
+
+            if (t.connectors && t.connectors.length > 0) {
+              const connNames = t.connectors
+                .map((c) => c.name || c.connectorName)
+                .filter(Boolean)
+                .join(", ");
+              console.log(
+                `[Simulator] Tenant '${t.slug}' will be simulated (connectors configured: [${connNames}]).`
+              );
+            }
+
+            return true;
           });
 
           console.log(
@@ -206,11 +245,18 @@ export class NocturneApiClient {
             }
           );
           if (connRes.ok) {
-            const data = await parseJson<{ connectors?: Array<{ connectorName: string }> }>(connRes);
-            const hasNightscout = data.connectors?.some(
-              (c) => c.connectorName?.toLowerCase() === "nightscout"
-            );
-            return hasNightscout ? null : tenant;
+            const data = await parseJson<{ connectors?: ConnectorSummary[] }>(connRes);
+            const nsConnector = data.connectors?.find(isNightscoutConnector);
+            if (nsConnector) {
+              const syncDetail = nsConnector.lastSuccessfulSync
+                ? `last sync: ${nsConnector.lastSuccessfulSync}`
+                : "configured";
+              console.log(
+                `[Simulator] Skipping tenant '${tenant.slug}': Nightscout integration active (${syncDetail}).`
+              );
+              return null;
+            }
+            return tenant;
           }
         } catch {
           // If connectors cannot be queried, keep tenant as candidate
