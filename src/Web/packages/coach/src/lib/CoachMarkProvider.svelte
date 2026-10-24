@@ -14,6 +14,7 @@
     settleDelay = 500,
     seenDwellMs = 2000,
     router,
+    paused = false,
     children,
   }: {
     adapter: CoachMarkAdapter;
@@ -23,6 +24,8 @@
     seenDwellMs?: number;
     /** Without one, the history entry an overlay holds can cancel, or strand under, a navigation. */
     router?: CoachRouter;
+    /** When true, popovers and selection are suspended (e.g. while a blocking modal dialog is open). */
+    paused?: boolean;
     children: Snippet;
   } = $props();
 
@@ -32,6 +35,10 @@
 
   $effect.pre(() => {
     ctx.labels = labels;
+  });
+
+  $effect(() => {
+    ctx.setPaused(paused);
   });
 
   // The back button dismisses quietly, so no follow-on sequence appears.
@@ -51,4 +58,6 @@
 </script>
 
 {@render children()}
-<Popover {sentinel} />
+{#if !paused}
+  <Popover {sentinel} />
+{/if}

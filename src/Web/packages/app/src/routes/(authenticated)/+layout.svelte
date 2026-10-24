@@ -269,7 +269,7 @@
 
 <InitialReadsPrefetch enabled={data.canViewRealtimeData} />
 
-<CoachMarkProvider adapter={coachMarkAdapter} labels={coachLabels()} {sequences} router={coachRouter}>
+<CoachMarkProvider adapter={coachMarkAdapter} labels={coachLabels()} {sequences} router={coachRouter} paused={cgmSimOnboardingOpen}>
   <CoachParamHandler />
   <ChartPrintPatterns />
   <Sidebar.Provider>

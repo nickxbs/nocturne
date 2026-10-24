@@ -120,8 +120,32 @@ export class CoachMarkContext {
     this.scheduleSelection();
   }
 
+  private _paused = $state(false);
+
   get disabled(): boolean {
     return this._disabled;
+  }
+
+  get paused(): boolean {
+    return this._paused;
+  }
+
+  setPaused(value: boolean): void {
+    if (this._paused === value) return;
+    this._paused = value;
+    if (value) {
+      this._activeSelection = null;
+      if (this._settleTimer) {
+        clearTimeout(this._settleTimer);
+        this._settleTimer = null;
+      }
+    } else {
+      if (this._forcedSequence) {
+        this.activateNextForcedStep();
+      } else {
+        this.scheduleSelection();
+      }
+    }
   }
 
   setDisabled(value: boolean): void {
@@ -379,7 +403,7 @@ export class CoachMarkContext {
   }
 
   private activateNextForcedStep(): void {
-    if (!this._forcedSequence) return;
+    if (!this._forcedSequence || this._paused) return;
 
     const seq = this.sequences[this._forcedSequence];
     if (!seq) return;
@@ -470,12 +494,13 @@ export class CoachMarkContext {
   private scheduleSelection(): void {
     if (!this._initialized) return;
     if (this._disabled) return;
+    if (this._paused) return;
     if (this._quietUntilNavigation) return;
     if (this._forcedSequence) return;
     if (this._settleTimer) clearTimeout(this._settleTimer);
     this._settleTimer = setTimeout(() => {
       // Any of the guards above can have changed while the timer ran.
-      if (this._activeSelection || this._disabled || this._quietUntilNavigation || this._forcedSequence) {
+      if (this._activeSelection || this._disabled || this._paused || this._quietUntilNavigation || this._forcedSequence) {
         return;
       }
       this._activeSelection = selectActiveMark(
