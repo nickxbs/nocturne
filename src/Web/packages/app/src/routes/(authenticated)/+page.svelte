@@ -80,15 +80,20 @@
         (`dashboardTopWidgets`), and tenant settings carry no top-placement row
         to gate it with.
       -->
-      <div
-        {@attach coachmark({
-          ...coachFor("quick-tour.widgets"),
-        })}
-      >
-        <WidgetGrid widgets={topWidgets} maxWidgets={3} />
-      </div>
+      <div class="grid grid-cols-1 @3xl:grid-cols-12 gap-3 @md:gap-4 items-stretch">
+        <div
+          class="@3xl:col-span-7 flex flex-col"
+          {@attach coachmark({
+            ...coachFor("quick-tour.widgets"),
+          })}
+        >
+          <WidgetGrid widgets={topWidgets} maxWidgets={3} />
+        </div>
 
-      <CgmSimProfileCard />
+        <div class="@3xl:col-span-5 flex flex-col">
+          <CgmSimProfileCard />
+        </div>
+      </div>
 
       {#if isMainSectionEnabled(widgets, WidgetId.GlucoseChart)}
         {#snippet glucoseChart(chartVisible: boolean)}

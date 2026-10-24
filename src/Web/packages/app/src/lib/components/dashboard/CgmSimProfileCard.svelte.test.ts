@@ -31,7 +31,7 @@ describe("CgmSimProfileCard", () => {
     render(CgmSimProfileCard);
 
     await expect.element(page.getByTestId("cgmsim-profile-card")).toBeVisible();
-    await expect.element(page.getByText("CGMSIM Subject & Parameters")).toBeVisible();
+    await expect.element(page.getByText("CGMSIM Profile")).toBeVisible();
 
     // Subject fields
     await expect.element(page.getByTestId("cgmsim-subject-sex")).toHaveTextContent("Female");
@@ -47,12 +47,12 @@ describe("CgmSimProfileCard", () => {
     await expect.element(page.getByTestId("cgmsim-param-insulin-peak")).toHaveTextContent("75 min");
   });
 
-  it("renders insert food and treatment button", async () => {
+  it("renders CarePortal button", async () => {
     render(CgmSimProfileCard);
 
     const btn = page.getByTestId("insert-food-treatment-btn");
     await expect.element(btn).toBeVisible();
-    await expect.element(btn).toHaveTextContent("Insert Food & Treatment");
+    await expect.element(btn).toHaveTextContent("CarePortal");
   });
 
   it("provides navigation links to subject and parameters settings", async () => {
