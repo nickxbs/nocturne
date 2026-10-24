@@ -1,5 +1,5 @@
 import { loadConfig } from "./config.js";
-import { NocturneApiClient } from "./api-client.js";
+import { NocturneApiClient, formatError } from "./api-client.js";
 import { CgmSimulatorEngine } from "./simulator.js";
 
 async function main() {
@@ -94,19 +94,36 @@ async function main() {
         } catch (tenantErr) {
           console.error(
             `  [${tenant.slug}] Error running simulation step:`,
-            tenantErr instanceof Error ? tenantErr.message : tenantErr
+            formatError(tenantErr)
           );
         }
       }
     } catch (err) {
-      console.error("[Simulator] Simulation tick failed:", err instanceof Error ? err.message : err);
+      console.error("[Simulator] Simulation tick failed:", formatError(err));
     } finally {
       isRunning = false;
       console.log(`--- Finished Simulation Tick ---\n`);
     }
   }
 
-  // Run immediately on start
+  // Wait for Nocturne API to become available before starting ticks
+  console.log(`[Simulator] Connecting to Nocturne API at ${config.apiUrl}...`);
+  let apiReady = false;
+  for (let attempt = 1; attempt <= 30; attempt++) {
+    apiReady = await apiClient.checkHealth();
+    if (apiReady) {
+      console.log(`[Simulator] Nocturne API is ready and healthy!`);
+      break;
+    }
+    console.log(`[Simulator] Waiting for Nocturne API to become ready (attempt ${attempt}/30, retrying in 3s)...`);
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+
+  if (!apiReady) {
+    console.warn(`[Simulator] Nocturne API did not respond to /alive after 90s, attempting first tick anyway...`);
+  }
+
+  // Run first cycle
   await runSimulationCycle();
 
   // Schedule recurring interval

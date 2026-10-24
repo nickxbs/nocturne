@@ -15,7 +15,9 @@ export function loadConfig(): SimulatorConfig {
 
   const apiUrl = (process.env.NOCTURNE_API_URL || "http://localhost:1610").replace(/\/+$/, "");
   const instanceKey = process.env.NOCTURNE_INSTANCE_KEY || process.env.INSTANCE_KEY || "";
-  const baseDomain = process.env.NOCTURNE_BASE_DOMAIN || "nocturne.localhost";
+  const baseDomainRaw =
+    process.env.NOCTURNE_BASE_DOMAIN || process.env.BASE_DOMAIN || "nocturne.localhost";
+  const baseDomain = baseDomainRaw.split(":")[0];
   const intervalMs = parseInt(process.env.SIMULATION_INTERVAL_MS || "300000", 10);
   const serviceName = process.env.INSTANCE_SERVICE_NAME || "cgmsim";
   const targetTenantSlug = process.env.SIMULATION_TENANT?.trim();

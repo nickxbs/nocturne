@@ -10,6 +10,18 @@ import type {
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
+export function formatError(err: unknown): string {
+  if (err instanceof Error) {
+    if ("cause" in err && err.cause) {
+      const cause = err.cause;
+      const causeMsg = cause instanceof Error ? cause.message : String(cause);
+      return `${err.message} (cause: ${causeMsg})`;
+    }
+    return err.message;
+  }
+  return String(err);
+}
+
 async function parseJson<T>(res: Response): Promise<T> {
   const json: unknown = await res.json();
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- HTTP boundary deserialization
@@ -28,10 +40,65 @@ export class NocturneApiClient {
   }
 
   /**
-   * Builds the common headers for instance-key service-to-service communication,
-   * optionally scoping to a tenant subdomain via the Host header.
+   * Checks if the Nocturne API is reachable and responding.
    */
-  private getHeaders(tenantSlug?: string): Record<string, string> {
+  async checkHealth(): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.config.apiUrl}/alive`, {
+        signal: AbortSignal.timeout(3000),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  private readonly tokenCache = new Map<string, { token: string; expiresAt: number }>();
+
+  /**
+   * Acquires a bearer token for a tenant via dev-only login endpoint when instance key is not set.
+   */
+  private async getDevAccessToken(tenantSlug: string): Promise<string | null> {
+    const cached = this.tokenCache.get(tenantSlug);
+    const now = Date.now();
+    if (cached && cached.expiresAt > now + 60_000) {
+      return cached.token;
+    }
+
+    try {
+      const res = await fetch(`${this.config.apiUrl}/api/v4/dev-only/auth/login`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ tenant: tenantSlug, username: null }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+
+      if (res.ok) {
+        const data = await parseJson<{ accessToken: string; expiresInSeconds?: number }>(res);
+        if (data?.accessToken) {
+          const expiresInMs = (data.expiresInSeconds || 3600) * 1000;
+          this.tokenCache.set(tenantSlug, {
+            token: data.accessToken,
+            expiresAt: now + expiresInMs,
+          });
+          return data.accessToken;
+        }
+      }
+    } catch {
+      // Dev login endpoint unavailable, proceed without dev token
+    }
+
+    return null;
+  }
+
+  /**
+   * Builds headers for API calls. Sets X-Forwarded-Host to ensure the tenant
+   * is resolved by TenantResolutionMiddleware even when called directly against localhost:1610.
+   */
+  private async getHeaders(tenantSlug?: string): Promise<Record<string, string>> {
     const headers: Record<string, string> = {
       Accept: "application/json",
       "Content-Type": "application/json",
@@ -43,7 +110,17 @@ export class NocturneApiClient {
     }
 
     if (tenantSlug) {
-      headers["Host"] = `${tenantSlug}.${this.config.baseDomain}`;
+      const tenantHost = `${tenantSlug}.${this.config.baseDomain}`;
+      headers["Host"] = tenantHost;
+      headers["X-Forwarded-Host"] = tenantHost;
+      headers["X-Forwarded-Proto"] = "https";
+
+      if (!this.instanceKeyHash && this.config.allowDevFallback) {
+        const token = await this.getDevAccessToken(tenantSlug);
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+      }
     }
 
     return headers;
@@ -73,7 +150,7 @@ export class NocturneApiClient {
     if (this.config.allowDevFallback) {
       try {
         const res = await fetch(`${this.config.apiUrl}/api/v4/dev-only/admin/tenants`, {
-          headers: this.getHeaders(),
+          headers: await this.getHeaders(),
           signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         });
 
@@ -96,14 +173,14 @@ export class NocturneApiClient {
       } catch (err) {
         console.warn(
           `[Simulator] Dev-only tenants endpoint not reachable, falling back to platform-admin:`,
-          err instanceof Error ? err.message : String(err)
+          formatError(err)
         );
       }
     }
 
     // 2. Production fallback via PlatformAdmin endpoints
     const res = await fetch(`${this.config.apiUrl}/api/v4/admin/tenants`, {
-      headers: this.getHeaders(),
+      headers: await this.getHeaders(),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
@@ -124,7 +201,7 @@ export class NocturneApiClient {
           const connRes = await fetch(
             `${this.config.apiUrl}/api/v4/admin/connectors/${tenant.id}`,
             {
-              headers: this.getHeaders(),
+              headers: await this.getHeaders(),
               signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
             }
           );
@@ -156,7 +233,7 @@ export class NocturneApiClient {
   async getCgmSimSettings(tenantSlug: string): Promise<CgmSimSettings | null> {
     try {
       const res = await fetch(`${this.config.apiUrl}/api/v4/cgmsim/settings`, {
-        headers: this.getHeaders(tenantSlug),
+        headers: await this.getHeaders(tenantSlug),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
 
@@ -168,7 +245,7 @@ export class NocturneApiClient {
 
       return await parseJson<CgmSimSettings>(res);
     } catch (err) {
-      console.error(`[${tenantSlug}] Failed to fetch CGMSIM settings:`, err);
+      console.error(`[${tenantSlug}] Failed to fetch CGMSIM settings:`, formatError(err));
       return null;
     }
   }
@@ -182,7 +259,7 @@ export class NocturneApiClient {
       const res = await fetch(
         `${this.config.apiUrl}/api/v1/treatments?find[created_at][$gte]=${query}&count=50`,
         {
-          headers: this.getHeaders(tenantSlug),
+          headers: await this.getHeaders(tenantSlug),
           signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         }
       );
@@ -194,7 +271,7 @@ export class NocturneApiClient {
 
       return await parseJson<Treatment[]>(res);
     } catch (err) {
-      console.error(`[${tenantSlug}] Failed to fetch treatments:`, err);
+      console.error(`[${tenantSlug}] Failed to fetch treatments:`, formatError(err));
       return [];
     }
   }
@@ -205,7 +282,7 @@ export class NocturneApiClient {
   async getCurrentEntry(tenantSlug: string): Promise<CurrentEntry | null> {
     try {
       const res = await fetch(`${this.config.apiUrl}/api/v1/entries/current`, {
-        headers: this.getHeaders(tenantSlug),
+        headers: await this.getHeaders(tenantSlug),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
 
@@ -222,7 +299,7 @@ export class NocturneApiClient {
       // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- HTTP boundary deserialization
       return json as CurrentEntry;
     } catch (err) {
-      console.error(`[${tenantSlug}] Failed to fetch current entry:`, err);
+      console.error(`[${tenantSlug}] Failed to fetch current entry:`, formatError(err));
       return null;
     }
   }
@@ -235,7 +312,7 @@ export class NocturneApiClient {
     try {
       const res = await fetch(`${this.config.apiUrl}/api/v1/entries`, {
         method: "POST",
-        headers: this.getHeaders(tenantSlug),
+        headers: await this.getHeaders(tenantSlug),
         body: JSON.stringify([entry]),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
@@ -248,7 +325,7 @@ export class NocturneApiClient {
 
       return true;
     } catch (err) {
-      console.error(`[${tenantSlug}] Failed to post simulated entry:`, err);
+      console.error(`[${tenantSlug}] Failed to post simulated entry:`, formatError(err));
       return false;
     }
   }
