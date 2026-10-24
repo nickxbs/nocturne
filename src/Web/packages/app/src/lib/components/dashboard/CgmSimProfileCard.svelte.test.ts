@@ -47,14 +47,6 @@ describe("CgmSimProfileCard", () => {
     await expect.element(page.getByTestId("cgmsim-param-insulin-peak")).toHaveTextContent("75 min");
   });
 
-  it("renders CarePortal button", async () => {
-    render(CgmSimProfileCard);
-
-    const btn = page.getByTestId("insert-food-treatment-btn");
-    await expect.element(btn).toBeVisible();
-    await expect.element(btn).toHaveTextContent("CarePortal");
-  });
-
   it("provides navigation links to subject and parameters settings", async () => {
     render(CgmSimProfileCard);
 

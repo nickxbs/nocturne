@@ -1,14 +1,11 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
+  import { Card } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import User from "@lucide/svelte/icons/user";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
-  import Plus from "@lucide/svelte/icons/plus";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import { resolve } from "$app/paths";
-  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
   import { getSettings } from "$lib/api/generated/cgmSims.generated.remote";
-  import type { EntryRecord } from "$lib/constants/entry-categories";
 
   const settingsQuery = getSettings();
   const settings = $derived(settingsQuery.current);
@@ -20,58 +17,36 @@
     female: "Female",
     other: "Other",
   };
-
-  const entryEditDialog = lazyComponent(
-    () => import("$lib/components/entries/EntryEditDialog.svelte"),
-  );
-
-  let selectedEntry = $state<EntryRecord | null>(null);
-
-  function openEntryDialog() {
-    selectedEntry = null;
-    entryEditDialog.open = true;
-  }
 </script>
 
-<Card.Root class="@container h-full flex flex-col justify-between" data-testid="cgmsim-profile-card">
-  <Card.Header class="p-3 pb-2 flex flex-row items-center justify-between gap-2 flex-wrap">
-    <div class="flex items-center gap-1.5">
-      <div class="flex h-6 w-6 items-center justify-center rounded bg-primary/10 text-primary">
-        <SlidersHorizontal class="h-3.5 w-3.5" />
-      </div>
-      <div>
-        <Card.Title class="text-sm font-semibold flex items-center gap-1.5 leading-none">
-          CGMSIM Profile
-        </Card.Title>
-      </div>
-    </div>
+<Card size="flush" class="@container h-full" data-testid="cgmsim-profile-card">
+  <section class="flex h-full flex-col justify-between gap-3 px-5 py-4">
+    <header class="flex min-h-7 items-center justify-between gap-2">
+      <h2 class="text-sm font-medium text-muted-foreground">CGMSIM Profile</h2>
+      <span class="text-xs text-muted-foreground">Virtual Patient</span>
+    </header>
 
-    <Button
-      variant="default"
-      size="sm"
-      onclick={openEntryDialog}
-      data-testid="insert-food-treatment-btn"
-    >
-      <Plus class="h-3.5 w-3.5 mr-1" />
-      <span>CarePortal</span>
-    </Button>
-  </Card.Header>
-
-  <Card.Content class="p-3 pt-0 flex-1 flex flex-col justify-center">
-    <div class="grid grid-cols-1 @sm:grid-cols-2 gap-2">
+    <div class="flex-1 grid grid-cols-1 @sm:grid-cols-2 gap-4 items-center">
       <!-- Subject section -->
-      <div class="rounded-md border border-border/60 bg-muted/20 p-2 space-y-1.5">
+      <div class="flex flex-col justify-between space-y-2">
         <div class="flex items-center justify-between">
-          <div class="flex items-center gap-1 text-xs font-semibold text-foreground/80">
-            <User class="h-3 w-3 text-primary" />
+          <div class="flex items-center gap-1.5 text-xs font-semibold text-foreground/80">
+            <User class="size-3.5 text-primary" />
             <span>Subject</span>
           </div>
-          <Button variant="ghost" size="icon-xs" href={resolve("/cgmsim/subject")} title="Configure Subject" aria-label="Configure Subject">
-            <ExternalLink class="h-2.5 w-2.5 text-muted-foreground" />
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            href={resolve("/cgmsim/subject")}
+            title="Configure Subject"
+            aria-label="Configure Subject"
+            class="h-5 w-5 text-muted-foreground hover:text-foreground"
+          >
+            <ExternalLink class="size-3" />
           </Button>
         </div>
 
-        <div class="grid grid-cols-2 gap-1.5 text-xs">
+        <div class="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
           <div class="space-y-0.5">
             <span class="text-muted-foreground text-2xs block leading-none">Sex</span>
             <span class="font-medium text-foreground leading-none" data-testid="cgmsim-subject-sex">
@@ -99,19 +74,26 @@
         </div>
       </div>
 
-      <!-- Parameters section -->
-      <div class="rounded-md border border-border/60 bg-muted/20 p-2 space-y-1.5">
+      <!-- Kinetics section -->
+      <div class="flex flex-col justify-between space-y-2 @sm:border-l @sm:border-border/60 @sm:pl-4">
         <div class="flex items-center justify-between">
-          <div class="flex items-center gap-1 text-xs font-semibold text-foreground/80">
-            <SlidersHorizontal class="h-3 w-3 text-primary" />
+          <div class="flex items-center gap-1.5 text-xs font-semibold text-foreground/80">
+            <SlidersHorizontal class="size-3.5 text-primary" />
             <span>Kinetics</span>
           </div>
-          <Button variant="ghost" size="icon-xs" href={resolve("/cgmsim/parameters")} title="Configure Parameters" aria-label="Configure Parameters">
-            <ExternalLink class="h-2.5 w-2.5 text-muted-foreground" />
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            href={resolve("/cgmsim/parameters")}
+            title="Configure Parameters"
+            aria-label="Configure Parameters"
+            class="h-5 w-5 text-muted-foreground hover:text-foreground"
+          >
+            <ExternalLink class="size-3" />
           </Button>
         </div>
 
-        <div class="grid grid-cols-3 gap-1.5 text-xs">
+        <div class="grid grid-cols-3 gap-x-2 gap-y-1.5 text-xs">
           <div class="space-y-0.5">
             <span class="text-muted-foreground text-2xs block leading-none">ISF</span>
             <span class="font-medium text-foreground leading-none" data-testid="cgmsim-param-isf">
@@ -145,16 +127,5 @@
         </div>
       </div>
     </div>
-  </Card.Content>
-</Card.Root>
-
-{#if entryEditDialog.component}
-  <entryEditDialog.component
-    bind:open={entryEditDialog.open}
-    entry={selectedEntry}
-    onClose={() => {
-      entryEditDialog.open = false;
-      selectedEntry = null;
-    }}
-  />
-{/if}
+  </section>
+</Card>

@@ -8,6 +8,8 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
+  import { Button } from "$lib/components/ui/button";
+  import Plus from "@lucide/svelte/icons/plus";
   import { Badge } from "$lib/components/ui/badge";
   import { IsMobile } from "$lib/hooks/is-mobile.svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
@@ -293,6 +295,12 @@
     entryEditDialog.open = true;
   }
 
+  function openNewEntryDialog() {
+    selectedEntry = null;
+    correlatedRecords = [];
+    entryEditDialog.open = true;
+  }
+
   // ===== INSPECTION DIALOG STATE =====
   let isPickerOpen = $derived(inspection.activeDialog === "picker");
 
@@ -376,6 +384,17 @@
           ? 'min-h-8 basis-full @lg:basis-auto'
           : ''}"
       >
+        <Button
+          variant="default"
+          size="xs"
+          class="h-7 gap-1 text-xs font-medium"
+          onclick={openNewEntryDialog}
+          data-testid="insert-food-treatment-btn"
+        >
+          <Plus class="size-3" />
+          <span>CarePortal</span>
+        </Button>
+
         <PredictionSettings
           showPredictions={effectiveShowPredictions}
           predictionMode={predictionModeValue}
