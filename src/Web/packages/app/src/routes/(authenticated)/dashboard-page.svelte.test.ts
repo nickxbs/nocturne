@@ -29,6 +29,9 @@ vi.mock("$lib/components/dashboard", async () => ({
   ).default,
   WidgetGrid: (await import("$lib/test-stubs/WidgetGrid.test-stub.svelte"))
     .default,
+  CgmSimProfileCard: (
+    await import("$lib/test-stubs/CgmSimProfileCard.test-stub.svelte")
+  ).default,
 }));
 
 const uiSettings = vi.hoisted(() => ({
@@ -106,6 +109,7 @@ const grid = () => page.getByTestId("widget-grid");
 const glucoseChart = () => page.getByTestId("glucose-chart");
 const recentEntries = () => page.getByTestId("recent-entries");
 const recentTreatments = () => page.getByTestId("recent-treatments");
+const cgmSimCard = () => page.getByTestId("cgmsim-profile-card");
 
 function renderDashboard(
   settings: FeatureSettings,
@@ -155,6 +159,7 @@ describe("dashboard page", () => {
   it("renders every main section the tenant leaves on", async () => {
     renderDashboard(features());
 
+    await expect.element(cgmSimCard()).toBeVisible();
     await expect.element(glucoseChart()).toBeVisible();
     await expect.element(recentEntries()).toBeVisible();
     await expect.element(recentTreatments()).toBeVisible();

@@ -5,6 +5,7 @@
     RecentEntriesCard,
     RecentTreatmentsCard,
     WidgetGrid,
+    CgmSimProfileCard,
   } from "$lib/components/dashboard";
   import { getUiSettings } from "$api/ui-settings.remote";
   import { dashboardTopWidgets } from "$lib/stores/appearance-store.svelte";
@@ -86,6 +87,8 @@
       >
         <WidgetGrid widgets={topWidgets} maxWidgets={3} />
       </div>
+
+      <CgmSimProfileCard />
 
       {#if isMainSectionEnabled(widgets, WidgetId.GlucoseChart)}
         {#snippet glucoseChart(chartVisible: boolean)}

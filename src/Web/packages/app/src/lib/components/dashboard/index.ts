@@ -6,6 +6,7 @@ export { default as PredictionSettings } from './PredictionSettings.svelte';
 export { default as RecentEntriesCard } from './RecentEntriesCard.svelte';
 export { default as RecentTreatmentsCard } from './RecentTreatmentsCard.svelte';
 export { default as WidgetGrid } from './WidgetGrid.svelte';
+export { default as CgmSimProfileCard } from './CgmSimProfileCard.svelte';
 
 // Individual widgets
 export * from './widgets';
