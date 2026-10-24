@@ -266,7 +266,13 @@ jobs:
           done
           # Every publish reads and refreshes the shared layer cache.
           CACHE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:buildcache"
-          CACHE_ARGS=(--cache-from "type=registry,ref=${CACHE_REF}" --cache-to "type=registry,ref=${CACHE_REF},mode=max")
+          if docker manifest inspect "${CACHE_REF}" >/dev/null 2>&1; then
+            echo "Found existing buildcache at ${CACHE_REF}"
+            CACHE_ARGS=(--cache-from "type=registry,ref=${CACHE_REF}" --cache-to "type=registry,ref=${CACHE_REF},mode=max")
+          else
+            echo "No existing buildcache found at ${CACHE_REF}, initializing new cache"
+            CACHE_ARGS=(--cache-to "type=registry,ref=${CACHE_REF},mode=max")
+          fi
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             "${TAG_ARGS[@]}" \
@@ -284,18 +290,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "pnpm"
-          cache-dependency-path: src/Web/pnpm-lock.yaml
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -322,7 +316,13 @@ jobs:
             TAG_ARGS+=(--tag "${t}")
           done
           CACHE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-cgmsim:buildcache"
-          CACHE_ARGS=(--cache-from "type=registry,ref=${CACHE_REF}" --cache-to "type=registry,ref=${CACHE_REF},mode=max")
+          if docker manifest inspect "${CACHE_REF}" >/dev/null 2>&1; then
+            echo "Found existing buildcache at ${CACHE_REF}"
+            CACHE_ARGS=(--cache-from "type=registry,ref=${CACHE_REF}" --cache-to "type=registry,ref=${CACHE_REF},mode=max")
+          else
+            echo "No existing buildcache found at ${CACHE_REF}, initializing new cache"
+            CACHE_ARGS=(--cache-to "type=registry,ref=${CACHE_REF},mode=max")
+          fi
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             "${TAG_ARGS[@]}" \
