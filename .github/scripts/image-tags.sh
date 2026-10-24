@@ -44,9 +44,16 @@ for tag in $extra; do
   web_tags+=",${web}:${tag}"
 done
 
+cgmsim="${REGISTRY}/${IMAGE_REPOSITORY}/nocturne-cgmsim"
+cgmsim_tags="${cgmsim}:${version}"
+for tag in $extra; do
+  cgmsim_tags+=",${cgmsim}:${tag}"
+done
+
 {
   echo "version=${version}"
   echo "app_version=${app_version}"
   echo "extra_tags=${extra}"
   echo "web_tags=${web_tags}"
+  echo "cgmsim_tags=${cgmsim_tags}"
 } >> "$GITHUB_OUTPUT"

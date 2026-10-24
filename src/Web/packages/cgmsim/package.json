@@ -1,0 +1,42 @@
+{
+  "name": "@nocturne/cgmsim",
+  "version": "1.0.0",
+  "description": "Standalone Node.js simulation service generating metabolic glucose entries for Nocturne tenants",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "clean": "rimraf dist",
+    "lint": "eslint .",
+    "lint:ci": "eslint . --max-warnings 0 --report-unused-disable-directives-severity error"
+  },
+  "keywords": [
+    "nocturne",
+    "cgm",
+    "simulator",
+    "diabetes",
+    "glucose"
+  ],
+  "author": "Nocturne Project",
+  "license": "AGPL-3.0-only",
+  "devDependencies": {
+    "@nocturne/eslint-config": "workspace:*",
+    "@types/node": "^24.10.1",
+    "@vitest/coverage-v8": "4.1.6",
+    "eslint": "^10.3.0",
+    "rimraf": "^5.0.5",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.6"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@lsandini/cgmsim-lib": "^0.11.3"
+  }
+}
