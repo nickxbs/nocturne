@@ -72,3 +72,21 @@ public class CgmSimInitializeRequest
     [Required]
     public CgmSimParameters Parameters { get; set; } = new();
 }
+
+/// <summary>
+/// Bolus wizard calculation breakdown computed from current glucose, IOB, COB, and tenant parameters.
+/// </summary>
+public class CgmSimWizardPreview
+{
+    public double Carbs { get; set; }
+    public double BgUnits { get; set; }
+    public double ChoUnits { get; set; }
+    public double CobUnits { get; set; }
+    public double IobUnits { get; set; }
+    public double AdjustmentUnits { get; set; }
+    public double RecommendedBolus { get; set; }
+    public double? CurrentBg { get; set; }
+    public double TargetBg { get; set; }
+    public double Isf { get; set; }
+    public double Cr { get; set; }
+}

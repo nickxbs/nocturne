@@ -54,6 +54,8 @@ export function toCreateEntryInput(record: EntryRecord) {
           carbs: typeof d.carbs === "number" ? d.carbs : Number(d.carbs) || 0,
           carbTime: d.carbTime != null ? Number(d.carbTime) : undefined,
           absorptionTime: d.absorptionTime != null ? Number(d.absorptionTime) : undefined,
+          fatGrams: d.fatGrams != null ? Number(d.fatGrams) : undefined,
+          proteinGrams: d.proteinGrams != null ? Number(d.proteinGrams) : undefined,
           correlationId: d.correlationId,
         },
       };

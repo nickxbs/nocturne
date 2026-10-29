@@ -32,6 +32,7 @@ const GUEST: NavViewer = {
 
 /** Surfaces only the data owner can act on. */
 const OWNER_ONLY = [
+  "Careportal",
   "Food",
   "Meals",
   "Tools",

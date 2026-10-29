@@ -5,11 +5,14 @@ import {
   UpdateBolusRequestSchema,
   CreateCarbIntakeRequestSchema,
   UpdateCarbIntakeRequestSchema,
+  CreateMealRequestSchema,
+  CreateTempBasalRequestSchema,
   UpsertBGCheckRequestSchema,
   UpsertNoteRequestSchema,
   UpsertDeviceEventRequestSchema,
   CreateBasalInjectionRequestSchema,
   UpdateBasalInjectionRequestSchema,
+  BasalScheduleSchema,
 } from "$lib/api/generated/schemas";
 
 const entriesSchema = z.object({
@@ -106,10 +109,13 @@ export const createEntry = command(
   z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("bolus"), data: CreateBolusRequestSchema }),
     z.object({ kind: z.literal("carbs"), data: CreateCarbIntakeRequestSchema }),
+    z.object({ kind: z.literal("meal"), data: CreateMealRequestSchema }),
+    z.object({ kind: z.literal("tempBasal"), data: CreateTempBasalRequestSchema }),
     z.object({ kind: z.literal("bgCheck"), data: UpsertBGCheckRequestSchema }),
     z.object({ kind: z.literal("note"), data: UpsertNoteRequestSchema }),
     z.object({ kind: z.literal("deviceEvent"), data: UpsertDeviceEventRequestSchema }),
     z.object({ kind: z.literal("basalInjection"), data: CreateBasalInjectionRequestSchema }),
+    z.object({ kind: z.literal("basalSchedule"), data: BasalScheduleSchema }),
   ]),
   async (input) => {
     const { apiClient } = getRequestEvent().locals;
@@ -118,6 +124,10 @@ export const createEntry = command(
         return await apiClient.bolus.create(input.data);
       case "carbs":
         return await apiClient.nutrition.createCarbIntake(input.data);
+      case "meal":
+        return await apiClient.nutrition.createMeal(input.data);
+      case "tempBasal":
+        return await apiClient.tempBasal.createTempBasals([input.data]);
       case "bgCheck":
         return await apiClient.bGCheck.create(input.data);
       case "note":
@@ -126,6 +136,8 @@ export const createEntry = command(
         return await apiClient.deviceEvent.create(input.data);
       case "basalInjection":
         return await apiClient.basalInjection.create(input.data);
+      case "basalSchedule":
+        return await apiClient.profile.createBasalSchedule(input.data);
     }
   }
 );

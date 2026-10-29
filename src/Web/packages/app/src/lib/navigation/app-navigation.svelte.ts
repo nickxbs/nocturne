@@ -51,6 +51,7 @@ export type NavItemId =
   | "reports"
   | "clock"
   | "tenants"
+  | "careportal"
   | "food"
   | "meals"
   | "tools"
@@ -181,6 +182,12 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
   }
 
   items.push(
+    {
+      id: "careportal",
+      title: "Careportal",
+      href: "/careportal",
+      icon: Syringe,
+    },
     {
       id: "food",
       title: "Food",

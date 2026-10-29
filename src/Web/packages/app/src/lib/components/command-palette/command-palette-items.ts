@@ -139,6 +139,14 @@ export const items: CommandPaletteItem[] = [
 		href: "/",
 	},
 	{
+		id: "page-careportal",
+		label: "Careportal",
+		group: "pages",
+		keywords: ["careportal", "pump", "bolus", "wizard", "treatments"],
+		icon: CirclePlus,
+		href: "/careportal",
+	},
+	{
 		id: "page-food",
 		label: "Food",
 		group: "pages",
