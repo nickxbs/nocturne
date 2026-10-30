@@ -6,39 +6,44 @@
   import Activity from "@lucide/svelte/icons/activity";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { labResultArtwork } from "#lib/watercolour-icons.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import {
     getAvailableYears,
     getEHbA1cTimeline,
-  } from "$api/generated/dataOverviews.generated.remote";
-  import * as labResultsApi from "$api/generated/labHbA1cs.generated.remote";
+  } from "#lib/api/generated/dataOverviews.generated.remote.js";
+  import * as labResultsApi from "#lib/api/generated/labHbA1cs.generated.remote.js";
   import type {
     EHbA1cPoint,
     LabHbA1cResult,
     A1cDisplayValue,
     A1cDisplayReferences,
-  } from "$api/generated/nocturne-api-client";
-  import { a1cUnits } from "$lib/stores/appearance-store.svelte";
+    TimeZoneUnavailableReason,
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { a1cUnits } from "#lib/stores/appearance-store.svelte.js";
   import {
     a1cLabel,
     a1cUnitLabel,
     a1cDisplayValue,
     formatA1c,
     formatA1cNumber,
-  } from "$lib/utils/a1c-formatting";
-  import { bg, bgLabel, formatLongDate } from "$lib/utils/formatting";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
-  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
+  } from "#lib/utils/a1c-formatting.js";
+  import { bg, bgLabel, formatLongDate } from "#lib/utils/formatting.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { setReportPrintMeta } from "#lib/components/reports/print/report-print.svelte.js";
+  import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
   import {
     CHART_TEXTURES,
     patternClass,
     type TextureKey,
-  } from "$lib/components/charts/print/chart-print-patterns";
+  } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   type ChartPoint = {
     date: Date;
@@ -61,6 +66,7 @@
   let error = $state<unknown>(null);
   let pointsByYear = $state<Map<number, EHbA1cPoint[]>>(new Map());
   let references = $state<A1cDisplayReferences>();
+  let timeZoneReason = $state<TimeZoneUnavailableReason>();
 
   let labResults = $state<LabHbA1cResult[]>([]);
   let newLabDate = $state("");
@@ -200,21 +206,24 @@
     loading = true;
     error = null;
     try {
-      const [{ years }, results] = await Promise.all([
-        getAvailableYears().run(),
-        labResultsApi.getAll().run(),
+      const [{ years, timeZoneUnavailableReason }, results] = await Promise.all([
+        fresh(getAvailableYears()),
+        fresh(labResultsApi.getAll()),
       ]);
       labResults = results ?? [];
+      const timelineReasons: (TimeZoneUnavailableReason | undefined)[] = [];
       const pointResults = await Promise.all(
         (years?.length ? years : [new Date().getFullYear()]).map(
           async (year) => {
-            const response = await getEHbA1cTimeline({ year }).run();
+            const response = await fresh(getEHbA1cTimeline({ year }));
             references = response.a1cReferences;
+            timelineReasons.push(response.timeZoneUnavailableReason);
             return [year, response.points ?? []] as const;
           }
         )
       );
       pointsByYear = new Map(pointResults);
+      timeZoneReason = timeZoneUnavailableReason ?? timelineReasons.find((reason) => reason);
     } catch (err) {
       error = err;
       console.error("Failed to load eHbA1c timeline:", err);
@@ -297,7 +306,7 @@
         unit: a1cUnits.current,
         note: newLabNote || undefined,
       });
-      labResults = (await labResultsApi.getAll().run()) ?? [];
+      labResults = (await fresh(labResultsApi.getAll())) ?? [];
       newLabDate = "";
       newLabValue = "";
       newLabNote = "";
@@ -314,7 +323,7 @@
     if (!target?.id) return;
     try {
       await labResultsApi.remove(target.id);
-      labResults = (await labResultsApi.getAll().run()) ?? [];
+      labResults = (await fresh(labResultsApi.getAll())) ?? [];
     } catch (err) {
       labResultError = describeSubmitError(err, "Failed to delete lab result");
     }
@@ -336,10 +345,8 @@
         <Card.Description>
           {a1cLabel(true)} estimates what a lab {a1cLabel()} test would read on a
           given day. For each day, it takes the average glucose from every reading
-          in the trailing 90 days and weights each day's contribution by recency —
-          the most recent ~30 days count for roughly half the estimate, tapering off
-          exponentially for older days, similar to how glycated hemoglobin reflects
-          glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted
+          in the trailing 90 days and weights each day's contribution by recency.
+          The most recent ~30 days count for roughly half the estimate. The weight tapers off exponentially for older days. This is similar to how glycated hemoglobin reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted
           average glucose is then converted to NGSP percent with the ADAG formula:
           {a1cLabel(true)} (%) = (average glucose in mg/dL + 46.7) / 28.7.
         </Card.Description>
@@ -357,12 +364,22 @@
         </div>
       {:else if error}
         <div class="flex h-[320px] items-center justify-center text-destructive">
-          Failed to load {a1cLabel(true)} data. Please try again later.
+          Failed to load {a1cLabel(true)} data. Try again later.
         </div>
+      {:else if chartData.length === 0 && timeZoneReason}
+        <p class="text-sm text-muted-foreground">
+          <TimeZoneNote reason={timeZoneReason}>
+            This report cannot group readings into local days to estimate HbA1c.
+          </TimeZoneNote>
+        </p>
       {:else if chartData.length === 0}
-        <div class="flex h-[320px] items-center justify-center text-muted-foreground">
-          Not enough glucose history yet — each point needs at least a month of readings within
-          the trailing 90 days.
+        <div class="flex h-[320px] items-center justify-center">
+          <EmptyState
+            art="report-pages"
+            size="compact"
+            title="Not enough glucose history yet"
+            body="Each point needs at least a month of readings within the trailing 90 days."
+          />
         </div>
       {:else}
         {#if latest && extremes}
@@ -396,6 +413,7 @@
             y="displayValue"
             {yDomain}
             clip
+            padding={{ top: 4, right: 16, bottom: 20, left: 20 }}
             series={[
               {
                 key: "displayValue",
@@ -474,7 +492,7 @@
         {a1cLabel(true)} calculation.
       </p>
       <Card.Description class="print:hidden">
-        Enter a lab {a1cLabel()} result here — shown as a triangle marker on the chart
+        Enter a lab {a1cLabel()} result here. It shows as a triangle marker on the chart
         above, so you can see how closely the {a1cLabel(true)} estimate tracks an
         actual lab draw. Lab results are not included in the {a1cLabel(true)} calculation
         itself. The date below is the date the blood was drawn, not the date you enter
@@ -483,7 +501,7 @@
     </Card.Header>
     <Card.Content class="space-y-4">
       {#if labResults.length === 0}
-        <p class="text-sm text-muted-foreground">No lab results added yet.</p>
+        <EmptyState art={labResultArtwork} size="compact" title="No lab results added yet" />
       {:else}
         <ul class="divide-border divide-y">
           {#each [...labResults].sort((a, b) => toDate(b.measuredAt).getTime() - toDate(a.measuredAt).getTime()) as result (result.id)}
@@ -511,7 +529,7 @@
         </ul>
       {/if}
 
-      <div class="grid gap-3 sm:grid-cols-3 print:hidden">
+      <div class="grid gap-3 @xl:grid-cols-3 print:hidden">
         <div class="space-y-1.5">
           <Label for="lab-date">Date of blood draw</Label>
           <Input id="lab-date" type="date" bind:value={newLabDate} />
@@ -556,6 +574,7 @@
 
 {#snippet labMarkers({ points }: { points: { x: number; y: number; data: (typeof labChartPoints)[number] }[] })}
   {#each points as point (point.data.id)}
+    <!-- Native polygon: layerchart Polygon draws a path with no children, so the per-marker title tooltip has no home; one marker per lab result. -->
     <polygon
       data-testid="lab-marker"
       points="{point.x},{point.y - 7} {point.x - 6},{point.y + 5} {point.x + 6},{point.y + 5}"

@@ -1,15 +1,15 @@
 <script lang="ts">
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     Card,
     CardContent,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
+  } from "#lib/components/ui/card/index.js";
   import ReportsSkeleton from "./ReportsSkeleton.svelte";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import type { Snippet } from "svelte";
 
   interface Props {
@@ -40,7 +40,7 @@
     error,
     hasData = false,
     refreshing = false,
-    errorTitle = "Error Loading Data",
+    errorTitle = "Error loading data",
     onRetry,
     compact = false,
     children,
@@ -54,7 +54,7 @@
         ? error.message
         : typeof error === "string"
           ? error
-          : remoteErrorMessage(error, "Something went wrong. Please try again.")
+          : remoteErrorMessage(error, "Could not load the data. Try again.")
       : null
   );
 

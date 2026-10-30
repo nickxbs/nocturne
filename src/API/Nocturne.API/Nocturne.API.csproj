@@ -15,14 +15,26 @@
          multi-arch publish (ContainerRuntimeIdentifiers) can run inner
          per-RID publishes without a separate restore. -->
     <RuntimeIdentifiers>linux-x64;linux-arm64</RuntimeIdentifiers>
+    <!-- Precompiles the app's own assemblies (the base image's framework already is), so a
+         restarted container answers about a second sooner and spends less memory on the JIT;
+         tiered compilation still rejits hot code. Off for a publish without a runtime, where the
+         SDK would infer the host's and the multi-arch container publish would refuse it; on for
+         restore, so the per-runtime publishes find the compiler that restore downloaded. -->
+    <PublishReadyToRun Condition="'$(RuntimeIdentifier)' != '' or '$(MSBuildIsRestoring)' == 'true'">true</PublishReadyToRun>
     <ContainerRepository>nocturne-api</ContainerRepository>
     <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0</ContainerBaseImage>
     <ContainerWorkingDirectory>/app/</ContainerWorkingDirectory>
+    <!-- Read before the SDK's targets default Version to 1.0.0, so it holds only a -p:Version
+         the release build passed. AppVersion.IsRelease reads it back. -->
+    <NocturneReleaseVersion>$(Version)</NocturneReleaseVersion>
   </PropertyGroup>
+  <ItemGroup Condition="'$(NocturneReleaseVersion)' != ''">
+    <AssemblyMetadata Include="NocturneReleaseVersion" Value="$(NocturneReleaseVersion)" />
+  </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Nocturne.API.Tests" />
     <InternalsVisibleTo Include="Nocturne.API.Performance.Tests" />
-    <InternalsVisibleTo Include="Nocturne.Alerts.ParityCorpus.Generator" />
+    <InternalsVisibleTo Include="Nocturne.Alerts.Corpus" />
   </ItemGroup>
   <!-- Build provenance baked into the published container image. CI passes the source
        commit and build timestamp; the status endpoint surfaces them in the About panel. -->

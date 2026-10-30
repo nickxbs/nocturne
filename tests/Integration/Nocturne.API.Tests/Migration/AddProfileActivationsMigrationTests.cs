@@ -26,6 +26,12 @@ public sealed class AddProfileActivationsMigrationFixture : IAsyncLifetime
 {
     private const string PriorMigration = "20261020015113_ConvertMotionClassActivitiesToMotionSpans";
 
+    /// <summary>
+    /// Migrated to rather than the latest: <c>RemoveLegacyProfileSpansAndSwitchSnapshots</c> deletes the
+    /// spans a second up would convert again.
+    /// </summary>
+    private const string MigrationUnderTest = "20261021035454_AddProfileActivations";
+
     internal static readonly Guid TenantA = Guid.Parse("a1111111-1111-7111-8111-111111111111");
     internal static readonly Guid TenantB = Guid.Parse("b2222222-2222-7222-8222-222222222222");
 
@@ -69,16 +75,15 @@ public sealed class AddProfileActivationsMigrationFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        var database = await SharedPostgres.CreateEmptyDatabaseAsync("add_profile_activations");
+        var database = await SharedPostgres.CreateDatabaseAtMigrationAsync(PriorMigration, "add_profile_activations");
         _migrator = database.MigratorConnectionString;
 
-        await MigrateToAsync(PriorMigration);
         await SeedAsync();
-        await MigrateToAsync(null);
+        await MigrateToAsync(MigrationUnderTest);
         await ReadAsync(AfterUp);
         await MigrateToAsync(PriorMigration);
         TableAfterDown = await TableExistsAsync();
-        await MigrateToAsync(null);
+        await MigrateToAsync(MigrationUnderTest);
         await ReadAsync(AfterSecondUp);
     }
 

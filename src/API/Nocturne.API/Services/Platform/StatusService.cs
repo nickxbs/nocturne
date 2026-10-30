@@ -5,14 +5,18 @@ using System.Linq;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
@@ -39,15 +43,22 @@ public class StatusService : IStatusService
 
     private readonly IConfiguration _configuration;
     private readonly ICacheService _cacheService;
+    private readonly CacheFlights _flights;
     private readonly IDemoModeService _demoModeService;
     private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly PublicAccessCacheService _publicAccessCacheService;
+    private readonly ITenantService _tenants;
     private readonly ITenantAppearanceReader _appearanceReader;
     private readonly IGlucoseStatusClassifier _thresholdClassifier;
+    private readonly IAlertRepository _alertRepository;
     private readonly ICategoryReadContext _categoryReadContext;
+    private readonly TimeProvider _time;
     private readonly ILogger<StatusService> _logger;
+
+    /// <summary>The cache key of a tenant's system status, before its demo-mode and rules suffixes.</summary>
+    public static string SystemStatusCacheKey(string tenantId) => $"status:system:{tenantId}";
 
     /// <summary>
     /// Whether the caller may see thresholds derived from the tenant's alert rules. A share cannot
@@ -57,39 +68,41 @@ public class StatusService : IStatusService
     private bool ReadsAlertRules =>
         !_categoryReadContext.IsShare && _httpContextAccessor.HttpContext?.IsAuthenticated() == true;
 
-    /// <summary>
-    /// Set when the thresholds fell back to the defaults because <c>alert_rules</c> could not be
-    /// read, so the response is returned but not cached and the next request tries again.
-    /// </summary>
-    private bool _thresholdsDegraded;
-
     private string TenantCacheId => _tenantAccessor.Context?.TenantId.ToString()
         ?? throw new InvalidOperationException("Tenant context is not resolved");
 
     public StatusService(
         IConfiguration configuration,
         ICacheService cacheService,
+        CacheFlights flights,
         IDemoModeService demoModeService,
         INocturneDbContextFactory dbContextFactory,
         IHttpContextAccessor httpContextAccessor,
         ITenantAccessor tenantAccessor,
         PublicAccessCacheService publicAccessCacheService,
+        ITenantService tenants,
         ITenantAppearanceReader appearanceReader,
         IGlucoseStatusClassifier thresholdClassifier,
+        IAlertRepository alertRepository,
         ICategoryReadContext categoryReadContext,
+        TimeProvider timeProvider,
         ILogger<StatusService> logger
     )
     {
         _configuration = configuration;
         _cacheService = cacheService;
+        _flights = flights;
         _demoModeService = demoModeService;
         _dbContextFactory = dbContextFactory;
         _httpContextAccessor = httpContextAccessor;
         _tenantAccessor = tenantAccessor;
         _publicAccessCacheService = publicAccessCacheService;
+        _tenants = tenants;
         _appearanceReader = appearanceReader;
         _thresholdClassifier = thresholdClassifier;
+        _alertRepository = alertRepository;
         _categoryReadContext = categoryReadContext;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -105,7 +118,7 @@ public class StatusService : IStatusService
                 Status = "setup_required",
                 Name = "Nocturne",
                 Version = AppVersion.Current,
-                ServerTime = DateTime.UtcNow,
+                ServerTime = _time.GetUtcNow().UtcDateTime,
                 ApiEnabled = false,
             };
         }
@@ -113,59 +126,26 @@ public class StatusService : IStatusService
         // Not an ITenantCache key: the response varies by authentication, not by readable rows (CLAUDE.md, PHI cache invariant).
         var demoSuffix = _demoModeService.IsEnabled ? ":demo" : "";
         var rulesSuffix = ReadsAlertRules ? "" : ":defaults";
-        var cacheKey = $"status:system:{TenantCacheId}" + demoSuffix + rulesSuffix;
+        var cacheKey = SystemStatusCacheKey(TenantCacheId) + demoSuffix + rulesSuffix;
         var cacheTtl = TimeSpan.FromMinutes(2);
 
-        var cachedStatus = await _cacheService.GetAsync<StatusResponse>(cacheKey);
-        if (cachedStatus != null)
-        {
-            _logger.LogDebug(
-                "Cache HIT for system status (demoMode: {DemoMode})",
-                _demoModeService.IsEnabled
-            );
-            return cachedStatus;
-        }
-
-        _logger.LogDebug(
-            "Cache MISS for system status (demoMode: {DemoMode}), generating response",
-            _demoModeService.IsEnabled
-        );
-        _thresholdsDegraded = false;
-        var status = await GenerateSystemStatusAsync();
-
-        if (status != null)
-        {
-            if (_thresholdsDegraded)
-            {
-                return status;
-            }
-
-            await _cacheService.SetAsync(cacheKey, status, cacheTtl);
-            _logger.LogDebug("Cached system status with {TTL}min TTL", cacheTtl.TotalMinutes);
-            return status;
-        }
-
-        // Return a default status if generation fails
-        return new StatusResponse
-        {
-            Status = "error",
-            Name = "Nocturne",
-            Version = AppVersion.Current,
-            ServerTime = DateTime.UtcNow,
-            ApiEnabled = true,
-        };
+        var ct = _httpContextAccessor.HttpContext?.RequestAborted ?? CancellationToken.None;
+        return await _flights.GetOrSetAsync(
+                _cacheService, cacheKey, () => GenerateSystemStatusAsync(cacheTtl), ct)
+            ?? throw new InvalidOperationException("The system status was not generated.");
     }
 
     /// <summary>
-    /// Generate the system status response (private method for cache factory)
+    /// Generates the system status, cached for <paramref name="ttl"/> unless its thresholds fell back
+    /// to the defaults because <c>alert_rules</c> could not be read, so the next request tries again.
     /// </summary>
-    private async Task<StatusResponse> GenerateSystemStatusAsync()
+    private async Task<CacheResult<StatusResponse>> GenerateSystemStatusAsync(TimeSpan ttl)
     {
         _logger.LogDebug("Generating system status response");
 
         var version = AppVersion.Current;
-        var serverTime = DateTime.UtcNow;
-        var settings = await GetPublicSettingsAsync();
+        var serverTime = _time.GetUtcNow().UtcDateTime;
+        var (settings, thresholdsDegraded) = await GetPublicSettingsAsync();
 
         // Add demo mode settings if enabled
         if (_demoModeService.IsEnabled)
@@ -248,7 +228,7 @@ public class StatusService : IStatusService
             _demoModeService.IsEnabled
         );
 
-        return response;
+        return new CacheResult<StatusResponse>(response, thresholdsDegraded ? null : ttl);
     }
 
     // Permissions that grant read access to dashboard data. Mirrors the web app's
@@ -410,15 +390,21 @@ public class StatusService : IStatusService
     }
 
     /// <summary>
-    /// Get public settings that are safe to expose to clients
+    /// Get public settings that are safe to expose to clients, and whether their thresholds are the
+    /// degraded defaults (<see cref="ResolveThresholdsAsync"/>).
     /// </summary>
-    private async Task<Dictionary<string, object>> GetPublicSettingsAsync()
+    private async Task<(Dictionary<string, object> Settings, bool ThresholdsDegraded)> GetPublicSettingsAsync()
     {
         var settings = new Dictionary<string, object>();
 
-        // Core display settings
+        // Core display settings. Units are the owner's own choice, else the tenant default chosen in
+        // onboarding, which is what a Nightscout client reads as DISPLAY_UNITS.
         var appearance = await _appearanceReader.GetTenantAppearanceAsync(_tenantAccessor.TenantId);
-        settings["units"] = appearance.GlucoseUnits ?? "mg/dl";
+        var tenantUnits = appearance.GlucoseUnits
+            ?? (_tenantAccessor.Context is { } tenant
+                ? await _tenants.GetDefaultGlucoseUnitsAsync(tenant.TenantId)
+                : null);
+        settings["units"] = tenantUnits ?? GlucoseUnitDefaults.MgDl;
         settings["timeFormat"] = _configuration.GetValue<int>("Display:TimeFormat", 12);
         settings["dayStart"] = _configuration.GetValue<int>("Display:DayStart", 7);
         settings["dayEnd"] = _configuration.GetValue<int>("Display:DayEnd", 21);
@@ -465,7 +451,7 @@ public class StatusService : IStatusService
         // required for tenant data unconditionally rather than by setting.
         settings["requireAuthentication"] = false;
 
-        var thresholds = await ResolveThresholdsAsync();
+        var (thresholds, thresholdsDegraded) = await ResolveThresholdsAsync();
         settings["thresholds"] = new Dictionary<string, object>
         {
             ["bgHigh"] = thresholds.UrgentHigh,
@@ -501,25 +487,25 @@ public class StatusService : IStatusService
         settings["alarmTypes"] = _configuration.GetSection("Alarms:Types").Get<string[]>() ?? new[] { "predict" };
         settings["enable"] = EnabledFeatures.Read(_configuration);
 
-        return settings;
+        return (settings, thresholdsDegraded);
     }
 
     /// <summary>
     /// Resolves the thresholds in mg/dL. An unreadable <c>alert_rules</c> degrades to the configured
     /// defaults so the status endpoint keeps answering.
     /// </summary>
-    private async Task<TenantOverviewThresholds> ResolveThresholdsAsync()
+    private async Task<(TenantOverviewThresholds Thresholds, bool Degraded)> ResolveThresholdsAsync()
     {
         if (!ReadsAlertRules)
         {
-            return _thresholdClassifier.Defaults;
+            return (_thresholdClassifier.Defaults, false);
         }
 
         var ct = _httpContextAccessor.HttpContext?.RequestAborted ?? CancellationToken.None;
         try
         {
-            await using var db = await _dbContextFactory.CreateAsync(ct);
-            return await _thresholdClassifier.ResolveThresholdsAsync(db, ct);
+            var rules = await _alertRepository.GetEnabledRulesAsync(_tenantAccessor.TenantId, ct);
+            return (_thresholdClassifier.ResolveThresholds(rules), false);
         }
         catch (DbException ex)
         {
@@ -530,8 +516,7 @@ public class StatusService : IStatusService
             _logger.LogWarning(ex, "Failed to read alert rules for status thresholds; using the defaults");
         }
 
-        _thresholdsDegraded = true;
-        return _thresholdClassifier.Defaults;
+        return (_thresholdClassifier.Defaults, true);
     }
 
     /// <summary>
@@ -571,7 +556,7 @@ public class StatusService : IStatusService
         var basicStatus = await GetSystemStatusAsync();
 
         var storageVersion = await GetPostgresVersionAsync();
-        var serverTime = DateTime.UtcNow;
+        var serverTime = _time.GetUtcNow().UtcDateTime;
 
         var response = new V3StatusResponse
         {
@@ -586,7 +571,7 @@ public class StatusService : IStatusService
             Name = basicStatus.Name ?? "Nocturne",
             Version = basicStatus.Version ?? AppVersion.Current,
             ServerTime = serverTime,
-            SrvDate = new DateTimeOffset(serverTime).ToUnixTimeMilliseconds(),
+            SrvDate = serverTime.ToMills(),
             ApiEnabled = basicStatus.ApiEnabled,
             CareportalEnabled = basicStatus.CareportalEnabled ?? false,
             Head = basicStatus.Head ?? "unknown",
@@ -595,7 +580,7 @@ public class StatusService : IStatusService
             {
                 Authorization = GetAuthorizationInfo(),
                 Permissions = GetApiPermissions(),
-                UptimeMs = (long)(DateTime.UtcNow - ProcessStartUtc).TotalMilliseconds,
+                UptimeMs = (long)(_time.GetUtcNow().UtcDateTime - ProcessStartUtc).TotalMilliseconds,
                 Collections = GetAvailableCollections(),
                 ApiVersions = GetSupportedApiVersions(),
             },
@@ -623,7 +608,7 @@ public class StatusService : IStatusService
     {
         _logger.LogDebug("Generating last modified timestamps response");
 
-        var serverTime = DateTime.UtcNow;
+        var serverTime = _time.GetUtcNow().UtcDateTime;
         var grantedScopes = _httpContextAccessor.HttpContext?.GetGrantedScopes() ?? new HashSet<string>();
 
         Task<DateTime?> ReadableLastModifiedAsync(string collection, Func<NocturneDbContext, Task<DateTime?>> query) =>
@@ -682,7 +667,7 @@ public class StatusService : IStatusService
             .Select(f => (DateTime?)f.SysUpdatedAt)
             .FirstOrDefaultAsync());
 
-        var settingsTask = ReadableLastModifiedAsync("settings", ctx => ctx.Settings.AsNoTracking()
+        var settingsTask = ReadableLastModifiedAsync("settings", ctx => ctx.Settings.V3Documents().AsNoTracking()
             .OrderByDescending(s => s.SrvModified ?? s.SysUpdatedAt)
             .Select(s =>
                 (DateTime?)(s.SrvModified.HasValue ? s.SrvModified.Value.UtcDateTime : s.SysUpdatedAt))

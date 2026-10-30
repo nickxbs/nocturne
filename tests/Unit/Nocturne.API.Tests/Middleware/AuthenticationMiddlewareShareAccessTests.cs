@@ -72,7 +72,8 @@ public sealed class AuthenticationMiddlewareShareAccessTests
     {
         var jwt = new JwtService(
             Options.Create(new JwtOptions { SecretKey = new string('k', 48) }),
-            NullLogger<JwtService>.Instance);
+            NullLogger<JwtService>.Instance,
+            TimeProvider.System);
 
         var token = jwt.GenerateAccessToken(
             new SubjectInfo { Id = TestDatabaseSeeder.TestSubjectId, Name = "owner" },
@@ -94,14 +95,13 @@ public sealed class AuthenticationMiddlewareShareAccessTests
         return (handler, scopeFactory, token);
     }
 
-    private static DefaultHttpContext ContextFor(bool shareAccess)
+    private DefaultHttpContext ContextFor(bool shareAccess)
     {
         var services = new ServiceCollection();
         services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
         // The seeded subject is a member of the seeded tenant; the middleware's membership check
         // is orthogonal to the share gate under test, so it is satisfied rather than exercised.
-        services.AddSingleton(Mock.Of<ITenantMemberService>(m =>
-            m.IsMemberAsync(TestDatabaseSeeder.TestSubjectId, TestDatabaseSeeder.TenantId) == Task.FromResult(true)));
+        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(_dbName).AsFactory());
         var ctx = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
         ctx.Items["TenantContext"] =
             new TenantContext(TestDatabaseSeeder.TenantId, "acme", "Acme", true, false);

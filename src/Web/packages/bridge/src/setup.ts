@@ -179,6 +179,8 @@ export async function setupBridge(
   });
 
   socketIOServer.onTenantAdmitted = (slug) => registry.ensure(slug);
+  socketIOServer.isCurrentTenant = (slug, id) => registry.holds(slug, id);
+  socketIOServer.holdsTenantNow = (slug, id) => registry.holdsNow(slug, id);
   socketIOServer.onApexUnresolved = async () => {
     await registry.refresh();
   };
@@ -195,6 +197,9 @@ export async function setupBridge(
       );
     }
   };
+
+  socketIOServer.currentAlarm = async (tenantSlug) =>
+    (await registry.get(tenantSlug)?.currentAlarm()) ?? null;
 
   // Discover tenants in the background so a slow or temporarily-unavailable API
   // doesn't prevent the Socket.IO server from accepting browser connections.

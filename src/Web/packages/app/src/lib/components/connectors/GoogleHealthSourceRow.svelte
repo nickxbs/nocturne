@@ -4,11 +4,11 @@
   import {
     GoogleHealthConnectionState,
     type GoogleHealthStatus,
-  } from "$lib/api/generated/nocturne-api-client";
+  } from "#lib/api/generated/nocturne-api-client.js";
   import DataSourceRow, {
     type DataSourceStatus,
-  } from "$lib/components/settings/DataSourceRow.svelte";
-  import { lastSeen } from "$lib/utils/formatting";
+  } from "#lib/components/settings/DataSourceRow.svelte";
+  import { relativeAge } from "#lib/utils/formatting.js";
   import HeartPulse from "@lucide/svelte/icons/heart-pulse";
 
   let { connection }: { connection: GoogleHealthStatus } = $props();
@@ -39,7 +39,7 @@
     : undefined}
   lastSyncAttempt={connection.lastAttempt}
   lastSuccessfulSync={connection.lastSync}
-  onclick={() => void goto(resolve("/settings/connectors/google-health"))}
+  onclick={() => void goto(resolve('settings/connectors/google-health'))}
 >
   {#snippet logo()}<HeartPulse class="h-5 w-5" />{/snippet}
   {#snippet metrics()}
@@ -53,7 +53,7 @@
       {:else if state === GoogleHealthConnectionState.NothingSelected}
         Choose at least one data type to start importing
       {:else if connection.lastSync}
-        Last successful sync: {lastSeen(connection.lastSync)}
+        Last successful sync: {relativeAge(connection.lastSync, { fallback: "Never" })}
       {:else}
         Waiting for the first successful sync
       {/if}

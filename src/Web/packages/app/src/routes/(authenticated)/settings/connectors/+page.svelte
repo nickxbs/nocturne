@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { getStatus as getConnectorStatuses } from "$api/generated/connectorStatus.generated.remote";
-  import { getGoogleHealth } from "$api/generated/googleHealths.generated.remote";
+  import { SyncPhase } from "#lib/api/index.js";
+  import { getStatus as getConnectorStatuses } from "#lib/api/generated/connectorStatus.generated.remote.js";
+  import { getGoogleHealth } from "#lib/api/generated/googleHealths.generated.remote.js";
   import {
     getServicesOverview,
     getConnectorCapabilities,
     triggerConnectorSync,
-  } from "$api/generated/services.generated.remote";
+  } from "#lib/api/generated/services.generated.remote.js";
   import type {
     ServicesOverview,
     UploaderApp,
@@ -13,7 +14,7 @@
     ConnectorStatusDto,
     ConnectorCapabilities,
     SyncResult,
-  } from "$lib/api/generated/nocturne-api-client";
+  } from "#lib/api/generated/nocturne-api-client.js";
 
   import {
     Card,
@@ -21,43 +22,56 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Separator } from "$lib/components/ui/separator";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
 
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import Wifi from "@lucide/svelte/icons/wifi";
-  import WifiOff from "@lucide/svelte/icons/wifi-off";
   import Sparkles from "@lucide/svelte/icons/sparkles";
   import Database from "@lucide/svelte/icons/database";
   import Copy from "@lucide/svelte/icons/copy";
   import Check from "@lucide/svelte/icons/check";
   import KeyRound from "@lucide/svelte/icons/key-round";
-  import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
-  import DataSourceRow from "$lib/components/settings/DataSourceRow.svelte";
-  import GoogleHealthSourceRow from "$lib/components/connectors/GoogleHealthSourceRow.svelte";
-  import type { DataSourceStatus } from "$lib/components/settings/DataSourceRow.svelte";
-  import ConnectedApps from "$lib/components/settings/ConnectedApps.svelte";
-  import ClientDevices from "$lib/components/settings/ClientDevices.svelte";
-  import ApiTokens from "$lib/components/settings/ApiTokens.svelte";
-  import UploaderSetupDialog from "$lib/components/connectors/UploaderSetupDialog.svelte";
-  import ConnectorDetailsDialog from "$lib/components/connectors/ConnectorDetailsDialog.svelte";
-  import ManualSyncDialog from "$lib/components/connectors/ManualSyncDialog.svelte";
-  import UploaderAppsCard from "$lib/components/connectors/UploaderAppsCard.svelte";
-  import ServerConnectorsCard, { type ConnectorStatusWithDescription } from "$lib/components/connectors/ServerConnectorsCard.svelte";
-  import DataSourceManageDialog from "$lib/components/connectors/DataSourceManageDialog.svelte";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import SettingsPageSkeleton from "#lib/components/settings/SettingsPageSkeleton.svelte";
+  import DataSourceRow from "#lib/components/settings/DataSourceRow.svelte";
+  import GoogleHealthSourceRow from "#lib/components/connectors/GoogleHealthSourceRow.svelte";
+  import type { DataSourceStatus } from "#lib/components/settings/DataSourceRow.svelte";
+  import ConnectedApps from "#lib/components/settings/ConnectedApps.svelte";
+  import ClientDevices from "#lib/components/settings/ClientDevices.svelte";
+  import ApiTokens from "#lib/components/settings/ApiTokens.svelte";
+  import UploaderSetupDialog from "#lib/components/connectors/UploaderSetupDialog.svelte";
+  import ConnectorDetailsDialog from "#lib/components/connectors/ConnectorDetailsDialog.svelte";
+  import ManualSyncDialog from "#lib/components/connectors/ManualSyncDialog.svelte";
+  import UploaderAppsCard from "#lib/components/connectors/UploaderAppsCard.svelte";
+  import ServerConnectorsCard, { type ConnectorStatusWithDescription } from "#lib/components/connectors/ServerConnectorsCard.svelte";
+  import DataSourceManageDialog from "#lib/components/connectors/DataSourceManageDialog.svelte";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { toast } from "svelte-sonner";
-  import { getUploaderName } from "$lib/utils/uploader-labels";
-  import { coachmark } from "@nocturne/coach";
-  import { coachFor } from "$lib/coach-marks/copy.svelte";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  import { getUploaderName } from "#lib/utils/uploader-labels.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
   import { createTerminalRunTracker } from "./terminal-run-tracker";
-  import { canManageConnectors } from "$lib/authorization/connector-management";
+  import { canManageConnectors } from "#lib/authorization/connector-management.js";
   import { page } from "$app/state";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import SettingsLinkCard from "#lib/components/settings/SettingsLinkCard.svelte";
+  import type { SettingsLink } from "#lib/navigation/settings-navigation.svelte.js";
+  import { fresh } from "#lib/api/fresh-query.js";
+
+  // The migration endpoints are RequireSuperuser, which resolves to the wildcard.
+  const canMoveFromNightscout = $derived(
+    satisfiesScope(page.data.effectivePermissions ?? [], "*")
+  );
+  const moveFromNightscoutLink: SettingsLink = {
+    title: "Move from Nightscout",
+    description: "Import your Nightscout data and check when you can turn Nightscout off.",
+    href: "/settings/migration",
+    icon: Database,
+  };
 
   // Queries — fire on the server during SSR; results land in cache for hydration.
   const servicesOverviewQuery = getServicesOverview();
@@ -134,7 +148,7 @@
   let syncProgressByConnector = $derived(realtimeStore.syncProgressByConnector);
   let activeSyncProgress = $derived.by(() => {
     const entries = Object.values(syncProgressByConnector);
-    return entries.find((p) => p.phase === "Syncing") ?? entries.at(-1) ?? null;
+    return entries.find((p) => p.phase === SyncPhase.Syncing) ?? entries.at(-1) ?? null;
   });
 
   const terminalRuns = createTerminalRunTracker();
@@ -173,7 +187,7 @@
         toast.error(
           describeSubmitError(
             outcome.reason,
-            "This list may be out of date. Reload the page to see the latest."
+            "This list is possibly out of date. Reload the page to see the latest."
           )
         );
       }
@@ -208,7 +222,7 @@
       return;
     }
     try {
-      selectedConnectorCapabilities = await getConnectorCapabilities(connectorId).run();
+      selectedConnectorCapabilities = await fresh(getConnectorCapabilities(connectorId));
     } catch (e) {
       console.error("Failed to load connector capabilities", e);
       selectedConnectorCapabilities = null;
@@ -253,7 +267,7 @@
             success: false,
             message: describeSubmitError(
               e,
-              "We couldn't start this sync. Please try again."
+              "We could not start this sync. Try again."
             ),
           };
         }
@@ -285,7 +299,7 @@
       await loadConnectorStatuses();
     } catch (e) {
       toast.error(
-        describeSubmitError(e, "We couldn't start the sync. Please try again.")
+        describeSubmitError(e, "We could not start the sync. Try again.")
       );
     } finally {
       quickSyncingById = { ...quickSyncingById, [connectorId]: false };
@@ -350,20 +364,20 @@
 </script>
 
 <svelte:head>
-  <title>Connectors & Apps - Settings - Nocturne</title>
+  <title>Connectors & apps - Settings - Nocturne</title>
 </svelte:head>
 
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
   <!-- Header -->
-  <div class="flex items-start justify-between">
-    <div class="flex items-center gap-3">
-      <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div class="flex min-w-0 items-center gap-3">
+      <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
         <Wifi class="h-6 w-6 text-primary" />
       </div>
       <div>
-        <h1 class="text-2xl font-bold tracking-tight">Connectors & Apps</h1>
+        <h1 class="text-2xl font-bold tracking-tight">Connectors & apps</h1>
         <p class="text-muted-foreground">
-          Manage data sources, set up new connections, and control app access
+          Manage data sources, add new connections, and control app access
         </p>
       </div>
     </div>
@@ -386,19 +400,17 @@
           <AlertCircle class="h-12 w-12 mx-auto mb-4 text-destructive" />
           <p class="font-medium">Failed to load services</p>
           <p class="text-sm text-muted-foreground mt-1">{error}</p>
-          <Button class="mt-4" onclick={loadServices}>Try Again</Button>
+          <Button class="mt-4" onclick={loadServices}>Try again</Button>
         </div>
       </CardContent>
     </Card>
   {:else if servicesOverview}
     <!-- Active Data Sources -->
-    <Card {@attach coachmark({
-      ...coachFor("setup-connectors.sources"),
-    })}>
+    <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Wifi class="h-5 w-5" />
-          Active Data Sources
+          Active data sources
         </CardTitle>
         <CardDescription>
           Devices and apps currently sending data to this Nocturne instance
@@ -406,13 +418,11 @@
       </CardHeader>
       <CardContent>
         {#if !hasGoogleHealthStatus && otherDataSources.length === 0}
-          <div class="text-center py-8 text-muted-foreground">
-            <WifiOff class="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p class="font-medium">No data sources detected</p>
-            <p class="text-sm">
-              Set up an uploader app to start sending data to Nocturne
-            </p>
-          </div>
+          <EmptyState
+            art="plug"
+            title="No data sources detected"
+            body="Add an uploader app to start sending data to Nocturne"
+          />
         {:else}
           <div class="space-y-3">
             {#if hasGoogleHealthStatus && googleHealth}
@@ -460,9 +470,7 @@
     />
 
     <!-- Server-Side Connectors -->
-    <div {@attach coachmark({
-      ...coachFor("setup-connectors.server-connectors"),
-    })}>
+    <div>
       <ServerConnectorsCard
         availableConnectors={servicesOverview.availableConnectors ?? []}
         {connectorStatuses}
@@ -492,7 +500,7 @@
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <Database class="h-5 w-5" />
-            API Information
+            API information
           </CardTitle>
           <CardDescription>
             Use these endpoints to configure uploaders manually
@@ -555,6 +563,10 @@
         prefillScopes={apiTokenPrefillScopes}
       />
     </div>
+
+    {#if canMoveFromNightscout}
+      <SettingsLinkCard link={moveFromNightscoutLink} />
+    {/if}
   {/if}
 </div>
 

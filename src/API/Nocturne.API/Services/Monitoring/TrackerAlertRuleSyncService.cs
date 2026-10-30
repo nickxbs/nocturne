@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Alerts;
-using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
@@ -27,6 +27,15 @@ public interface ITrackerAlertRuleSyncService
     Task SyncDefinitionAsync(Guid definitionId, CancellationToken ct = default);
 
     /// <summary>
+    /// Creates the managed alert rules of <paramref name="definitionId"/>, a definition that has
+    /// none yet, on the caller's <paramref name="unit"/> and inside its transaction, so the rules
+    /// commit with the definition. Having no rules, it retires none, so nothing is closed
+    /// before the caller commits.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The definition already has managed rules.</exception>
+    Task CreateRulesAsync(DbUnitOfWork unit, Guid definitionId, CancellationToken ct = default);
+
+    /// <summary>
     /// Deletes every managed alert rule owned by <paramref name="definitionId"/>. Called
     /// when the tracker definition itself is deleted.
     /// </summary>
@@ -41,6 +50,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     private readonly IAlertReferenceService _referenceService;
     private readonly AlertRuleRearm _rearm;
     private readonly AlertRuleRetirement _retirement;
+    private readonly TimeProvider _time;
     private readonly ILogger<TrackerAlertRuleSyncService> _logger;
 
     /// <summary>Initialises a new <see cref="TrackerAlertRuleSyncService"/>.</summary>
@@ -50,6 +60,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         IAlertReferenceService referenceService,
         AlertRuleRearm rearm,
         AlertRuleRetirement retirement,
+        TimeProvider timeProvider,
         ILogger<TrackerAlertRuleSyncService> logger)
     {
         _contextFactory = contextFactory;
@@ -57,6 +68,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         _referenceService = referenceService;
         _rearm = rearm;
         _retirement = retirement;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -67,6 +79,21 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     public async Task SyncDefinitionAsync(Guid definitionId, CancellationToken ct = default)
     {
         await using var unit = await DbUnitOfWork.OpenAsync(_contextFactory, ct);
+        await SyncAsync(unit, definitionId, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task CreateRulesAsync(DbUnitOfWork unit, Guid definitionId, CancellationToken ct = default)
+    {
+        var tag = ManagedByTag(definitionId);
+        if (await unit.Context.AlertRules.AnyAsync(r => r.ManagedBy == tag, ct))
+            throw new InvalidOperationException($"Tracker definition {definitionId} already has managed rules");
+
+        await SyncAsync(unit, definitionId, ct);
+    }
+
+    private async Task SyncAsync(DbUnitOfWork unit, Guid definitionId, CancellationToken ct)
+    {
         var db = unit.Context;
         var tenantId = db.TenantId;
 
@@ -83,6 +110,11 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         var managedRules = await db.AlertRules
             .Where(r => r.ManagedBy == tag)
             .ToDictionaryAsync(r => r.Id, ct);
+        if (managedRules.Count == 0
+            && definition.NotificationThresholds.Count == 0
+            && !(definition.LowReservoirUnits is not null && TrackerCoverage.HoldsInsulin(definition)))
+            return;
+
         var recipient = await InAppRecipientOfAsync(db, tenantId, definition, ct);
 
         // The threshold editor replaces the whole threshold list (new row ids), which
@@ -131,8 +163,8 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         {
             if (minutes is null)
             {
-                // Misconfigured (negative threshold without lifespan) — matches the legacy
-                // evaluator's skip. Leave any previously synced rule in place untouched.
+                // A negative threshold without a lifespan can never fire. Leave any previously
+                // synced rule in place untouched.
                 if (threshold.AlertRuleId is { } existingId) keptRuleIds.Add(existingId);
                 continue;
             }
@@ -161,7 +193,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
                 rule.ConditionType = AlertConditionType.TrackerAge;
                 rule.ScopeClass = scopeClass;
                 rule.Severity = severity;
-                rule.UpdatedAt = DateTime.UtcNow;
+                rule.UpdatedAt = _time.GetUtcNow().UtcDateTime;
                 keptRuleIds.Add(rule.Id);
             }
             else
@@ -178,12 +210,9 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
                     Severity = severity,
                     ManagedBy = tag,
                     IsEnabled = true,
-                    // Quiet-hours opt-out on the threshold maps onto the alert engine's DND
-                    // bypass. Create-time seed only — the rule editor owns it afterwards.
-                    AllowThroughDnd = !threshold.RespectQuietHours,
-                    ClientConfiguration = BuildClientConfiguration(threshold),
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow,
+                    ClientConfiguration = "{}",
+                    CreatedAt = _time.GetUtcNow().UtcDateTime,
+                    UpdatedAt = _time.GetUtcNow().UtcDateTime,
                 };
 
                 created.Channels.Add(InAppChannel(tenantId, created.Id, recipient));
@@ -263,7 +292,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
                 if (rule.IsEnabled)
                     disabled.Add(rule.Id);
                 rule.IsEnabled = false;
-                rule.UpdatedAt = DateTime.UtcNow;
+                rule.UpdatedAt = _time.GetUtcNow().UtcDateTime;
                 _logger.LogWarning(
                     "Managed rule {RuleId} ('{RuleName}') is referenced by alert_state rule(s) {ReferencingIds}; disabled instead of deleted",
                     rule.Id, rule.Name, string.Join(", ", referencing));
@@ -280,12 +309,13 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     }
 
     /// <summary>
-    /// Synthesises the single reservoir-level rule for a Reservoir-category definition
-    /// with <see cref="TrackerDefinitionEntity.LowReservoirUnits"/> set. The rule is
+    /// Synthesises the single reservoir-level rule for a definition that holds insulin
+    /// (<see cref="TrackerCoverage.HoldsInsulin(TrackerDefinitionEntity)"/>) with
+    /// <see cref="TrackerDefinitionEntity.LowReservoirUnits"/> set. The rule is
     /// identified within the definition's managed set by its Reservoir condition type
     /// (there is at most one), so edits adopt the existing rule and preserve user edits
-    /// exactly like the tracker_age rules. When the units are cleared — or the category
-    /// changes away from Reservoir — the rule is not marked kept, so the shared orphan
+    /// exactly like the tracker_age rules. When the units are cleared — or the definition
+    /// stops holding insulin — the rule is not marked kept, so the shared orphan
     /// pass removes it.
     /// </summary>
     private void SyncReservoirLevelRule(
@@ -298,10 +328,10 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         HashSet<Guid> keptRuleIds,
         List<Guid> changed)
     {
-        if (definition.Category != TrackerCategory.Reservoir || definition.LowReservoirUnits is not { } units)
+        if (!TrackerCoverage.HoldsInsulin(definition) || definition.LowReservoirUnits is not { } units)
             return;
 
-        // Snake_case to match the evaluators' shared JSON options (ReservoirCondition).
+        // Snake_case, the condition models' wire form (ReservoirCondition).
         var conditionParams = JsonSerializer.Serialize(new { @operator = "<", value = units });
         var name = Truncate($"{definition.Name}: below {units} U", 128);
         var severity = MapSeverity(definition.LowReservoirUrgency);
@@ -319,7 +349,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             existing.Name = name;
             existing.ScopeClass = scopeClass;
             existing.Severity = severity;
-            existing.UpdatedAt = DateTime.UtcNow;
+            existing.UpdatedAt = _time.GetUtcNow().UtcDateTime;
             keptRuleIds.Add(existing.Id);
             return;
         }
@@ -336,8 +366,8 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             ManagedBy = tag,
             IsEnabled = true,
             ClientConfiguration = "{}",
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = _time.GetUtcNow().UtcDateTime,
+            UpdatedAt = _time.GetUtcNow().UtcDateTime,
         };
         created.Channels.Add(InAppChannel(tenantId, created.Id, recipient));
         db.AlertRules.Add(created);
@@ -345,7 +375,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     }
 
     /// <summary>
-    /// Who a synced rule's in-app channel is sent to: the member who owns the tracker definition,
+    /// Who a synced rule's in-app channel is sent to: the member who created the tracker definition,
     /// or the tenant's longest-standing owner when that is not a person who may receive, as for a
     /// definition created through a site token, which belongs to the device account. Empty when
     /// the tenant has neither, which delivery records as failed.
@@ -353,12 +383,12 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     private static async Task<string> InAppRecipientOfAsync(
         NocturneDbContext db, Guid tenantId, TrackerDefinitionEntity definition, CancellationToken ct)
     {
-        var recipient = await InAppRecipients.ResolveAsync(db, tenantId, definition.UserId, ct)
+        var recipient = await InAppRecipients.ResolveAsync(db, tenantId, definition.CreatedBy, ct)
             ?? await InAppRecipients.EarliestOwnerAsync(db, tenantId, ct);
         return recipient?.ToString() ?? string.Empty;
     }
 
-    private static AlertRuleChannelEntity InAppChannel(Guid tenantId, Guid ruleId, string recipient) => new()
+    private AlertRuleChannelEntity InAppChannel(Guid tenantId, Guid ruleId, string recipient) => new()
     {
         Id = Guid.CreateVersion7(),
         TenantId = tenantId,
@@ -366,7 +396,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         ChannelType = ChannelType.InApp,
         Destination = recipient,
         SortOrder = 0,
-        CreatedAt = DateTime.UtcNow,
+        CreatedAt = _time.GetUtcNow().UtcDateTime,
     };
 
     /// <summary>
@@ -415,23 +445,6 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         NotificationUrgency.Warn => AlertRuleSeverity.Warning,
         _ => AlertRuleSeverity.Info,
     };
-
-    /// <summary>
-    /// Seeds the rule's client presentation config from the threshold's legacy audio
-    /// settings. Create-time seed only — the rule editor owns it afterwards.
-    /// </summary>
-    private static string BuildClientConfiguration(TrackerNotificationThresholdEntity threshold)
-    {
-        if (!threshold.AudioEnabled && !threshold.VibrateEnabled)
-            return "{}";
-
-        return JsonSerializer.Serialize(new
-        {
-            audioEnabled = threshold.AudioEnabled,
-            audioSound = threshold.AudioSound,
-            vibrateEnabled = threshold.VibrateEnabled,
-        });
-    }
 
     private static string Truncate(string value, int max) =>
         value.Length <= max ? value : value[..max];

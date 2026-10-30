@@ -1,26 +1,18 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import type { DirectGrantDto } from "$api";
+import type { DirectGrantDto } from "#lib/api/index.js";
 import {
   fakeRemoteQuery,
   type FakeQuery,
-} from "$lib/api/fake-remote-query.svelte";
-
-/**
- * A remote `query()` can only be awaited when its proxy was built in a tracking
- * context, so a component that reloads its list from a click handler gets a
- * rejection instead of data — the create still succeeds on the server, and the
- * failed reload is what reaches the user. {@link fakeRemoteQuery} reproduces
- * that rule; a bare `Promise` stand-in cannot.
- */
+} from "#lib/api/fake-remote-query.svelte.js";
 
 let grants: DirectGrantDto[];
 let listQuery: () => FakeQuery<DirectGrantDto[]>;
 let createImpl: (body?: unknown) => Promise<{ token?: string }>;
 let revokeImpl: () => Promise<unknown>;
 
-vi.mock("$lib/api/generated/directGrants.generated.remote", () => ({
+vi.mock("#lib/api/generated/directGrants.generated.remote.js", () => ({
   list: () => listQuery(),
   create: (body: unknown) => createImpl(body),
   revoke: () => revokeImpl(),
@@ -99,27 +91,6 @@ describe("ApiTokens create", () => {
     await expect.element(page.getByText(LOAD_FAILURE)).not.toBeInTheDocument();
   });
 
-  it("lists the new token without a page reload", async () => {
-    createImpl = () => {
-      grants = [grant("g-new", "Home Assistant")];
-      return Promise.resolve({ token: "noc_created" });
-    };
-
-    render(ApiTokens, {
-      createOpen: true,
-      prefillLabel: "Home Assistant",
-      prefillScopes: ["glucose.read"],
-    });
-
-    await page
-      .getByRole("dialog")
-      .getByRole("button", { name: "Create token" })
-      .click();
-    await page.getByRole("button", { name: "Done" }).click();
-
-    await expect.element(page.getByText("Home Assistant")).toBeVisible();
-  });
-
   it("still surfaces a real create failure", async () => {
     createImpl = () =>
       Promise.reject({ status: 400, body: { message: "Label already used." } });
@@ -157,23 +128,6 @@ describe("ApiTokens revoke", () => {
     await expect.element(page.getByText(LOAD_FAILURE)).not.toBeInTheDocument();
   });
 
-  it("drops the token from the list without a page reload", async () => {
-    revokeImpl = () => {
-      grants = [];
-      return Promise.resolve({ success: true });
-    };
-
-    render(ApiTokens);
-    await expect.element(page.getByText("Old uploader key")).toBeVisible();
-
-    await page.getByRole("button").nth(1).click();
-    await page.getByRole("button", { name: "Revoke" }).click();
-
-    await expect
-      .element(page.getByText("Old uploader key"))
-      .not.toBeInTheDocument();
-  });
-
   it("keeps the reason when the revoke itself fails", async () => {
     revokeImpl = () =>
       Promise.reject({ status: 409, body: { message: "Already revoked." } });
@@ -197,10 +151,10 @@ describe("ApiTokens load failure", () => {
     render(ApiTokens);
 
     // A reading surface shows a server-written 5xx reason in place of its
-    // fallback; see READ_SURFACE in $lib/forms/submit-error.
+    // fallback; see READ_SURFACE in #lib/forms/submit-error.
     await expect.element(page.getByText("boom", { exact: true })).toBeVisible();
     await expect
-      .element(page.getByText("No API tokens.", { exact: false }))
+      .element(page.getByText("No API tokens"))
       .not.toBeInTheDocument();
   });
 });

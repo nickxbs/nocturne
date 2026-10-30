@@ -1,26 +1,53 @@
 <script lang="ts">
+    import { ArtworkHero } from "water-ui";
+    import { DOCS_HERO } from "#lib/data/docs-artwork.js";
     import { resolve } from "$app/paths";
-    import SystemRequirements from "$lib/components/docs/SystemRequirements.svelte";
-    import VerificationSteps from "$lib/components/docs/VerificationSteps.svelte";
-    import NextSteps from "$lib/components/docs/NextSteps.svelte";
-    import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
-    import PasswordGenerator from "$lib/components/docs/PasswordGenerator.svelte";
-    import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
+    import SystemRequirements from "#lib/components/docs/SystemRequirements.svelte";
+    import VerificationSteps from "#lib/components/docs/VerificationSteps.svelte";
+    import NextSteps from "#lib/components/docs/NextSteps.svelte";
+    import SupportNocturne from "#lib/components/docs/SupportNocturne.svelte";
+    import EnvFileGenerator from "#lib/components/docs/EnvFileGenerator.svelte";
+    import CodeBlock from "#lib/components/docs/CodeBlock.svelte";
     import Callout from "@nocturne/cms/components/Callout.svelte";
-    import envExample from "$lib/release/docker-compose/default.env.example?raw";
-    import dockerCompose from "$lib/release/docker-compose/docker-compose.yaml?raw";
-    import bindDataCompose from "$lib/release/docker-compose/docker-compose.bind-data.yaml?raw";
+    import envExample from "#lib/release/docker-compose/default.env.example?raw";
+    import dockerCompose from "#lib/release/docker-compose/docker-compose.yaml?raw";
+    import bindDataCompose from "#lib/release/docker-compose/docker-compose.bind-data.yaml?raw";
+
+    const hero = DOCS_HERO["installation/docker-compose"];
+
+    // @wc-ignore
+    const allowLocalLogin = [
+        "docker compose exec nocturne-postgres-server sh -c 'sed -i \"1i local all all trust\" \"$PGDATA/pg_hba.conf\"'",
+        "docker compose kill -s SIGHUP nocturne-postgres-server",
+    ].join("\n");
+
+    // @wc-ignore
+    const resetPasswords = [
+        "docker compose exec nocturne-postgres-server psql -U nocturne -d nocturne \\",
+        "  -c \"ALTER ROLE nocturne PASSWORD '<POSTGRES_PASSWORD>'\" \\",
+        "  -c \"ALTER ROLE nocturne_migrator PASSWORD '<POSTGRES_MIGRATOR_PASSWORD>'\" \\",
+        "  -c \"ALTER ROLE nocturne_app PASSWORD '<POSTGRES_APP_PASSWORD>'\" \\",
+        "  -c \"ALTER ROLE nocturne_web PASSWORD '<POSTGRES_WEB_PASSWORD>'\"",
+    ].join("\n");
+
+    // @wc-ignore
+    const removeLocalLogin = [
+        "docker compose exec nocturne-postgres-server sh -c 'sed -i \"1d\" \"$PGDATA/pg_hba.conf\"'",
+        "docker compose kill -s SIGHUP nocturne-postgres-server",
+        "docker compose up -d",
+    ].join("\n");
 </script>
 
 <div class="max-w-3xl">
-    <div class="flex items-center gap-4 mb-4">
-        <img
-            src="/logos/docker-compose.png"
-            alt="Docker Compose"
-            class="w-12 h-12 object-contain shrink-0"
-        />
-        <h1 class="text-4xl font-bold tracking-tight">Docker Compose</h1>
-    </div>
+    <ArtworkHero
+        artwork={hero.artwork}
+        palette={hero.palette}
+        motion="auto"
+        autoplay="once"
+        size={400}
+        wrap={hero.wrap ?? true}
+    />
+    <h1 class="text-4xl font-bold tracking-tight mb-4">Docker Compose</h1>
     <p class="text-lg text-muted-foreground mb-8">
         Deploy Nocturne on any server with Docker Compose from the command line.
     </p>
@@ -42,7 +69,7 @@
 
     <SystemRequirements />
 
-    <h2 class="text-2xl font-bold mt-8 mb-4">Step 1: Download the release bundle</h2>
+    <h2 data-install-step="1" class="text-2xl font-bold mt-8 mb-4">Step 1: Download the release bundle</h2>
     <p class="text-muted-foreground mb-4">
         Download the <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose</code>
         bundle from the
@@ -52,29 +79,31 @@
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose.yaml</code>
         and the environment template, which GitHub lists as
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">default.env.example</code>.
-        The database init script and the TLS proxy config are embedded directly in
-        the compose file, so there are no extra directories to keep alongside it. The
+        The database init script and the TLS proxy config are embedded directly in the compose file. There are no extra directories to keep alongside it. The
         bundle also ships a
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose.byo-proxy.yaml</code>
         override for operators who run their own reverse proxy (see below).
         A second, optional override lets PostgreSQL store its data in a directory on
         the Docker host.
     </p>
-    <CodeBlock code={"mkdir nocturne && cd nocturne\ncurl -LO https://github.com/nightscout/nocturne/releases/latest/download/docker-compose.yaml\ncurl -LO https://github.com/nightscout/nocturne/releases/latest/download/docker-compose.bind-data.yaml\ncurl -L -o .env https://github.com/nightscout/nocturne/releases/latest/download/default.env.example"} class="mb-4" />
+    <CodeBlock code={"mkdir nocturne && cd nocturne\ncurl -LO https://github.com/nightscout/nocturne/releases/latest/download/docker-compose.yaml\ncurl -LO https://github.com/nightscout/nocturne/releases/latest/download/docker-compose.bind-data.yaml"} class="mb-4" />
 
     <details class="mb-8">
         <summary class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground">View docker-compose.yaml</summary>
         <CodeBlock code={dockerCompose} class="mt-2" maxHeight="400px" />
     </details>
 
-    <h2 class="text-2xl font-bold mt-8 mb-4">Step 2: Configure environment variables</h2>
+    <h2 data-install-step="2" class="text-2xl font-bold mt-8 mb-4">Step 2: Configure environment variables</h2>
     <p class="text-muted-foreground mb-4">
-        Edit <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code> and fill in your
-        values. The required fields come first and are left blank; optional bot integrations are commented out.
-        Use the generator below for each password field and <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">INSTANCE_KEY</code>.
+        This page made the file below in your browser, with a new random value for each key and
+        password. The values do not leave your browser. Enter your domain, then download a copy
+        of the file. Then copy the file to <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code> in the <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">nocturne</code> folder:
     </p>
-    <PasswordGenerator label="password" />
-    <CodeBlock code={envExample} class="mb-8" maxHeight="400px" />
+    <EnvFileGenerator template={envExample} />
+    <CodeBlock code="nano .env    # paste the file, then save it" class="mb-4" />
+    <p class="text-muted-foreground mb-8">
+        Optional bot integrations are commented out. To use one, remove the <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">#</code> and add its value.
+    </p>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Optional: use a host directory for PostgreSQL</h2>
     <p class="text-muted-foreground mb-4">
@@ -92,8 +121,7 @@
     <ol class="list-decimal list-inside space-y-3 text-muted-foreground mb-4">
         <li>
             Create the directory on the machine running the Docker daemon, not merely on the
-            computer where you run the Docker CLI. Use an absolute path and ensure the
-            PostgreSQL container can write to it. For example:
+            computer where you run the Docker CLI. Use an absolute path and make sure the PostgreSQL container can write to it. For example:
             <CodeBlock code="sudo mkdir -p /srv/nocturne/postgres-data" class="mt-3" />
         </li>
         <li>
@@ -102,7 +130,7 @@
         </li>
         <li>
             This replaces the default <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker compose up -d</code>
-            command in Step 3 below; do not run both commands. Start the stack with both files. Keep both <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">-f</code>
+            command in Step 3 below. Do not run both commands. Start the stack with both files. Keep both <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">-f</code>
             arguments on every later Compose command, including updates and shutdown:
             <CodeBlock code="docker compose -f docker-compose.yaml -f docker-compose.bind-data.yaml up -d" class="mt-3" />
         </li>
@@ -113,7 +141,7 @@
             existing install, take and verify a backup, stop the stack, and migrate the existing
             PostgreSQL data before starting with the override. Preserve file ownership and use
             the same PostgreSQL major version. Keep the original named volume until the new
-            location has been verified. There is no automatic volume migration. Do not use
+            location is verified. There is no automatic volume migration. Do not use
             <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">docker compose down -v</code>
             while the original volume is your only copy.
         </p>
@@ -155,18 +183,17 @@
                     Verify the PostgreSQL logs and your existing Nocturne data before allowing
                     writes. Keep the original named volume and backup archive until verification
                     is complete. To roll back before new writes, stop the override stack without
-                    deleting volumes, then start the original Compose file again:
+                    deleting volumes. Then start the original Compose file again:
                     <CodeBlock code={'docker compose -f docker-compose.yaml -f docker-compose.bind-data.yaml down\ndocker compose up -d'} class="mt-3" />
-                    For a stack that also uses BYO proxy, keep that override when stopping and
-                    when returning to the named-volume configuration:
+                    For a stack that also uses BYO proxy, keep that override when you stop it. Keep it also when you return to the named-volume configuration:
                     <CodeBlock code={'docker compose -f docker-compose.yaml -f docker-compose.bind-data.yaml -f docker-compose.byo-proxy.yaml down\ndocker compose -f docker-compose.yaml -f docker-compose.byo-proxy.yaml up -d'} class="mt-3" />
                 </li>
             </ol>
             <p class="text-muted-foreground">
                 Do not use <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">down -v</code>
                 during migration or rollback. It deletes named volumes. If the new database has
-                accepted writes, it is no longer equivalent to the untouched original volume;
-                plan any rollback or restore before reopening the service to users.
+                accepted writes, it is no longer equivalent to the untouched original volume.
+                Plan any rollback or restore before reopening the service to users.
             </p>
         </div>
     </details>
@@ -181,7 +208,7 @@
         <CodeBlock code={bindDataCompose} class="mt-2" maxHeight="240px" />
     </details>
 
-    <h2 class="text-2xl font-bold mt-8 mb-4">Step 3: Start the services</h2>
+    <h2 data-install-step="3" class="text-2xl font-bold mt-8 mb-4">Step 3: Start the services</h2>
     <CodeBlock code="docker compose up -d" class="mb-4" />
     <p class="text-muted-foreground mb-8">
         Docker will pull the images and start all services. First run takes a few minutes.
@@ -197,9 +224,7 @@
         on demand the first time it is visited.
     </p>
     <p class="text-muted-foreground mb-4">
-        Already run your own reverse proxy (nginx, Traefik, Caddy)? Use the
-        bring-your-own-proxy override to disable the bundled Caddy and expose the
-        gateway on plain HTTP port 8080 for your proxy to forward to:
+        Already run your own reverse proxy (nginx, Traefik, Caddy)? Use the bring-your-own-proxy override. It disables the bundled Caddy and exposes the gateway on plain HTTP port 8080 for your proxy to forward to:
     </p>
     <CodeBlock code="docker compose -f docker-compose.yaml -f docker-compose.byo-proxy.yaml up -d" class="mb-4" />
     <p class="text-muted-foreground mb-4">
@@ -211,11 +236,11 @@
         along with <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">X-Forwarded-Proto</code> and
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">X-Forwarded-Host</code>, or logins will
         fail with a 403. See
-        <a href={resolve("/docs/installation/reverse-proxy")} class="text-primary hover:underline">Bring your own reverse proxy</a>
+        <a href={resolve("docs/installation/reverse-proxy")} class="text-primary hover:underline">Bring your own reverse proxy</a>
         for worked nginx, Traefik, and Caddy configurations.
     </p>
 
-    <h2 class="text-2xl font-bold mt-8 mb-4">Step 4: Verify the installation</h2>
+    <h2 data-install-step="4" class="text-2xl font-bold mt-8 mb-4">Step 4: Verify the installation</h2>
     <VerificationSteps />
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Updating</h2>
@@ -223,14 +248,21 @@
         Watchtower checks for image updates daily, except for Caddy and Postgres. To update everything, including Caddy and Postgres:
     </p>
     <CodeBlock code="docker compose pull && docker compose up -d" class="mb-4" />
+    <p class="text-muted-foreground mb-4">
+        When a new release is available, each tenant owner gets a notification with the release notes.
+        To show the time that Watchtower installs the release, set
+        <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">WATCHTOWER_API_TOKEN</code> in your
+        <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code> file to a value from the generator. Then run
+        <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker compose up -d</code>. This setting is optional.
+        If you installed before this setting was added, download the new bundle first.
+    </p>
     <p class="text-muted-foreground mb-8">
         Watchtower updates images, not the compose file. If you installed before the
         restart policy and log rotation below were added, download the new bundle and
         run <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker compose up -d</code>
         to pick them up. That first run recreates the containers, which clears their
-        old logs; your database data is kept. If you installed before Caddy was excluded from
-        Watchtower, set <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">com.centurylinklabs.watchtower.enable</code>
-        to <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">"false"</code> on the <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">caddy</code> service, or download the new bundle, then run
+        old logs. Your database data is kept. If you installed before Caddy was excluded from Watchtower, set <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">com.centurylinklabs.watchtower.enable</code>
+        to <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">"false"</code> on the <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">caddy</code> service. Or download the new bundle and run
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker compose up -d</code> to recreate it.
     </p>
     <p class="text-muted-foreground mb-4">
@@ -246,8 +278,7 @@
     <h2 class="text-2xl font-bold mt-8 mb-4">Restarts and logs</h2>
     <p class="text-muted-foreground mb-4">
         Every service sets <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">restart: unless-stopped</code>,
-        so Docker restarts it when it exits or when the Docker daemon restarts, unless you
-        stopped it. Docker's default policy is <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">no</code>
+        so Docker restarts it when it exits or when the Docker daemon restarts. Docker does not restart a service that you stopped. Docker's default policy is <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">no</code>
         (<a href="https://docs.docker.com/engine/containers/start-containers-automatically/" class="text-primary hover:underline">Docker docs</a>).
     </p>
     <p class="text-muted-foreground mb-8">
@@ -261,12 +292,46 @@
         so the bundle overrides any <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">log-driver</code>
         in your <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">daemon.json</code>.
         To keep yours, set <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">logging</code>
-        on the services in a <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose.override.yaml</code>.
-        Compose reads that file only when you pass no <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">-f</code>
-        (<a href="https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/" class="text-primary hover:underline">Docker docs</a>),
-        so with the bring-your-own-proxy command, also pass
+        on the services in a <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose.override.yaml</code>. Compose reads that file only when you pass no <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">-f</code> (<a href="https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/" class="text-primary hover:underline">Docker docs</a>). With the bring-your-own-proxy command, also pass
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">-f docker-compose.override.yaml</code>.
     </p>
+
+    <h2 class="text-2xl font-bold mt-8 mb-4">If you lose the .env file</h2>
+    <p class="text-muted-foreground mb-4">
+        Keep a copy of <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code> with your database backups. A database backup does not
+        contain these values.
+    </p>
+    <p class="text-muted-foreground mb-2">
+        <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">INSTANCE_KEY</code>: you cannot recover it. With a new key:
+    </p>
+    <ul class="list-disc list-inside space-y-2 text-muted-foreground mb-4">
+        <li>Alerts stop at Discord, webhooks and the other channels that use a secret, until you enter each secret again.</li>
+        <li>Connectors stop until you enter their passwords again.</li>
+        <li>Existing share links still work, but Nocturne cannot show them again. To see a link, make a new one.</li>
+    </ul>
+    <p class="text-muted-foreground mb-4">
+        Your glucose data, treatments and settings stay in the database.
+    </p>
+    <p class="text-muted-foreground mb-4">
+        The database passwords: you can set new ones. Put new values in
+        <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code>, then do these steps to set the same values in the database.
+    </p>
+    <ol class="list-decimal list-inside space-y-3 text-muted-foreground mb-8">
+        <li>
+            Let PostgreSQL accept connections from inside its container without a password:
+            <CodeBlock code={allowLocalLogin} class="mt-2" />
+        </li>
+        <li>
+            Set the new passwords. Replace each value in angle brackets with the value from your
+            new <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code>. If you changed <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">POSTGRES_USERNAME</code>, use that name in
+            place of <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">nocturne</code>.
+            <CodeBlock code={resetPasswords} class="mt-2" />
+        </li>
+        <li>
+            Remove the line that you added in step 1, and start Nocturne with the new values:
+            <CodeBlock code={removeLocalLogin} class="mt-2" />
+        </li>
+    </ol>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Troubleshooting</h2>
     <p class="text-muted-foreground mb-4">Check the logs for error details:</p>
@@ -274,7 +339,7 @@
     <p class="text-muted-foreground mb-8">To start fresh, stop all services and remove volumes:</p>
     <CodeBlock code="docker compose down -v" class="mb-8" />
 
-    <h2 class="text-2xl font-bold mt-8 mb-4">Next Steps</h2>
+    <h2 data-install-step="next-steps" class="text-2xl font-bold mt-8 mb-4">Next steps</h2>
     <NextSteps />
 
     <SupportNocturne />

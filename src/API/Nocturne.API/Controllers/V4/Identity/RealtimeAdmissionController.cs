@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Extensions;
 using Nocturne.API.Hubs;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Models.Authorization;
@@ -33,20 +34,32 @@ public class RealtimeAdmissionController : ControllerBase
     [HttpGet]
     [RequireScope(Scope.GlucoseRead)]
     [ProducesResponseType(typeof(RealtimeAdmission), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public ActionResult<RealtimeAdmission> GetRealtimeAdmission()
     {
+        if (HttpContext.GetTenantContext() is not { } tenant)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden);
+        }
+
         var authorization = HubAuthorizationState.FromRequest(HttpContext);
         return Ok(new RealtimeAdmission(
+            tenant.TenantId,
             authorization?.CanJoinTenantRelay ?? false,
             authorization?.OwnSubjectId,
-            authorization is { CanJoinTenantRelay: true }
-                ? [.. RealtimeCategories.All.Where(authorization.MayReceiveCategory)]
-                : [],
-            authorization?.HistoryClamped ?? false));
+            authorization is null
+                ? []
+                : [.. RealtimeCategories.All.Where(authorization.MayReceiveCategory)],
+            authorization?.HistoryClamped ?? false,
+            authorization is { CanJoinTenantRelay: true } && authorization.Satisfies(Scope.AlertsAcknowledge)));
     }
 }
 
 /// <summary>A caller's realtime admission.</summary>
+/// <param name="TenantId">
+/// The tenant the caller was admitted to, signed into the bridge's handshake ticket so the bridge
+/// refuses the ticket once the slug names another tenant.
+/// </param>
 /// <param name="TenantRelay">
 /// Whether the caller may join the room carrying the whole tenant's live payloads. False for a
 /// guest link and an anonymous share, which hold single categories.
@@ -58,12 +71,20 @@ public class RealtimeAdmissionController : ControllerBase
 /// </param>
 /// <param name="Categories">
 /// The <see cref="RealtimeCategories"/> whose storage broadcasts the caller may receive through the
-/// bridge. Empty for a caller that may not join the tenant room (a guest link or an anonymous share),
-/// whose socket the bridge keeps out of every room, and for a history-clamped caller.
+/// bridge, as <c>DataHub.Subscribe</c> would join them. A guest link that may not join the tenant
+/// room still receives these. Empty for an anonymous share, which proves no hub credential, and for a
+/// history-clamped caller.
 /// </param>
 /// <param name="HistoryClamped">Whether the caller may read only the last 24 hours.</param>
+/// <param name="MayAck">
+/// Whether the caller may silence the tenant's alarms through the bridge's <c>/alarm</c> namespace.
+/// The bridge forwards an ack on its own AlarmHub connection, whose gate it always meets, so the
+/// bridge drops an ack from a subscriber without this.
+/// </param>
 public record RealtimeAdmission(
+    Guid TenantId,
     bool TenantRelay,
     Guid? SubjectId,
     IReadOnlyList<string> Categories,
-    bool HistoryClamped);
+    bool HistoryClamped,
+    bool MayAck);

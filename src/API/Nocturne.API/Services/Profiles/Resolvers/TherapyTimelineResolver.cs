@@ -120,17 +120,20 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
         string profileName, long fromMills, long toMills, CancellationToken ct)
     {
         // Sequential: see INocturneDbContextFactory.
-        List<DateTime> starts =
+        List<long> starts =
         [
-            .. (await _versions.GetVersionsAsync(_therapySettingsRepo, profileName, ct)).Select(v => v.Timestamp),
-            .. (await _versions.GetVersionsAsync(_sensitivityRepo, profileName, ct)).Select(v => v.Timestamp),
-            .. (await _versions.GetVersionsAsync(_carbRatioRepo, profileName, ct)).Select(v => v.Timestamp),
-            .. (await _versions.GetVersionsAsync(_basalRepo, profileName, ct)).Select(v => v.Timestamp),
+            .. CutsOf(await _versions.GetVersionsAsync(_therapySettingsRepo, profileName, ct)),
+            .. CutsOf(await _versions.GetVersionsAsync(_sensitivityRepo, profileName, ct)),
+            .. CutsOf(await _versions.GetVersionsAsync(_carbRatioRepo, profileName, ct)),
+            .. CutsOf(await _versions.GetVersionsAsync(_basalRepo, profileName, ct)),
         ];
 
+        IEnumerable<long> CutsOf<TRecord>(TRecord[] versions) where TRecord : class, IV4Record =>
+            ProfileVersionCache.Slice(versions, fromMills, toMills)
+                .Skip(1)
+                .Select(s => s.StartMills);
+
         return starts
-            .Select(t => new DateTimeOffset(DateTime.SpecifyKind(t, DateTimeKind.Utc)).ToUnixTimeMilliseconds())
-            .Where(t => t > fromMills && t < toMills)
             .Distinct()
             .Order()
             .ToList();
@@ -151,8 +154,7 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
         if (!hasData)
         {
             return new TherapySnapshot(
-                dia: TherapySnapshot.DefaultDia,
-                peakMinutes: TherapySnapshot.DefaultPeakMinutes,
+                dia: await _therapySettings.GetDIAAsync(anchorMills, profileName, ct),
                 carbsPerHour: TherapySnapshot.DefaultCarbsPerHour,
                 timezone: null,
                 ccpPercentage: null,
@@ -181,7 +183,6 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
         {
             return new TherapySnapshot(
                 dia: dia,
-                peakMinutes: TherapySnapshot.DefaultPeakMinutes,
                 carbsPerHour: carbsHr,
                 timezone: ResolveTimezone(timezoneId),
                 ccpPercentage: ccp?.Percentage,
@@ -198,7 +199,6 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
 
         return new TherapySnapshot(
             dia: dia,
-            peakMinutes: TherapySnapshot.DefaultPeakMinutes,
             carbsPerHour: carbsHr,
             timezone: ResolveTimezone(timezoneId),
             ccpPercentage: ccp?.Percentage,

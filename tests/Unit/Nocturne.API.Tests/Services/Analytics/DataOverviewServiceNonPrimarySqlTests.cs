@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore.Sqlite.Query.Internal;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Analytics;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -48,14 +49,17 @@ public class DataOverviewServiceNonPrimarySqlTests : IDisposable
         var therapySettings = new Mock<ITherapySettingsResolver>();
         therapySettings
             .Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string?)null);
+            .ReturnsAsync("UTC");
 
         _service = new DataOverviewService(
             new TestNocturneDbContextFactory(_context),
-            therapySettings.Object,
-            new Mock<IStatisticsService>().Object,
-            Mock.Of<ITenantCache>(),
-            NullLogger<DataOverviewService>.Instance);
+            new TenantClockResolver(
+                therapySettings.Object,
+                new CategoryReadContext(),
+                NullLogger<TenantClockResolver>.Instance),
+            new Mock<IStatisticsService>().WithRealTimeInRange().Object,
+            TestTenantCache.Create(),
+            TimeProvider.System, NullLogger<DataOverviewService>.Instance);
     }
 
     public void Dispose()

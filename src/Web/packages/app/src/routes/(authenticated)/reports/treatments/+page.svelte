@@ -8,7 +8,7 @@
     TreatmentEditDialog,
     TreatmentCategoryTabs,
     TreatmentStatsCard,
-  } from "$lib/components/treatments";
+  } from "#lib/components/treatments/index.js";
   import {
     mergeEntryRecords,
     countEntryRecords,
@@ -18,15 +18,15 @@
     type EntryCategoryId,
     type EntryRecord,
     ENTRY_CATEGORIES,
-  } from "$lib/constants/entry-categories";
+  } from "#lib/constants/entry-categories.js";
 
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Card from "$lib/components/ui/card";
-  import * as Alert from "$lib/components/ui/alert";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import Calendar from "@lucide/svelte/icons/calendar";
   import X from "@lucide/svelte/icons/x";
   import Plus from "@lucide/svelte/icons/plus";
@@ -35,10 +35,10 @@
   import Droplet from "@lucide/svelte/icons/droplet";
   import FileText from "@lucide/svelte/icons/file-text";
   import Smartphone from "@lucide/svelte/icons/smartphone";
-  import { bg, bgLabel, formatCarbDisplay, formatDateTimeCompact, formatInsulinDisplay, formatNumber, formatNumericDate } from "$lib/utils/formatting";
+  import { bg, bgLabel, formatCarbDisplay, formatDateTimeCompact, formatInsulinDisplay, formatNumber, formatNumericDate } from "#lib/utils/formatting.js";
   import { toast } from "svelte-sonner";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
 
   // Import remote function forms and commands
   import {
@@ -49,14 +49,14 @@
     createEntry,
   } from "./data.remote";
   import { toCreateEntryInput, toUpdateEntryInput } from "./entry-request";
-  import { getStats as getTreatmentLogStats } from "$lib/api/generated/treatmentLogs.generated.remote";
+  import { getStats as getTreatmentLogStats } from "#lib/api/generated/treatmentLogs.generated.remote.js";
 
   // Get shared date params from context (set by reports layout)
   const reportsParams = requireDateParamsContext(7);
 
   const reportsResource = contextResource(
     () => getTreatmentsData(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading Treatments", dateParams: reportsParams }
+    { errorTitle: "Error loading treatments", dateParams: reportsParams }
   );
 
   const allRows = $derived(
@@ -98,7 +98,7 @@
         search: debouncedSearch.current || undefined,
       });
     },
-    { errorTitle: "Error Loading Treatments" }
+    { errorTitle: "Error loading treatments" }
   );
 
   function refreshData() {
@@ -110,6 +110,7 @@
   let showDeleteConfirm = $state(false);
   let showBulkDeleteConfirm = $state(false);
   let rowToDelete = $state<EntryRecord | null>(null);
+  const deleteForm = $derived(deleteEntryForm.for(rowToDelete?.data.id || ""));
   let rowsToDelete = $state<EntryRecord[]>([]);
 
   // Edit dialog states
@@ -146,7 +147,7 @@
       editDialogOpen = true;
     } else {
       // Stale / out-of-range link: drop the param so the URL isn't misleading.
-      const url = new URL(page.url);
+      const url = new URL(page.url.href);
       url.searchParams.delete(EDIT_PARAM);
       // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL minus one param, already resolved
       replaceState(url, page.state);
@@ -175,7 +176,7 @@
   // log can be refreshed and shared and `page.url` stays authoritative (the edit
   // dialog reads it to keep its `?edit=` param in sync).
   function setFilterParam(name: string, value: string) {
-    const url = new URL(page.url);
+    const url = new URL(page.url.href);
     if (value) url.searchParams.set(name, value);
     else url.searchParams.delete(name);
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL with one param changed, already resolved
@@ -306,11 +307,11 @@
       case "carbs":
         return record.data.carbs
           ? `${formatCarbDisplay(record.data.carbs)}g`
-          : "Carb Intake";
+          : "Carb intake";
       case "bgCheck":
         return record.data.mgdl
           ? `${bg(record.data.mgdl)} ${bgLabel()}`
-          : "BG Check";
+          : "BG check";
       case "note":
         return record.data.text
           ? record.data.text.length > 50
@@ -318,7 +319,7 @@
             : record.data.text
           : "Note";
       case "deviceEvent":
-        return record.data.eventType ?? "Device Event";
+        return record.data.eventType ?? "Device event";
       case "basalInjection":
         return record.data.units
           ? `${record.data.units}U basal`
@@ -326,14 +327,6 @@
     }
   }
 </script>
-
-<svelte:head>
-  <title>Treatment Log - Nocturne</title>
-  <meta
-    name="description"
-    content="View and manage your diabetes treatments, insulin doses, and carb entries"
-  />
-</svelte:head>
 
 {#if reportsResource.current}
 <div class="@container space-y-6">
@@ -410,7 +403,7 @@
               {#snippet child({ props }: { props: Record<string, unknown> })}
                 <Button {...props} size="sm">
                   <Plus class="mr-1 h-4 w-4" />
-                  Add Treatment
+                  Add treatment
                 </Button>
               {/snippet}
             </DropdownMenu.Trigger>
@@ -537,35 +530,25 @@
           Cancel
         </Button>
         <form
-          {...deleteEntryForm
-            .for(rowToDelete.data.id || "")
-            .enhance(async ({ submit }) => {
-              isLoading = true;
-              try {
-                await submit();
-                toast.success("Deleted successfully");
-                showDeleteConfirm = false;
-                rowToDelete = null;
-                refreshData();
-              } catch (error) {
-                console.error("Delete error:", error);
-                toast.error("Failed to delete");
-              } finally {
-                isLoading = false;
-              }
-            })}
+          {...deleteForm.enhance(async ({ submit }) => {
+            isLoading = true;
+            try {
+              await submit();
+              toast.success("Deleted successfully");
+              showDeleteConfirm = false;
+              rowToDelete = null;
+              refreshData();
+            } catch (error) {
+              console.error("Delete error:", error);
+              toast.error("Failed to delete");
+            } finally {
+              isLoading = false;
+            }
+          })}
           class="flex-1"
         >
-          <input
-            type="hidden"
-            name="entryId"
-            value={rowToDelete.data.id}
-          />
-          <input
-            type="hidden"
-            name="entryKind"
-            value={rowToDelete.kind}
-          />
+          <input {...deleteForm.fields.entryId.as("hidden", rowToDelete.data.id ?? "")} />
+          <input {...deleteForm.fields.entryKind.as("hidden", rowToDelete.kind)} />
           <Button
             type="submit"
             variant="destructive"
@@ -589,7 +572,7 @@
   >
     <Card.Root class="w-full max-w-lg">
       <Card.Header>
-        <Card.Title>Delete {rowsToDelete.length} Records</Card.Title>
+        <Card.Title>Delete {rowsToDelete.length} records</Card.Title>
         <Card.Description>
           Are you sure you want to delete {rowsToDelete.length} selected record{rowsToDelete.length !==
           1
@@ -600,7 +583,7 @@
 
       <Card.Content>
         <Alert.Root>
-          <Alert.Title>Selected Records</Alert.Title>
+          <Alert.Title>Selected records</Alert.Title>
           <Alert.Description>
             <div class="max-h-48 space-y-2 overflow-y-auto text-sm">
               {#each rowsToDelete.slice(0, 5) as row (`${row.kind}-${row.data.id}`)}

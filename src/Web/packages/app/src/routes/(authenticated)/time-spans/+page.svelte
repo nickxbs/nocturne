@@ -1,18 +1,18 @@
 <script lang="ts">
-  import { toggled } from "$lib/utils/collections";
+  import { toggled } from "#lib/utils/collections.js";
   import { parseDate } from "@internationalized/date";
-  import { formatLongDate, formatShortDate } from "$lib/utils/formatting";
+  import { formatLongDate, formatShortDate } from "#lib/utils/formatting.js";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Toggle } from "$lib/components/ui/toggle";
-  import DateRangePicker from "$lib/components/ui/date-range-picker.svelte";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Toggle } from "#lib/components/ui/toggle/index.js";
+  import DateRangePicker from "#lib/components/ui/date-range-picker.svelte";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
-  import { StateSpansTimeline } from "$lib/components/dashboard/state-spans-timeline";
+  import { StateSpansTimeline } from "#lib/components/dashboard/state-spans-timeline/index.js";
   import { getTimeSpansData } from "./data.remote";
   import {
     dayCount as countDays,
@@ -20,7 +20,7 @@
     isDayString,
     resolveDayRange,
     startOfDay,
-  } from "$lib/utils/date-range";
+  } from "#lib/utils/date-range.js";
   import { useSearchParams } from "runed/kit";
   import { z } from "zod";
 
@@ -56,7 +56,7 @@
   });
 
   const CATEGORIES = [
-    { key: "pumpModes", label: "Pump Modes", color: "var(--pump-mode-automatic)" },
+    { key: "pumpModes", label: "Pump modes", color: "var(--pump-mode-automatic)" },
     { key: "profiles", label: "Profiles", color: "var(--chart-1)" },
     { key: "basal", label: "Basal", color: "var(--insulin-basal)" },
     { key: "overrides", label: "Overrides", color: "var(--chart-2)" },
@@ -94,14 +94,12 @@
     const anchor = parseDate(direction === -1 ? fromParam : toParam);
     const newFirst = anchor.add({ days: direction * (direction === -1 ? dayCount : 1) });
     const newLast = newFirst.add({ days: dayCount - 1 });
-    goto(
-      resolve(`/time-spans?from=${newFirst.toString()}&to=${newLast.toString()}`),
-      { invalidateAll: true }
-    );
+
+    goto(resolve(`time-spans?from=${newFirst.toString()}&to=${newLast.toString()}`), { refreshAll: true });
   }
 
   function goBack() {
-    goto(resolve("/"));
+    goto(resolve(""));
   }
 
   // Format date range for display
@@ -111,7 +109,7 @@
   });
 </script>
 
-<div class="space-y-6 p-4">
+<div class="@container space-y-6 p-4">
   <!-- Header with Navigation -->
   <Card.Root>
     <Card.Content class="p-4">
@@ -119,16 +117,16 @@
         <!-- Back button -->
         <Button variant="ghost" size="sm" onclick={goBack}>
           <ArrowLeft class="h-4 w-4 mr-2" />
-          Back to Dashboard
+          Back to dashboard
         </Button>
 
         <!-- Date Navigation -->
-        <div class="flex min-w-0 items-center gap-2 max-sm:w-full">
+        <div class="flex min-w-0 items-center gap-2 @max-xl:w-full">
           <Button variant="outline" size="icon" onclick={() => shiftPeriod(-1)}>
             <ChevronLeft class="h-4 w-4" />
           </Button>
           <div
-            class="flex min-w-0 flex-1 items-center gap-2 justify-center text-center sm:min-w-[280px]"
+            class="flex min-w-0 flex-1 items-center gap-2 justify-center text-center @xl:min-w-[280px]"
           >
             <span class="text-lg font-medium">{dateRangeDisplay}</span>
           </div>
@@ -137,7 +135,7 @@
           </Button>
         </div>
 
-        <div class="hidden w-24 sm:block"></div>
+        <div class="hidden w-24 @2xl:block"></div>
       </div>
     </Card.Content>
   </Card.Root>
@@ -148,7 +146,7 @@
   <!-- Timeline Card -->
   <Card.Root>
     <Card.Header class="pb-2">
-      <Card.Title>State Spans Timeline</Card.Title>
+      <Card.Title>State spans timeline</Card.Title>
       <Card.Description>
         View pump modes, profiles, temp basals, overrides, and activities over time
       </Card.Description>
@@ -180,7 +178,7 @@
         tempBasalSpans={data?.tempBasalSpans ?? []}
         overrideSpans={data?.overrideSpans ?? []}
         activitySpans={data?.activitySpans ?? []}
-        {dateRange}
+        dateRange={dateRange}
         showPumpModes={isShown("pumpModes")}
         showProfiles={isShown("profiles")}
         showTempBasals={isShown("basal")}

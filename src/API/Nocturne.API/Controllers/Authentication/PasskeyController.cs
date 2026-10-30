@@ -252,10 +252,10 @@ public class PasskeyController : ControllerBase
     /// The challenge must have been issued for the subject the caller's credentials resolve to,
     /// so a challenge minted by another flow cannot be redeemed as an enrolment onto it.
     /// <para>
-    /// Declares no invalidation because a recovery session reaches it: the generated command would
-    /// refresh <see cref="ListCredentials"/>, which needs a session, and its 401 would surface as a
-    /// failure on an enrolment that in fact succeeded. Callers holding a session refresh their
-    /// own list.
+    /// Invalidates <see cref="ListCredentials"/> so a caller holding a session sees the new passkey
+    /// in the response. A recovery session reaches this endpoint too and cannot read that list; the
+    /// generated command settles a refresh that fails and logs it, so the 401 does not fail an
+    /// enrolment that succeeded, and a query is returned only to a client that asked for it.
     /// </para>
     /// </remarks>
     [HttpPost("register/complete")]
@@ -263,7 +263,7 @@ public class PasskeyController : ControllerBase
     [DenyDemoSubject]
     [AllowAnonymous]
     [EnableRateLimiting("passkey-register")]
-    [RemoteCommand]
+    [RemoteCommand(Invalidates = ["ListCredentials"])]
     [ProducesResponseType(typeof(PasskeyRegisterCompleteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -411,11 +411,9 @@ public class PasskeyController : ControllerBase
     /// </para>
     /// <para>
     /// Hence the two steps. The candidate list comes from tables that are not tenant-scoped, so one
-    /// query answers it. The membership check cannot join to them in the same statement: a single
-    /// anti-join spans every candidate at once, and the reach that makes it cross-tenant is granted
-    /// one subject at a time (<c>app.current_subject_id</c>), so no one pin can cover the statement.
-    /// It is asked per candidate instead, through <see cref="ITenantMemberService"/>, whose
-    /// enumeration carries that subject's own reach.
+    /// query answers it. The membership check is asked per candidate through
+    /// <see cref="ITenantMemberService"/>, whose enumeration is pinned to that subject
+    /// (<c>app.current_subject_id</c>) and so reads only that subject's memberships.
     /// </para>
     /// The preconditions mean only a half-finished enrolment can match, never an account that can
     /// already sign in or that belongs to a tenant — so with several candidates (duplicates left by
@@ -812,7 +810,7 @@ public class PasskeyController : ControllerBase
     }
 
     /// <summary>
-    /// Mark the current tenant's onboarding as complete.
+    /// Mark the current tenant's onboarding core as complete, enrolling it in the setup hub.
     /// </summary>
     [HttpPost("onboarding/complete")]
     [Authorize]
@@ -829,6 +827,7 @@ public class PasskeyController : ControllerBase
         if (tenant.OnboardingCompletedAt == null)
         {
             tenant.OnboardingCompletedAt = DateTime.UtcNow;
+            tenant.SetupHubEnrolledAt = tenant.OnboardingCompletedAt;
             await db.SaveChangesAsync();
         }
 

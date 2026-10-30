@@ -1,5 +1,7 @@
+using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Core.Clinical.Treatments;
 using FluentAssertions;
-using Nocturne.Alerts.ParityCorpus.Generator.Harness;
+using Nocturne.Alerts.Corpus;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -61,11 +63,11 @@ public class AlertReplayServiceTests
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
 
         var enricherDeps = new SensorContextEnricherDependencies(
+            new IobCobReader(_iobCalculator.Object, _cobCalculator.Object, _bolusRepository.Object,
+                _tempBasalRepository.Object, _carbIntakeRepository.Object, TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
             _iobCalculator.Object,
             _cobCalculator.Object,
             _treatmentService.Object,
-            _bolusRepository.Object,
-            _carbIntakeRepository.Object,
             _deviceEventRepository.Object,
             _pumpSnapshotRepository.Object,
             _apsSnapshotRepository.Object,
@@ -87,17 +89,17 @@ public class AlertReplayServiceTests
             TimeProvider.System,
             NullLogger<SensorContextEnricher>.Instance);
 
-        _sut = Service(new ManagedAlertReplayEngine(NullLogger<ManagedAlertReplayEngine>.Instance));
+        _sut = new AlertReplayService(
+            _alertRepository.Object,
+            _glucoseRepository.Object,
+            TestDoubles.CanonicalGlucosePassThrough.Create(),
+            _enricher,
+            _tenantAccessor.Object,
+            Options.Create(new AlertEvaluationOptions()),
+            new RustAlertReplayEngine(new AlertEngineErrors(
+                new Nocturne.API.Tests.Services.BackgroundServices.TestMeterFactory(), TimeProvider.System)),
+            TimeProvider.System);
     }
-
-    private AlertReplayService Service(IAlertReplayEngine engine) => new(
-        _alertRepository.Object,
-        _glucoseRepository.Object,
-        TestDoubles.CanonicalGlucosePassThrough.Create(),
-        _enricher,
-        _tenantAccessor.Object,
-        Options.Create(new AlertEvaluationOptions()),
-        engine);
 
     private static AlertRuleSnapshot ThresholdRule(Guid id, string direction, decimal value,
         AlertRuleSeverity severity = AlertRuleSeverity.Warning) =>
@@ -112,7 +114,7 @@ public class AlertReplayServiceTests
         Mgdl = mgdl,
     };
 
-    [Fact]
+    [NativeFact]
     public async Task EmptyTenantId_ReturnsEmpty()
     {
         _tenantAccessor.Setup(t => t.TenantId).Returns(Guid.Empty);
@@ -122,7 +124,7 @@ public class AlertReplayServiceTests
         result.Events.Should().BeEmpty();
     }
 
-    [Fact]
+    [NativeFact]
     public async Task NoRules_ReturnsEmptyEventsButValidWindow()
     {
         _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
@@ -136,7 +138,7 @@ public class AlertReplayServiceTests
         result.WindowEnd.Should().Be(new DateTime(2026, 4, 29, 0, 0, 0, DateTimeKind.Utc));
     }
 
-    [Fact]
+    [NativeFact]
     public async Task ThresholdBelow_LowReading_FiresOneEventAtLeadingEdge()
     {
         var ruleId = Guid.NewGuid();
@@ -156,7 +158,7 @@ public class AlertReplayServiceTests
         };
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(readings);
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
@@ -167,7 +169,7 @@ public class AlertReplayServiceTests
         result.Events[1].At.Should().Be(dayStart.AddHours(5));
     }
 
-    [Fact]
+    [NativeFact]
     public async Task ContinuouslyMet_ProducesSingleLeadingEdgeEvent()
     {
         var rule = ThresholdRule(Guid.NewGuid(), "below", 70m);
@@ -183,7 +185,7 @@ public class AlertReplayServiceTests
             .ToArray();
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(readings);
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
@@ -192,7 +194,7 @@ public class AlertReplayServiceTests
         result.Events[0].At.Should().Be(dayStart.AddHours(2));
     }
 
-    [Fact]
+    [NativeFact]
     public async Task ScopedDnd_LowsWindow_SuppressesALowRuleInReplay()
     {
         var rule = new AlertRuleSnapshot(Guid.NewGuid(), _tenantId, "low", AlertConditionType.Threshold,
@@ -217,7 +219,7 @@ public class AlertReplayServiceTests
             .ToArray();
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(readings);
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
@@ -226,7 +228,7 @@ public class AlertReplayServiceTests
         result.Events[0].Kind.Should().Be(AlertReplayEventKind.SuppressedByDnd);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task ScopedDnd_WindowReceivedAfterTheFire_DoesNotSuppress_ReceiptGating()
     {
         var rule = new AlertRuleSnapshot(Guid.NewGuid(), _tenantId, "low", AlertConditionType.Threshold,
@@ -253,7 +255,7 @@ public class AlertReplayServiceTests
             .ToArray();
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(readings);
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
@@ -262,7 +264,7 @@ public class AlertReplayServiceTests
         result.Events[0].Kind.Should().Be(AlertReplayEventKind.Fired);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task DoNotDisturbLeaf_EvaluatesTrueAtTicksWhereAnAllWindowWasActive()
     {
         // A do_not_disturb(is_active=true) rule with AllowThroughDnd so the fire is not
@@ -289,7 +291,7 @@ public class AlertReplayServiceTests
         // The leaf needs no glucose; replay still walks the day on no-data ticks.
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
@@ -301,7 +303,7 @@ public class AlertReplayServiceTests
         result.Events[0].At.Should().Be(dayStart.AddHours(2));
     }
 
-    [Fact]
+    [NativeFact]
     public async Task MultipleRules_OrderedByTopologicalDependency()
     {
         // Rule A: threshold < 70
@@ -324,7 +326,7 @@ public class AlertReplayServiceTests
 
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { Reading(dayStart.AddHours(3), 60) });
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
@@ -335,7 +337,7 @@ public class AlertReplayServiceTests
         result.Events[1].RuleId.Should().Be(ruleBId);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task SameTickOpenAndAutoResolve_EmitsFiredThenAutoResolved()
     {
         // Mirror of AlertOrchestrator.EvaluateRuleAsync: HandleExcursionOpened runs first,
@@ -365,7 +367,7 @@ public class AlertReplayServiceTests
         // assertion locks the same-tick pair in isolation.
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[]
             {
                 Reading(dayStart.AddHours(3), 75),
@@ -382,7 +384,7 @@ public class AlertReplayServiceTests
         result.Events[0].At.Should().Be(result.Events[1].At, "fire and auto-resolve happen on the same tick");
     }
 
-    [Fact]
+    [NativeFact]
     public async Task RollingWindow_When_Date_IsNull()
     {
         _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
@@ -393,7 +395,7 @@ public class AlertReplayServiceTests
         (result.WindowEnd - result.WindowStart).Should().BeCloseTo(TimeSpan.FromHours(24), TimeSpan.FromSeconds(5));
     }
 
-    [Fact]
+    [NativeFact]
     public async Task LoopStale_fires_at_correct_replay_tick()
     {
         // ApsSnapshot at dayStart+02:00; thereafter loop is silent. A loop_stale > 5 rule
@@ -413,7 +415,7 @@ public class AlertReplayServiceTests
             .ReturnsAsync(new[] { rule });
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         // The enricher uses GetLatestTimestampAsync(asOf) — pinned to each replay tick. We
@@ -431,7 +433,7 @@ public class AlertReplayServiceTests
         result.Events[0].At.Should().Be(dayStart.AddHours(2).AddMinutes(10));
     }
 
-    [Fact]
+    [NativeFact]
     public async Task PumpSuspended_fires_at_correct_replay_tick()
     {
         // A pump-suspended StateSpan opens at 03:00 with no end. Rule: pump_suspended is_active=true.
@@ -451,7 +453,7 @@ public class AlertReplayServiceTests
             .ReturnsAsync(new[] { rule });
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         _pumpSnapshotRepository.Setup(r => r.GetLatestAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
@@ -485,7 +487,7 @@ public class AlertReplayServiceTests
     /// glucose value flows through change-detection (rounded to integer mg/dL) and the
     /// emitted points match the readings.
     /// </summary>
-    [Fact]
+    [NativeFact]
     public async Task FactTimelines_LatestGlucose_EmitsOnReadingChange()
     {
         var rule = ThresholdRule(Guid.NewGuid(), "below", 70m);
@@ -505,7 +507,7 @@ public class AlertReplayServiceTests
         };
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(readings);
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
@@ -520,7 +522,7 @@ public class AlertReplayServiceTests
     /// A capped reading ("50+") must surface in the <c>reservoir_is_lower_bound</c> timeline
     /// so the FE can distinguish it from an exact 50.0.
     /// </summary>
-    [Fact]
+    [NativeFact]
     public async Task FactTimelines_ReservoirIsLowerBound_EmitsBoolAsOne()
     {
         var rule = new AlertRuleSnapshot(
@@ -533,7 +535,7 @@ public class AlertReplayServiceTests
             .ReturnsAsync(new[] { rule });
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
         _reservoirEstimation.Setup(s => s.GetEstimateAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Nocturne.API.Services.Devices.ReservoirEstimate(
@@ -546,11 +548,11 @@ public class AlertReplayServiceTests
     }
 
     /// <summary>
-    /// The Rust engine replays the rule snapshots it is handed, so a dry-run override that tightens
+    /// The engine replays the rule snapshots it is handed, so a dry-run override that tightens
     /// a stored rule's threshold is what it evaluates, not the stored row.
     /// </summary>
     [NativeFact]
-    public async Task DryRunOverride_OfAStoredRule_ReplaysAsWritten_OnTheRustEngine()
+    public async Task DryRunOverride_OfAStoredRule_ReplaysAsWritten()
     {
         var ruleId = Guid.NewGuid();
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
@@ -558,42 +560,15 @@ public class AlertReplayServiceTests
             .ReturnsAsync(new[] { ThresholdRule(ruleId, "below", 70m) });
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { Reading(dayStart.AddHours(1), 90) });
         var ruleOverride = new ReplayRuleOverride(
             ruleId, "tightened", AlertConditionType.Threshold, """{"direction":"below","value":100}""",
             AlertRuleSeverity.Warning, AllowThroughDnd: false, AutoResolveEnabled: false, AutoResolveParams: null);
-        var rust = Service(new RustAlertReplayEngine(new AlertEngineErrors(
-            new ServiceCollection().AddMetrics().BuildServiceProvider()
-                .GetRequiredService<System.Diagnostics.Metrics.IMeterFactory>(),
-            TimeProvider.System)));
-
-        var result = await rust.ReplayDryRunAsync(
+        var result = await _sut.ReplayDryRunAsync(
             null, null, dayStart, dayStart.AddHours(2), ruleOverride, CancellationToken.None);
 
         result.Events.Should().ContainSingle().Which.Should().Be(new AlertReplayEvent(
             dayStart.AddHours(1), ruleId, "tightened", AlertRuleSeverity.Warning, AlertReplayEventKind.Fired));
-    }
-
-    /// <summary>
-    /// Drift guard: every <see cref="AlertConditionType"/> evaluable at runtime must resolve to
-    /// an evaluator in the replay container. Replay used to hand-maintain its own evaluator
-    /// list and silently dropped any new condition kind (Sustained around a missing kind cleared
-    /// the timer every tick, so no event ever fired). Sourcing the registry from the live DI
-    /// extension closes that gap; this test fails closed if a future evaluator is added to live
-    /// DI but not exposed to replay.
-    /// </summary>
-    [Fact]
-    public void BuildReplayServices_ResolvesEveryRuntimeConditionType()
-    {
-        using var sp = ManagedAlertReplayEngine.BuildReplayServices(
-            new InMemoryConditionTimerStore(), TimeProvider.System);
-        var registry = sp.GetRequiredService<Nocturne.API.Services.Alerts.Evaluators.ConditionEvaluatorRegistry>();
-
-        foreach (var type in Enum.GetValues<AlertConditionType>())
-        {
-            registry.GetEvaluator(type).Should().NotBeNull(
-                "replay must support every runtime condition type, but {0} has no evaluator", type);
-        }
     }
 }

@@ -37,6 +37,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     private readonly IConfiguration _configuration;
     private readonly IHostEnvironment _environment;
     private readonly IEnumerable<IConnectorCacheInvalidator> _cacheInvalidators;
+    private readonly TimeProvider _time;
     private readonly ILogger<ConnectorConfigurationService> _logger;
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -52,6 +53,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         IConfiguration configuration,
         IHostEnvironment environment,
         IEnumerable<IConnectorCacheInvalidator> cacheInvalidators,
+        TimeProvider timeProvider,
         ILogger<ConnectorConfigurationService> logger)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
@@ -61,6 +63,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         _configuration = configuration;
         _environment = environment;
         _cacheInvalidators = cacheInvalidators;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -181,7 +184,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         else
         {
             entity.ConfigurationJson = configJson;
-            entity.LastModified = DateTimeOffset.UtcNow;
+            entity.LastModified = _time.GetUtcNow();
             entity.ModifiedBy = modifiedBy;
             _logger.LogInformation("Updating configuration for connector {ConnectorName}", connectorName);
         }
@@ -246,7 +249,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         else
         {
             entity.SecretsJson = secretsJson;
-            entity.LastModified = DateTimeOffset.UtcNow;
+            entity.LastModified = _time.GetUtcNow();
             entity.ModifiedBy = modifiedBy;
             _logger.LogInformation("Updating secrets for connector {ConnectorName}", connectorName);
         }
@@ -427,7 +430,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// Returns true if the field is not present (backwards compatibility - existing connectors default to enabled).
     /// Returns false only if explicitly set to false or there's a parsing error.
     /// </summary>
-    private bool GetEnabledFromConfig(string configJson)
+    internal static bool GetEnabledFromConfig(string configJson)
     {
         try
         {
@@ -440,11 +443,10 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             // This ensures existing connector configs continue to work after the migration
             return true;
         }
-        catch (JsonException ex)
+        catch (JsonException)
         {
-            _logger.LogDebug(ex, "Failed to parse configuration JSON for enabled field");
+            return false;
         }
-        return false;
     }
 
     /// <inheritdoc />
@@ -478,7 +480,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         else
         {
             entity.ConfigurationJson = configWithEnabled;
-            entity.LastModified = DateTimeOffset.UtcNow;
+            entity.LastModified = _time.GetUtcNow();
             entity.ModifiedBy = modifiedBy;
         }
 
@@ -975,7 +977,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         if (isHealthy.HasValue)
             config.IsHealthy = isHealthy.Value;
 
-        config.SysUpdatedAt = DateTime.UtcNow;
+        config.SysUpdatedAt = _time.GetUtcNow().UtcDateTime;
 
         await db.SaveChangesAsync(ct);
 

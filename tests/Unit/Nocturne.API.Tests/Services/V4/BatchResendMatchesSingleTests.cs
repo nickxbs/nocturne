@@ -104,7 +104,6 @@ public class BatchResendMatchesSingleTests : IDisposable
             foods.Object,
             Mock.Of<IDeviceService>(),
             Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<IProfileDecomposer>(),
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
@@ -155,7 +154,8 @@ public class BatchResendMatchesSingleTests : IDisposable
             Mock.Of<IStateSpanService>(),
             Mock.Of<IDeviceService>(),
             _audit,
-            NullLogger<DeviceStatusDecomposer>.Instance);
+            Mock.Of<ILoopClosedLoopStamper>(),
+            TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
 
         DeviceStatus Status(int battery) => new()
         {
@@ -184,7 +184,8 @@ public class BatchResendMatchesSingleTests : IDisposable
             Mock.Of<IStateSpanService>(),
             Mock.Of<IDeviceService>(),
             _audit,
-            NullLogger<DeviceStatusDecomposer>.Instance);
+            Mock.Of<ILoopClosedLoopStamper>(),
+            TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
 
         const string legacyId = "6500000000000000000000d2";
         DeviceStatus Status(int battery) => new()
@@ -226,7 +227,8 @@ public class BatchResendMatchesSingleTests : IDisposable
             Mock.Of<IStateSpanService>(),
             Mock.Of<IDeviceService>(),
             _audit,
-            NullLogger<DeviceStatusDecomposer>.Instance);
+            Mock.Of<ILoopClosedLoopStamper>(),
+            TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
 
         const string legacyId = "6500000000000000000000d3";
         DeviceStatus Status() => new()
@@ -252,7 +254,7 @@ public class BatchResendMatchesSingleTests : IDisposable
     public async Task Activity_BatchResend_UpdatesTheHeartRateRow()
     {
         var decomposer = new ActivityDecomposer(
-            _context.AsFactory(), Mock.Of<IStateSpanRepository>(), NullLogger<ActivityDecomposer>.Instance);
+            _context.AsFactory(), Mock.Of<IStateSpanRepository>(), TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
 
         Activity HeartRate(int bpm) => new()
         {

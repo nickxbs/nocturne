@@ -2,16 +2,18 @@
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
+  } from "#lib/components/ui/card/index.js";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
-  import ConnectorSetup from "$lib/components/connectors/ConnectorSetup.svelte";
+  import ConnectorSetup from "#lib/components/connectors/ConnectorSetup.svelte";
+  import RepullHistoryCard from "./RepullHistoryCard.svelte";
+  import type { AvailableConnector } from "#lib/api/generated/nocturne-api-client.js";
 
   const connectorName = $derived(page.params.connector);
   const isHomeAssistant = $derived(
@@ -43,13 +45,17 @@
     showCapabilities
     primaryAction="save-only"
     showEnvVarHints={page.data.isPlatformAdmin === true}
-    onCancel={() => goto(resolve("/settings/connectors"))}
+    onCancel={() => goto(resolve('settings/connectors'))}
   >
-    {#snippet extras()}
+    {#snippet extras({ connector }: { connector: AvailableConnector })}
+      {#if connector.id}
+        <RepullHistoryCard connectorId={connector.id} />
+      {/if}
+
       {#if isHomeAssistant}
         <Card>
           <CardHeader>
-            <CardTitle>Setup Guide</CardTitle>
+            <CardTitle>Setup guide</CardTitle>
             <CardDescription>
               Connect Home Assistant to Nocturne using the HACS custom integration
             </CardDescription>
@@ -65,7 +71,7 @@
                 <div class="flex-1 pt-1">
                   <p class="font-medium">Install HACS</p>
                   <p class="text-sm text-muted-foreground mt-1">
-                    If you haven't already, install the Home Assistant Community Store (HACS) by following the instructions at hacs.xyz.
+                    If you do not have the Home Assistant Community Store (HACS), install it with the instructions at hacs.xyz.
                   </p>
                 </div>
               </li>

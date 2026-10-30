@@ -1,25 +1,26 @@
 <script lang="ts">
+  import { ConnectorConfigCategory } from "#lib/constants/connector-config-categories.js";
   import { SvelteSet } from "svelte/reactivity";
-  import { Label } from "$lib/components/ui/label";
-  import { Input } from "$lib/components/ui/input";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Button } from "$lib/components/ui/button";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
-  } from "$lib/components/ui/select";
+  } from "#lib/components/ui/select/index.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Separator } from "$lib/components/ui/separator";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Collapsible from "$lib/components/ui/collapsible";
+  } from "#lib/components/ui/card/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import Eye from "@lucide/svelte/icons/eye";
   import EyeOff from "@lucide/svelte/icons/eye-off";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -31,8 +32,8 @@
   import type {
     JsonSchema,
     JsonSchemaProperty,
-  } from "$lib/utils/connector-json-schema";
-  import { getPropertyMeta } from "$lib/config/connectorPropertyMeta";
+  } from "#lib/utils/connector-json-schema.js";
+  import { getPropertyMeta } from "#lib/config/connectorPropertyMeta.js";
 
   interface Props {
     schema: JsonSchema;
@@ -132,7 +133,7 @@
       const category = getPropertyMeta(propName).category;
 
       // Skip credential-category fields - they're shown in the credentials card
-      if (category === "Credentials") continue;
+      if (category === ConnectorConfigCategory.Credentials) continue;
 
       if (!groups[category]) {
         groups[category] = {
@@ -153,10 +154,10 @@
 
   // Separate main and advanced groups
   const mainGroups = $derived(
-    groupedProperties.filter((g) => g.name !== "Advanced")
+    groupedProperties.filter((g) => g.name !== ConnectorConfigCategory.Advanced)
   );
   const advancedGroup = $derived(
-    groupedProperties.find((g) => g.name === "Advanced")
+    groupedProperties.find((g) => g.name === ConnectorConfigCategory.Advanced)
   );
 
   // Get secret fields
@@ -176,7 +177,7 @@
     return Object.entries(schema.properties)
       .filter(
         ([name, propSchema]) =>
-          getPropertyMeta(name).category === "Credentials" &&
+          getPropertyMeta(name).category === ConnectorConfigCategory.Credentials &&
           !secretFieldSet.has(name) &&
           propSchema["x-hidden"] !== true
       )
@@ -321,7 +322,7 @@
                 <RotateCcw class="h-3 w-3" />
               </Button>
             {:else if hasEnvOverride(propName)}
-              <Badge variant="outline">From Env</Badge>
+              <Badge variant="outline">From env</Badge>
             {/if}
           </div>
           {#if meta.description}
@@ -355,7 +356,7 @@
             <RotateCcw class="h-3 w-3" />
           </Button>
         {:else if hasEnvOverride(propName)}
-          <Badge variant="outline">From Env</Badge>
+          <Badge variant="outline">From env</Badge>
         {/if}
       </div>
       <Select
@@ -393,7 +394,7 @@
             <RotateCcw class="h-3 w-3" />
           </Button>
         {:else if hasEnvOverride(propName)}
-          <Badge variant="outline">From Env</Badge>
+          <Badge variant="outline">From env</Badge>
         {/if}
       </div>
       <Input
@@ -444,7 +445,7 @@
             <RotateCcw class="h-3 w-3" />
           </Button>
         {:else if hasEnvOverride(propName)}
-          <Badge variant="outline">From Env</Badge>
+          <Badge variant="outline">From env</Badge>
         {/if}
       </div>
       <Input

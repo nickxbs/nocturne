@@ -33,11 +33,9 @@ public class SubjectTokenConversionFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        // Unmigrated: the fixture walks the chain up to the migration under test itself.
-        var database = await SharedPostgres.CreateEmptyDatabaseAsync("token_conversion");
+        var database = await SharedPostgres.CreateDatabaseAtMigrationAsync(PriorMigration, "token_conversion");
         _migratorConnectionString = database.MigratorConnectionString;
 
-        await MigrateToAsync(PriorMigration);
         await SeedAsync();
         await MigrateToAsync(targetMigration: null);
     }
@@ -221,7 +219,7 @@ public class SubjectTokenConversionTests(SubjectTokenConversionFixture fixture)
     {
         // The whole point: a member with no passkey and no provider answers 503 recovery_mode on
         // every API request, and the recovery page cannot resolve an account with no username.
-        // tenant_members and subjects carry no RLS policy, so the tenant has to be named rather
+        // tenant_members and subjects carry no tenant policy, so the tenant has to be named rather
         // than left to the GUC.
         var orphans = await ScalarAsync<long>(Converts,
             $"""

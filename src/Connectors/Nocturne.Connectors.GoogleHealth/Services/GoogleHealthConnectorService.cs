@@ -28,10 +28,9 @@ public sealed class GoogleHealthConnectorService(
     ILogger<GoogleHealthConnectorService> logger,
     IConnectorPublisher? publisher = null,
     TimeProvider? timeProvider = null)
-    : BaseConnectorService<GoogleHealthConnectorConfiguration>(httpClient, serverResolver, logger, publisher)
+    : BaseConnectorService<GoogleHealthConnectorConfiguration>(httpClient, serverResolver, logger, publisher, timeProvider)
 {
-    private const string ConnectorName = "GoogleHealth";
-    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
+    public const string ConnectorName = "GoogleHealth";
 
     protected override string ConnectorSource => DataSources.GoogleHealthConnector;
     public override string ServiceName => ServiceNames.GoogleHealthConnector;
@@ -50,12 +49,12 @@ public sealed class GoogleHealthConnectorService(
         ISyncProgressReporter? progressReporter = null) =>
         since is { } requestedFrom
             ? base.SyncDataAsync(new SyncRequest { From = requestedFrom }, config, cancellationToken, progressReporter)
-            : base.SyncDataAsync(config, cancellationToken, DateTime.UtcNow, progressReporter);
+            : base.SyncDataAsync(config, cancellationToken, Clock.GetUtcNow().UtcDateTime, progressReporter);
 
     // Google Health owns its health cursors; a base glucose watermark must not become a repair bound.
     protected override SyncRequest CreateBackgroundSyncRequest(DateTime? since) => new();
 
-    // Matches GoogleHealthConnectorConfiguration's own validation floor for an explicit ImportFrom.
+    // Matches GoogleHealthService.ValidateOptions' floor for an explicit ImportFrom.
     private static readonly DateTimeOffset EarliestSupportedDate = new(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     private const string BackfillCursorKey = "backfillCursorDate";
@@ -296,7 +295,7 @@ public sealed class GoogleHealthConnectorService(
             var coversConfiguredTypes = ResolveActiveTypes(new SyncRequest(), config)
                 .All(type => GoogleHealthClient.TryGetDataType(type, out var name) && active.Contains(name, StringComparer.Ordinal));
 
-            var now = clock.GetUtcNow();
+            var now = Clock.GetUtcNow();
             var window = await ResolveWindowAsync(request, config, now, cancellationToken);
             await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.Reading, completedDataTypes: 0, totalDataTypes: active.Length);
 
@@ -460,16 +459,16 @@ public sealed class GoogleHealthConnectorService(
                     reconciliationRun = await writer.BeginReconciliationAsync([type], from, to, ct);
                     stage = "google_read";
                     await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, 0);
-                    var progressAt = clock.GetTimestamp();
+                    var progressAt = Clock.GetTimestamp();
                     var pagesRead = 0;
                     async Task PageRead(int pages)
                     {
                         pagesRead = pages;
                         // Progress uses database sessions; publish at most once per two seconds,
                         // while phase transitions below always publish the final page count.
-                        if (clock.GetElapsedTime(progressAt) < TimeSpan.FromSeconds(2)) return;
+                        if (Clock.GetElapsedTime(progressAt) < TimeSpan.FromSeconds(2)) return;
                         await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, pages);
-                        progressAt = clock.GetTimestamp();
+                        progressAt = Clock.GetTimestamp();
                     }
                     if (type == "sleep")
                         await foreach (var page in google.ReadSleepPagesAsync(accessToken, from, to, ct, PageRead))

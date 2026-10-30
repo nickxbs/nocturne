@@ -11,6 +11,7 @@ namespace Nocturne.API.Tests.Integration;
 /// <summary>
 /// v1 PUT /profile, DELETE /profile/{id} and DELETE /profile?keep=N on real PostgreSQL.
 /// </summary>
+[Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
 public class ProfileV1WriteIntegrationTests : ApiIntegrationTestBase
 {
@@ -213,7 +214,7 @@ public class ProfileV1WriteIntegrationTests : ApiIntegrationTestBase
     }
 
     [Fact]
-    public async Task Prune_RanksProfileDocumentsOnly_NotProfileSwitchSnapshots()
+    public async Task Prune_RanksProfileDocumentsOnly_NotProfileSwitches()
     {
         var client = CreateAuthenticatedClient();
         var now = DateTimeOffset.UtcNow;

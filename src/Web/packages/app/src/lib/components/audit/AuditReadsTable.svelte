@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { ReadAccessAuditDto } from "$lib/api/generated/nocturne-api-client";
+  import type { ReadAccessAuditDto } from "#lib/api/generated/nocturne-api-client.js";
   import type {
     Column,
     ColumnDef,
@@ -18,22 +18,22 @@
     createSvelteTable,
     FlexRender,
     renderSnippet,
-  } from "$lib/components/ui/data-table";
+  } from "#lib/components/ui/data-table/index.js";
 </script>
 
 <script lang="ts">
-  import { formatLocale } from "$lib/utils/formatting";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import * as Table from "$lib/components/ui/table";
+  import { formatLocale } from "#lib/utils/formatting.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
   import ArrowUpDown from "@lucide/svelte/icons/arrow-up-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import { SvelteSet } from "svelte/reactivity";
-  import DataTableToolbar from "$lib/components/treatments/DataTableToolbar.svelte";
-  import DataTablePagination from "$lib/components/treatments/DataTablePagination.svelte";
-  import ColumnFilterPopover from "$lib/components/treatments/ColumnFilterPopover.svelte";
+  import DataTableToolbar from "#lib/components/treatments/DataTableToolbar.svelte";
+  import DataTablePagination from "#lib/components/treatments/DataTablePagination.svelte";
+  import ColumnFilterPopover from "#lib/components/treatments/ColumnFilterPopover.svelte";
 
   interface Props {
     rows: ReadAccessAuditDto[];
@@ -277,7 +277,7 @@
     {
       id: "ipAddress",
       accessorFn: (row) => row.ipAddress,
-      header: "IP Address",
+      header: "IP address",
       cell: ({ row }) =>
         renderSnippet(ipCellSnippet, { ip: row.original.ipAddress }),
       enableSorting: false,
@@ -400,7 +400,7 @@
   clearEntityTypeFilter,
 }: EntityTypeFilterHeaderProps)}
   <ColumnFilterPopover
-    label="Entity Type"
+    label="Entity type"
     options={uniqueEntityTypes.map((t: string) => ({ value: t, label: t }))}
     selected={selectedEntityTypes}
     searchable={true}
@@ -429,7 +429,7 @@
   <div class="@container grid grid-cols-1 gap-3 px-4 py-3 text-sm @sm:grid-cols-2">
     {#if row.authType}
       <div>
-        <span class="font-medium text-muted-foreground">Auth Type</span>
+        <span class="font-medium text-muted-foreground">Auth type</span>
         <p>{row.authType}</p>
       </div>
     {/if}
@@ -444,7 +444,7 @@
       {#if Object.keys(params).length > 0}
         <div class="@sm:col-span-2">
           <span class="font-medium text-muted-foreground"
-            >Query Parameters</span
+            >Query parameters</span
           >
           <div class="mt-1 flex flex-wrap gap-2">
             {#each Object.entries(params) as [key, value] (key)}

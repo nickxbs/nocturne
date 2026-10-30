@@ -1,7 +1,8 @@
 // See https://svelte.dev/docs/kit/types#app
 // for information about these interfaces
-import { ApiClient, RustValidationIssue, UserDisplayPreferences } from "$lib/api";
-import type { LastSignIn } from "$lib/components/auth/last-sign-in";
+import { ApiClient, RustValidationIssue, UserDisplayPreferences } from "#lib/api/index.js";
+import type { LastSignIn } from "#lib/components/auth/last-sign-in.js";
+import type { MintedSession } from "#lib/server/demo-session.js";
 
 
 export interface ServerSettings {
@@ -28,6 +29,8 @@ export interface AuthUser {
 	preferredLanguage?: string;
 	/** Per-user display preferences (units, time format, theme, chart style, etc.) */
 	preferences?: UserDisplayPreferences;
+	/** The tenant's default glucose units, for a member who has chosen none of their own. */
+	defaultGlucoseUnits?: string;
 	/** URL to the subject's avatar image */
 	avatarUrl?: string;
 }
@@ -61,6 +64,11 @@ declare global {
 			 * than touching it directly.
 			 */
 			statusPromise?: Promise<TenantStatusResponse | null>;
+			/**
+			 * A demo session minted during this request. Its tokens stand in for the session cookies
+			 * the browser has not yet sent back. See mintDemoSession.
+			 */
+			mintedSession?: MintedSession;
 			/**
 			 * Set when the API could not be reached (or answered 5xx) while resolving the session,
 			 * so that an unauthenticated request is not known to be signed out.

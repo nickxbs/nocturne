@@ -40,6 +40,7 @@ public class AlertDeliveryServiceMuteTests
             .ReturnsAsync(NewContext);
         var services = new ServiceCollection()
             .AddSingleton(factory.Object.AsNocturneFactory())
+            .AddSingleton(TimeProvider.System)
             .AddSingleton<ChatIdentityDirectoryService>()
             .AddSingleton(_notifications.Object)
             .AddSingleton(typeof(Microsoft.Extensions.Logging.ILogger<>), typeof(NullLogger<>))
@@ -49,8 +50,10 @@ public class AlertDeliveryServiceMuteTests
             factory.Object.AsNocturneFactory(),
             Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
             Mock.Of<ISignalRBroadcastService>(),
+            Mock.Of<IEngineAlarmRelay>(),
             services,
-            NullLogger<AlertDeliveryService>.Instance);
+            NullLogger<AlertDeliveryService>.Instance,
+            TimeProvider.System);
     }
 
     private static AlertPayload Payload(Guid excursionId) => new()

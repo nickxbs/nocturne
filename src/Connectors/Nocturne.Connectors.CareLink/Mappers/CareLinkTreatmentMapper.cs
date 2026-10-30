@@ -1,7 +1,9 @@
 using Nocturne.Connectors.CareLink.Models;
 using Nocturne.Connectors.CareLink.Utilities;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using BolusType = Nocturne.Core.Models.V4.BolusType;
 
 namespace Nocturne.Connectors.CareLink.Mappers;
 
@@ -27,13 +29,12 @@ public static class CareLinkTreatmentMapper
     // marker to bound its end. The pump delivers an auto-basal roughly every 5 minutes.
     private const int DefaultAutoBasalIntervalMinutes = 5;
 
-    public static List<Bolus> MapBoluses(CareLinkData data, double pumpOffsetMs)
+    public static List<Bolus> MapBoluses(CareLinkData data, double pumpOffsetMs, DateTime now)
     {
         if (data.Markers is not { Count: > 0 })
             return [];
 
         var deviceName = DeviceName(data);
-        var now = DateTime.UtcNow;
         var results = new List<Bolus>();
 
         foreach (var marker in data.Markers.Where(m => IsType(m, InsulinMarker)))
@@ -47,7 +48,7 @@ public static class CareLinkTreatmentMapper
             if (programmed <= 0 && delivered <= 0)
                 continue;
 
-            var mills = ToMills(timestamp.Value);
+            var mills = timestamp.Value.ToMills();
             var bolusType = MapBolusType(marker.BolusType);
             var automatic = string.Equals(marker.ActivationType, Autocorrection, StringComparison.OrdinalIgnoreCase);
             // Most INSULIN markers carry a stable pump event id; when one is absent, key on the bolus
@@ -78,13 +79,12 @@ public static class CareLinkTreatmentMapper
         return results;
     }
 
-    public static List<CarbIntake> MapCarbIntakes(CareLinkData data, double pumpOffsetMs)
+    public static List<CarbIntake> MapCarbIntakes(CareLinkData data, double pumpOffsetMs, DateTime now)
     {
         if (data.Markers is not { Count: > 0 })
             return [];
 
         var deviceName = DeviceName(data);
-        var now = DateTime.UtcNow;
         var results = new List<CarbIntake>();
 
         foreach (var marker in data.Markers.Where(m => IsType(m, MealMarker)))
@@ -97,7 +97,7 @@ public static class CareLinkTreatmentMapper
             if (timestamp == null)
                 continue;
 
-            var mills = ToMills(timestamp.Value);
+            var mills = timestamp.Value.ToMills();
 
             results.Add(new CarbIntake
             {
@@ -116,13 +116,12 @@ public static class CareLinkTreatmentMapper
         return results;
     }
 
-    public static List<TempBasal> MapTempBasals(CareLinkData data, double pumpOffsetMs)
+    public static List<TempBasal> MapTempBasals(CareLinkData data, double pumpOffsetMs, DateTime now)
     {
         if (data.Markers is not { Count: > 0 })
             return [];
 
         var deviceName = DeviceName(data);
-        var now = DateTime.UtcNow;
 
         // Resolve each marker's timestamp up front and order chronologically so each micro-bolus
         // can be bounded by the next one's start.
@@ -170,9 +169,6 @@ public static class CareLinkTreatmentMapper
 
     private static string DeviceName(CareLinkData data) =>
         $"CareLink {data.MedicalDeviceFamily ?? "Unknown"}";
-
-    private static long ToMills(DateTime utc) =>
-        new DateTimeOffset(utc, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
     private static BolusType MapBolusType(string? bolusType) => bolusType?.ToUpperInvariant() switch
     {

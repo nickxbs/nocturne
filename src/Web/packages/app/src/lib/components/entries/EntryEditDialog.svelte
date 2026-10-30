@@ -1,16 +1,19 @@
 <script lang="ts">
-  import type { Bolus, CarbIntake, BGCheck, Note, DeviceEvent, BasalInjection } from "$lib/api";
-  import type { EntryRecord, EntryCategoryId } from "$lib/constants/entry-categories";
-  import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import * as Sheet from "$lib/components/ui/sheet";
-  import { IsMobile } from "$lib/hooks/is-mobile.svelte";
-  import { useDialogHistory } from "$lib/hooks/dialog-history.svelte";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import { Separator } from "$lib/components/ui/separator";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
+  import { isRecord } from "#lib/utils/type-guards.js";
+  import { useSubmission, type Submission } from "#lib/forms/index.js";
+  import type { Bolus, CarbIntake, BGCheck, Note, DeviceEvent, BasalInjection } from "#lib/api/index.js";
+  import { BolusType, GlucoseType, GlucoseUnit, DeviceEventType } from "#lib/api/index.js";
+  import type { EntryRecord, EntryCategoryId } from "#lib/constants/entry-categories.js";
+  import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import * as Sheet from "#lib/components/ui/sheet/index.js";
+  import { IsMobile } from "#lib/hooks/is-mobile.svelte.js";
+  import { useDialogHistory } from "#lib/hooks/dialog-history.svelte.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import BolusSection from "./BolusSection.svelte";
   import CarbIntakeSection, { type PendingFood } from "./CarbIntakeSection.svelte";
   import BGCheckSection from "./BGCheckSection.svelte";
@@ -25,21 +28,41 @@
   import Droplet from "@lucide/svelte/icons/droplet";
   import FileText from "@lucide/svelte/icons/file-text";
   import Smartphone from "@lucide/svelte/icons/smartphone";
-  import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
+  import { getDataSourceDisplayName } from "#lib/utils/data-source-display.js";
   import { toast } from "svelte-sonner";
-  import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { useToastSubmission } from "$lib/forms";
-  import { createEntry, updateEntry } from "$api/entries.remote";
-  import { toCreateEntryInput, toUpdateEntryInput } from "$api/entry-request";
-  import { remove as deleteBolus } from "$api/generated/bolus.generated.remote";
+  import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { useToastSubmission } from "#lib/forms/index.js";
   import {
+    create as createBolusForm,
+    update as updateBolusForm,
+    remove as deleteBolus,
+  } from "#lib/api/generated/bolus.generated.remote.js";
+  import {
+    createCarbIntake as createCarbIntakeForm,
+    updateCarbIntake as updateCarbIntakeForm,
     deleteCarbIntake,
     addCarbIntakeFood,
-  } from "$api/generated/nutritions.generated.remote";
-  import { remove as deleteBGCheck } from "$api/generated/bgChecks.generated.remote";
-  import { remove as deleteNote } from "$api/generated/notes.generated.remote";
-  import { remove as deleteDeviceEvent } from "$api/generated/deviceEvents.generated.remote";
-  import { remove as deleteBasalInjection } from "$api/generated/basalInjections.generated.remote";
+  } from "#lib/api/generated/nutritions.generated.remote.js";
+  import {
+    create as createBGCheckForm,
+    update as updateBGCheckForm,
+    remove as deleteBGCheck,
+  } from "#lib/api/generated/bgChecks.generated.remote.js";
+  import {
+    create as createNoteForm,
+    update as updateNoteForm,
+    remove as deleteNote,
+  } from "#lib/api/generated/notes.generated.remote.js";
+  import {
+    create as createDeviceEventForm,
+    update as updateDeviceEventForm,
+    remove as deleteDeviceEvent,
+  } from "#lib/api/generated/deviceEvents.generated.remote.js";
+  import {
+    create as createBasalInjectionForm,
+    update as updateBasalInjectionForm,
+    remove as deleteBasalInjection,
+  } from "#lib/api/generated/basalInjections.generated.remote.js";
 
   const realtimeStore = tryGetRealtimeStore();
 
@@ -85,9 +108,25 @@
   });
 
   let mills = $state<number>(Date.now());
+  const timestamp = $derived(new Date(mills).toISOString());
   const deletion = useToastSubmission("Failed to delete entry");
   let carbsPendingFoods = $state<PendingFood[]>([]);
 
+  // Form element refs for programmatic submission
+  let bolusFormRef = $state<HTMLFormElement | null>(null);
+  let carbsFormRef = $state<HTMLFormElement | null>(null);
+  let bgCheckFormRef = $state<HTMLFormElement | null>(null);
+  let noteFormRef = $state<HTMLFormElement | null>(null);
+  let deviceEventFormRef = $state<HTMLFormElement | null>(null);
+  let basalInjectionFormRef = $state<HTMLFormElement | null>(null);
+
+  // Track form completion per section
+  let bolusFormDone = $state(false);
+  let carbsFormDone = $state(false);
+  let bgCheckFormDone = $state(false);
+  let noteFormDone = $state(false);
+  let deviceEventFormDone = $state(false);
+  let basalInjectionFormDone = $state(false);
   let saveError = $state<string | null>(null);
   let isSaving = $state(false);
 
@@ -114,6 +153,74 @@
     Object.keys(ENTRY_CATEGORIES)
       .filter(isEntryCategoryId)
       .filter((k) => sections[k] == null),
+  );
+
+  // Determine which form to use per section (create vs update)
+  const existingBolusRecord = $derived(findExistingRecord("bolus"));
+  const activeBolusForm = $derived(
+    existingBolusRecord?.data.id ? updateBolusForm : createBolusForm,
+  );
+  // An update form takes the record's fields under `request`; a create form takes them flat.
+  const bolusPayload = $derived(
+    existingBolusRecord?.data.id ? updateBolusForm.fields.request : createBolusForm.fields,
+  );
+
+  const existingCarbsRecord = $derived(findExistingRecord("carbs"));
+  const activeCarbsForm = $derived(
+    existingCarbsRecord?.data.id ? updateCarbIntakeForm : createCarbIntakeForm,
+  );
+  const carbsPayload = $derived(
+    existingCarbsRecord?.data.id ? updateCarbIntakeForm.fields.request : createCarbIntakeForm.fields,
+  );
+
+  const existingBGCheckRecord = $derived(findExistingRecord("bgCheck"));
+  const activeBGCheckForm = $derived(
+    existingBGCheckRecord?.data.id ? updateBGCheckForm : createBGCheckForm,
+  );
+  const bgCheckPayload = $derived(
+    existingBGCheckRecord?.data.id ? updateBGCheckForm.fields.request : createBGCheckForm.fields,
+  );
+
+  const existingNoteRecord = $derived(findExistingRecord("note"));
+  const activeNoteForm = $derived(
+    existingNoteRecord?.data.id ? updateNoteForm : createNoteForm,
+  );
+  const notePayload = $derived(
+    existingNoteRecord?.data.id ? updateNoteForm.fields.request : createNoteForm.fields,
+  );
+
+  const existingDeviceEventRecord = $derived(findExistingRecord("deviceEvent"));
+  const activeDeviceEventForm = $derived(
+    existingDeviceEventRecord?.data.id ? updateDeviceEventForm : createDeviceEventForm,
+  );
+  const deviceEventPayload = $derived(
+    existingDeviceEventRecord?.data.id ? updateDeviceEventForm.fields.request : createDeviceEventForm.fields,
+  );
+
+  const existingBasalInjectionRecord = $derived(findExistingRecord("basalInjection"));
+  const activeBasalInjectionForm = $derived(
+    existingBasalInjectionRecord?.data.id ? updateBasalInjectionForm : createBasalInjectionForm,
+  );
+  const basalInjectionPayload = $derived(
+    existingBasalInjectionRecord?.data.id
+      ? updateBasalInjectionForm.fields.request
+      : createBasalInjectionForm.fields,
+  );
+
+  // Aggregate pending state across all forms
+  const formsPending = $derived(
+    !!createBolusForm.pending ||
+    !!updateBolusForm.pending ||
+    !!createCarbIntakeForm.pending ||
+    !!updateCarbIntakeForm.pending ||
+    !!createBGCheckForm.pending ||
+    !!updateBGCheckForm.pending ||
+    !!createNoteForm.pending ||
+    !!updateNoteForm.pending ||
+    !!createDeviceEventForm.pending ||
+    !!updateDeviceEventForm.pending ||
+    !!createBasalInjectionForm.pending ||
+    !!updateBasalInjectionForm.pending,
   );
 
   const sectionIcons: Record<EntryCategoryId, typeof Syringe> = {
@@ -220,179 +327,87 @@
     return correlatedRecords.find((r) => r.kind === kind);
   }
 
-  function hasSectionData(key: EntryCategoryId): boolean {
-    const existing = findExistingRecord(key);
-    if (existing?.data.id) return true;
-
-    switch (key) {
-      case "bolus":
-        return (
-          sections.bolus?.insulin != null ||
-          sections.bolus?.programmed != null ||
-          sections.bolus?.delivered != null
-        );
-      case "carbs":
-        return (
-          sections.carbs?.carbs != null || carbsPendingFoods.length > 0
-        );
-      case "bgCheck":
-        return sections.bgCheck?.glucose != null;
-      case "note":
-        return Boolean(sections.note?.text?.trim());
-      case "deviceEvent":
-        return (
-          sections.deviceEvent?.eventType != null ||
-          Boolean(sections.deviceEvent?.notes?.trim())
-        );
-      case "basalInjection":
-        return (
-          sections.basalInjection?.units != null ||
-          sections.basalInjection?.insulinContext?.patientInsulinId != null
-        );
-    }
-  }
-
-  function buildEntryRecord(
-    key: EntryCategoryId,
-    correlationId?: string,
-  ): EntryRecord | null {
-    const existing = findExistingRecord(key);
-    switch (key) {
-      case "bolus": {
-        if (!sections.bolus) return null;
-        const prev = existing?.kind === "bolus" ? existing.data : undefined;
-        const data: Bolus = {
-          ...prev,
-          ...sections.bolus,
-          id: prev?.id,
-          mills,
-          correlationId: correlationId ?? prev?.correlationId,
-        };
-        return { kind: "bolus", data };
-      }
-      case "carbs": {
-        if (!sections.carbs) return null;
-        const prev = existing?.kind === "carbs" ? existing.data : undefined;
-        const data: CarbIntake = {
-          ...prev,
-          ...sections.carbs,
-          id: prev?.id,
-          mills,
-          correlationId: correlationId ?? prev?.correlationId,
-        };
-        return { kind: "carbs", data };
-      }
-      case "bgCheck": {
-        if (!sections.bgCheck) return null;
-        const prev = existing?.kind === "bgCheck" ? existing.data : undefined;
-        const data: BGCheck = {
-          ...prev,
-          ...sections.bgCheck,
-          id: prev?.id,
-          mills,
-        };
-        return { kind: "bgCheck", data };
-      }
-      case "note": {
-        if (!sections.note) return null;
-        const prev = existing?.kind === "note" ? existing.data : undefined;
-        const data: Note = {
-          ...prev,
-          ...sections.note,
-          id: prev?.id,
-          mills,
-        };
-        return { kind: "note", data };
-      }
-      case "deviceEvent": {
-        if (!sections.deviceEvent) return null;
-        const prev = existing?.kind === "deviceEvent" ? existing.data : undefined;
-        const data: DeviceEvent = {
-          ...prev,
-          ...sections.deviceEvent,
-          id: prev?.id,
-          mills,
-        };
-        return { kind: "deviceEvent", data };
-      }
-      case "basalInjection": {
-        if (!sections.basalInjection) return null;
-        const prev = existing?.kind === "basalInjection" ? existing.data : undefined;
-        const data: BasalInjection = {
-          ...prev,
-          ...sections.basalInjection,
-          id: prev?.id,
-          mills,
-          correlationId: correlationId ?? prev?.correlationId,
-        };
-        return { kind: "basalInjection", data };
-      }
-    }
-  }
-
-  async function handleSave() {
+  function handleSave() {
     isSaving = true;
     saveError = null;
 
+    // Mark inactive sections as done immediately
+    bolusFormDone = sections.bolus == null;
+    carbsFormDone = sections.carbs == null;
+    bgCheckFormDone = sections.bgCheck == null;
+    noteFormDone = sections.note == null;
+    deviceEventFormDone = sections.deviceEvent == null;
+    basalInjectionFormDone = sections.basalInjection == null;
+
+    // Submit all active forms
+    if (sections.bolus != null && bolusFormRef) {
+      bolusFormRef.requestSubmit();
+    }
+    if (sections.carbs != null && carbsFormRef) {
+      carbsFormRef.requestSubmit();
+    }
+    if (sections.bgCheck != null && bgCheckFormRef) {
+      bgCheckFormRef.requestSubmit();
+    }
+    if (sections.note != null && noteFormRef) {
+      noteFormRef.requestSubmit();
+    }
+    if (sections.deviceEvent != null && deviceEventFormRef) {
+      deviceEventFormRef.requestSubmit();
+    }
+    if (sections.basalInjection != null && basalInjectionFormRef) {
+      basalInjectionFormRef.requestSubmit();
+    }
+  }
+
+  const bolusSubmission = useSubmission();
+  const carbsSubmission = useSubmission();
+  const bgCheckSubmission = useSubmission();
+  const noteSubmission = useSubmission();
+  const deviceEventSubmission = useSubmission();
+  const basalInjectionSubmission = useSubmission();
+
+  async function saveSection(
+    section: Submission,
+    submit: () => Promise<boolean>,
+    result: () => unknown,
+    failure: string,
+    finish: () => void,
+    onSaved?: (saved: unknown) => void | Promise<void>,
+  ) {
     try {
-      const activeKeys = activeSectionKeys.filter(hasSectionData);
-      if (activeKeys.length === 0) {
-        toast.error("Please enter details for the entry");
-        isSaving = false;
-        return;
-      }
-
-      const existingCorrelationId =
-        entry?.data.correlationId ??
-        correlatedRecords.find((r) => r.data.correlationId)?.data.correlationId;
-      const sharedCorrelationId =
-        activeKeys.length > 1
-          ? (existingCorrelationId ?? crypto.randomUUID())
-          : undefined;
-
-      const promises: Promise<unknown>[] = [];
-
-      for (const key of activeKeys) {
-        const record = buildEntryRecord(key, sharedCorrelationId);
-        if (!record) continue;
-
-        if (record.data.id) {
-          promises.push(updateEntry(toUpdateEntryInput(record)));
-        } else {
-          if (key === "carbs" && carbsPendingFoods.length > 0) {
-            promises.push(
-              (async () => {
-                const res = await createEntry(toCreateEntryInput(record));
-                const newId =
-                  res && typeof res === "object" && "id" in res && typeof res.id === "string"
-                    ? res.id
-                    : undefined;
-                if (newId) {
-                  for (const pf of carbsPendingFoods) {
-                    await addCarbIntakeFood({ id: newId, request: pf.request });
-                  }
-                }
-              })(),
-            );
-          } else {
-            promises.push(createEntry(toCreateEntryInput(record)));
-          }
-        }
-      }
-
-      await Promise.all(promises);
-      realtimeStore?.noteTreatmentWrite();
-      toast.success(isEditing ? "Entry updated" : "Entry created");
-      open = false;
-      onClose();
-    } catch (err) {
-      console.error("Save error:", err);
-      saveError = isEditing ? "Failed to update entry" : "Failed to create entry";
-      toast.error(saveError);
+      let saved: unknown;
+      await section.run(submit, async () => {
+        saved = result();
+        if (!saved) return false;
+        realtimeStore?.noteTreatmentWrite();
+        await onSaved?.(saved);
+      });
+      if (section.error || !saved) saveError ??= section.error ?? failure;
     } finally {
+      finish();
+    }
+  }
+
+  function checkAllDone() {
+    if (bolusFormDone && carbsFormDone && bgCheckFormDone && noteFormDone && deviceEventFormDone && basalInjectionFormDone) {
+      if (!saveError) {
+        toast.success(isEditing ? "Entry updated" : "Entry created");
+        open = false;
+        onClose();
+      } else {
+        toast.error(saveError);
+      }
       isSaving = false;
     }
   }
+
+  // Watch for form completion
+  $effect(() => {
+    if (isSaving && bolusFormDone && carbsFormDone && bgCheckFormDone && noteFormDone && deviceEventFormDone && basalInjectionFormDone) {
+      checkAllDone();
+    }
+  });
 
   async function handleDelete() {
     const target = entry;
@@ -460,6 +475,166 @@
   }
 </script>
 
+<!-- Hidden bolus form -->
+{#if sections.bolus != null}
+  {@const correlationId = activeSectionCount > 1 ? crypto.randomUUID() : undefined}
+  <form
+    bind:this={bolusFormRef}
+    class="hidden"
+    {...activeBolusForm.enhance(({ submit }) =>
+      saveSection(bolusSubmission, submit, () => activeBolusForm.result, "Failed to save bolus", () => (bolusFormDone = true)),
+    )}
+  >
+    {#if existingBolusRecord?.data.id}
+      <input {...updateBolusForm.fields.id.as("hidden", existingBolusRecord.data.id)} />
+    {/if}
+    <input {...bolusPayload.timestamp.as("hidden", timestamp)} />
+    {#if correlationId}
+      <input {...bolusPayload.correlationId.as("hidden", correlationId)} />
+    {/if}
+    <input {...bolusPayload.insulin.as("hidden", sections.bolus?.insulin ?? 0)} />
+    {#if !existingBolusRecord?.data.id}
+      <input {...createBolusForm.fields.bolusType.as("hidden", sections.bolus?.bolusType ?? BolusType.Normal)} />
+    {/if}
+    {#if sections.bolus?.duration != null}
+      <input {...bolusPayload.duration.as("hidden", sections.bolus.duration)} />
+    {/if}
+    {#if sections.bolus?.programmed != null}
+      <input {...bolusPayload.programmed.as("hidden", sections.bolus.programmed)} />
+    {/if}
+    {#if sections.bolus?.delivered != null}
+      <input {...bolusPayload.delivered.as("hidden", sections.bolus.delivered)} />
+    {/if}
+    {#if sections.bolus?.insulinType}
+      <input {...bolusPayload.insulinType.as("hidden", sections.bolus.insulinType)} />
+    {/if}
+    {#if sections.bolus?.unabsorbed != null}
+      <input {...bolusPayload.unabsorbed.as("hidden", sections.bolus.unabsorbed)} />
+    {/if}
+  </form>
+{/if}
+
+<!-- Hidden carbs form -->
+{#if sections.carbs != null}
+  {@const correlationId = activeSectionCount > 1 ? crypto.randomUUID() : undefined}
+  <form
+    bind:this={carbsFormRef}
+    class="hidden"
+    {...activeCarbsForm.enhance(({ submit }) =>
+      saveSection(carbsSubmission, submit, () => activeCarbsForm.result, "Failed to save carb intake", () => (carbsFormDone = true), async (saved) => {
+        // If creating with pending foods, add them
+        if (!existingCarbsRecord?.data.id && carbsPendingFoods.length > 0) {
+          const newId = isRecord(saved) ? saved.id : undefined;
+          if (typeof newId === "string" && newId) {
+            for (const pf of carbsPendingFoods) {
+              await addCarbIntakeFood({ id: newId, request: pf.request });
+            }
+          }
+        }
+      }),
+    )}
+  >
+    {#if existingCarbsRecord?.data.id}
+      <input {...updateCarbIntakeForm.fields.id.as("hidden", existingCarbsRecord.data.id)} />
+    {/if}
+    <input {...carbsPayload.timestamp.as("hidden", timestamp)} />
+    {#if correlationId}
+      <input {...carbsPayload.correlationId.as("hidden", correlationId)} />
+    {/if}
+    <input {...carbsPayload.carbs.as("hidden", sections.carbs?.carbs ?? 0)} />
+    {#if sections.carbs?.carbTime != null}
+      <input {...carbsPayload.carbTime.as("hidden", sections.carbs.carbTime)} />
+    {/if}
+    {#if sections.carbs?.absorptionTime != null}
+      <input {...carbsPayload.absorptionTime.as("hidden", sections.carbs.absorptionTime)} />
+    {/if}
+  </form>
+{/if}
+
+<!-- Hidden BG check form -->
+{#if sections.bgCheck != null}
+  <form
+    bind:this={bgCheckFormRef}
+    class="hidden"
+    {...activeBGCheckForm.enhance(({ submit }) =>
+      saveSection(bgCheckSubmission, submit, () => activeBGCheckForm.result, "Failed to save BG check", () => (bgCheckFormDone = true)),
+    )}
+  >
+    {#if existingBGCheckRecord?.data.id}
+      <input {...updateBGCheckForm.fields.id.as("hidden", existingBGCheckRecord.data.id)} />
+    {/if}
+    <input {...bgCheckPayload.timestamp.as("hidden", timestamp)} />
+    <input {...bgCheckPayload.glucose.as("hidden", sections.bgCheck?.glucose ?? 0)} />
+    <input {...bgCheckPayload.glucoseType.as("hidden", sections.bgCheck?.glucoseType ?? GlucoseType.Finger)} />
+    <input {...bgCheckPayload.units.as("hidden", sections.bgCheck?.units ?? GlucoseUnit.MgDl)} />
+  </form>
+{/if}
+
+<!-- Hidden note form -->
+{#if sections.note != null}
+  <form
+    bind:this={noteFormRef}
+    class="hidden"
+    {...activeNoteForm.enhance(({ submit }) =>
+      saveSection(noteSubmission, submit, () => activeNoteForm.result, "Failed to save note", () => (noteFormDone = true)),
+    )}
+  >
+    {#if existingNoteRecord?.data.id}
+      <input {...updateNoteForm.fields.id.as("hidden", existingNoteRecord.data.id)} />
+    {/if}
+    <input {...notePayload.timestamp.as("hidden", timestamp)} />
+    <input {...notePayload.text.as("hidden", sections.note?.text ?? "")} />
+    <input {...notePayload.isAnnouncement.as("hidden", sections.note?.isAnnouncement ?? false)} />
+  </form>
+{/if}
+
+<!-- Hidden device event form -->
+{#if sections.deviceEvent != null}
+  <form
+    bind:this={deviceEventFormRef}
+    class="hidden"
+    {...activeDeviceEventForm.enhance(({ submit }) =>
+      saveSection(deviceEventSubmission, submit, () => activeDeviceEventForm.result, "Failed to save device event", () => (deviceEventFormDone = true)),
+    )}
+  >
+    {#if existingDeviceEventRecord?.data.id}
+      <input {...updateDeviceEventForm.fields.id.as("hidden", existingDeviceEventRecord.data.id)} />
+    {/if}
+    <input {...deviceEventPayload.timestamp.as("hidden", timestamp)} />
+    <input {...deviceEventPayload.eventType.as("hidden", sections.deviceEvent?.eventType ?? DeviceEventType.SiteChange)} />
+    {#if sections.deviceEvent?.notes}
+      <input {...deviceEventPayload.notes.as("hidden", sections.deviceEvent.notes)} />
+    {/if}
+  </form>
+{/if}
+
+<!-- Hidden basal injection form -->
+{#if sections.basalInjection != null}
+  {@const correlationId = activeSectionCount > 1 ? crypto.randomUUID() : undefined}
+  <form
+    bind:this={basalInjectionFormRef}
+    class="hidden"
+    {...activeBasalInjectionForm.enhance(({ submit }) =>
+      saveSection(basalInjectionSubmission, submit, () => activeBasalInjectionForm.result, "Failed to save basal injection", () => (basalInjectionFormDone = true)),
+    )}
+  >
+    {#if existingBasalInjectionRecord?.data.id}
+      <input {...updateBasalInjectionForm.fields.id.as("hidden", existingBasalInjectionRecord.data.id)} />
+    {/if}
+    <input {...basalInjectionPayload.timestamp.as("hidden", timestamp)} />
+    {#if correlationId}
+      <input {...basalInjectionPayload.correlationId.as("hidden", correlationId)} />
+    {/if}
+    {#if sections.basalInjection?.insulinContext?.patientInsulinId}
+      <input {...basalInjectionPayload.patientInsulinId.as("hidden", sections.basalInjection.insulinContext.patientInsulinId)} />
+    {/if}
+    <input {...basalInjectionPayload.units.as("hidden", sections.basalInjection?.units ?? 0)} />
+    {#if sections.basalInjection?.notes}
+      <input {...basalInjectionPayload.notes.as("hidden", sections.basalInjection.notes)} />
+    {/if}
+  </form>
+{/if}
+
 {#if isMobile.current}
   <Sheet.Root bind:open onOpenChange={(o) => !o && onClose()}>
     <Sheet.Content
@@ -480,7 +655,7 @@
 {#snippet dialogBody()}
     <Dialog.Header>
       <Dialog.Title>
-        {isEditing ? "Edit Entry" : "New Entry"}
+        {isEditing ? "Edit entry" : "New entry"}
       </Dialog.Title>
       <Dialog.Description>
         {isEditing
@@ -492,7 +667,7 @@
     <div class="space-y-4">
       <!-- Shared Timestamp -->
       <div class="space-y-1.5">
-        <Label for="entry-timestamp">Date & Time</Label>
+        <Label for="entry-timestamp">Date & time</Label>
         <Input
           id="entry-timestamp"
           type="datetime-local"
@@ -565,7 +740,7 @@
             {#snippet child({ props }: { props: Record<string, unknown> })}
               <Button {...props} variant="outline" size="sm" class="w-full">
                 <Plus class="mr-2 h-4 w-4" />
-                Add Section
+                Add section
               </Button>
             {/snippet}
           </DropdownMenu.Trigger>
@@ -612,13 +787,13 @@
         <Button
           type="button"
           onclick={handleSave}
-          disabled={isSaving || deletion.busy}
+          disabled={isSaving || deletion.busy || formsPending}
         >
-          {#if isSaving}
+          {#if isSaving || formsPending}
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             Saving...
           {:else}
-            {isEditing ? "Save Changes" : "Create"}
+            {isEditing ? "Save changes" : "Create"}
           {/if}
         </Button>
       </Dialog.Footer>

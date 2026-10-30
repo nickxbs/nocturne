@@ -1,7 +1,7 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Separator } from "$lib/components/ui/separator";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import Copy from "@lucide/svelte/icons/copy";
   import Check from "@lucide/svelte/icons/check";
   import ExternalLink from "@lucide/svelte/icons/external-link";
@@ -10,18 +10,18 @@
   import Monitor from "@lucide/svelte/icons/monitor";
   import Apple from "@lucide/svelte/icons/apple";
   import TabletSmartphone from "@lucide/svelte/icons/tablet-smartphone";
-  import XdripQuickConnect from "$lib/components/XdripQuickConnect.svelte";
-  import PreludeQuickConnect from "$lib/components/PreludeQuickConnect.svelte";
-  import type { UploaderApp } from "$lib/api/generated/nocturne-api-client";
+  import XdripQuickConnect from "#lib/components/XdripQuickConnect.svelte";
+  import PreludeQuickConnect from "#lib/components/PreludeQuickConnect.svelte";
+  import type { UploaderApp } from "#lib/api/generated/nocturne-api-client.js";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import { create as createGrant } from "$lib/api/generated/directGrants.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  import { create as createGrant } from "#lib/api/generated/directGrants.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
   import {
     getUploaderName,
     getUploaderDescription,
-  } from "$lib/utils/uploader-labels";
+  } from "#lib/utils/uploader-labels.js";
 
   let {
     open = $bindable(false),
@@ -94,7 +94,7 @@
       <Dialog.Header>
         <Dialog.Title class="flex items-center gap-2">
           <PlatformIcon class="h-5 w-5" />
-          Set up {getUploaderName(selectedUploader)}
+          Configure {getUploaderName(selectedUploader)}
         </Dialog.Title>
         <Dialog.Description>
           {getUploaderDescription(selectedUploader)}
@@ -114,7 +114,7 @@
 
         <!-- Connection Info -->
         <div class="space-y-3">
-          <h4 class="font-medium">Connection Details</h4>
+          <h4 class="font-medium">Connection details</h4>
 
           <div class="space-y-2">
             <span class="text-sm text-muted-foreground">Nocturne URL</span>
@@ -142,7 +142,7 @@
 
           {#if !hasOAuthFlow}
             <div class="space-y-2">
-              <span class="text-sm text-muted-foreground">API Key</span>
+              <span class="text-sm text-muted-foreground">API key</span>
               {#if apiToken}
                 <div class="flex gap-2">
                   <code
@@ -211,7 +211,7 @@
               rel="noopener"
             >
               <ExternalLink class="h-4 w-4" />
-              Visit {getUploaderName(selectedUploader)} Website
+              Visit {getUploaderName(selectedUploader)} website
             </Button>
           </div>
         {/if}

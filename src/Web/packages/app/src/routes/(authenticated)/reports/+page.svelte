@@ -3,33 +3,33 @@
     a1cLabel,
     a1cUnitLabel,
     formatA1cValue,
-  } from "$lib/utils/a1c-formatting";
-  import { Button } from "$lib/components/ui/button";
+  } from "#lib/utils/a1c-formatting.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Gauge from "@lucide/svelte/icons/gauge";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import BarChart3 from "@lucide/svelte/icons/chart-column";
   import Calendar from "@lucide/svelte/icons/calendar";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
-  import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "$lib/components/ui/card";
+  import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "#lib/components/ui/card/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import { page } from "$app/state";
   import {
     reportsOverviewScopes,
     visibleReportCategories,
-  } from "$lib/navigation/report-navigation.svelte";
-  import { satisfiesAllScopes } from "$lib/authorization/scopes";
-  import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
-  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
-  import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
-  import { getReportsData } from "$api/reports.remote";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { formatGlucoseRange, formatGlucoseValue, formatLocale, formatNumber, formatShortDate, getUnitLabel } from "$lib/utils/formatting";
-  import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { coachmark } from "@nocturne/coach";
-  import { coachFor } from "$lib/coach-marks/copy.svelte";
+  } from "#lib/navigation/report-navigation.svelte.js";
+  import { satisfiesAllScopes } from "#lib/authorization/scopes.js";
+  import TIRStackedChart from "#lib/components/reports/TIRStackedChart.svelte";
+  import ReliabilityBadge from "#lib/components/reports/ReliabilityBadge.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
+  import { AmbulatoryGlucoseProfile } from "#lib/components/ambulatory-glucose-profile/index.js";
+  import { getReportsData } from "#lib/api/reports.remote.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { formatGlucoseRange, formatGlucoseValue, formatLocale, formatNumber, formatShortDate, getUnitLabel } from "#lib/utils/formatting.js";
+  import ReportsSkeleton from "#lib/components/reports/ReportsSkeleton.svelte";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
 
   // Get shared date params from context (set by reports layout)
   // Default: 14 days is standard for reports overview
@@ -58,12 +58,12 @@
       canLoadSummary
         ? getReportsData(reportsParams.dateRangeInput)
         : { loading: false, error: null, current: undefined, refresh: () => {} },
-    { errorTitle: "Error Loading Reports", dateParams: reportsParams }
+    { errorTitle: "Error loading reports", dateParams: reportsParams }
   );
 
   const isLoading = $derived(reportsResource.loading);
   const queryData = $derived(reportsResource.current);
-  const entries = $derived(queryData?.entries ?? []);
+  const readingCount = $derived(queryData?.readingCount ?? 0);
   const analysis = $derived(queryData?.analysis);
   const averagedStats = $derived(queryData?.averagedStats);
   const startDate = $derived(reportsResource.date.from);
@@ -73,10 +73,15 @@
   const units = $derived(glucoseUnits.current);
   const glucoseFormatting = $derived({
     unitLabel: getUnitLabel(units),
-    targetRangeDisplay: formatGlucoseRange(70, 180, units),
   });
 
   const tir = $derived(analysis?.timeInRange?.percentages);
+  const consensusRange = $derived.by(() => {
+    const served = analysis?.timeInRange?.thresholds;
+    return served?.targetBottom != null && served.targetTop != null
+      ? { low: served.targetBottom, high: served.targetTop }
+      : undefined;
+  });
   const variability = $derived(analysis?.glycemicVariability);
   const stats = $derived(analysis?.basicStats);
 
@@ -112,23 +117,15 @@
   } as const;
 </script>
 
-<svelte:head>
-  <title>Reports - Nocturne</title>
-  <meta
-    name="description"
-    content="Comprehensive diabetes management analytics and insights"
-  />
-</svelte:head>
-
 {#if isLoading && !reportsResource.current}
   <div class="mx-auto max-w-6xl px-3 py-6 @md:px-6"><ReportsSkeleton /></div>
 {:else if reportsResource.error}
   <div class="flex min-h-[60vh] items-center justify-center px-4">
     <div class="max-w-md space-y-4 text-center">
       <AlertTriangle class="mx-auto size-6 text-destructive" aria-hidden="true" />
-      <h2 class="text-xl font-semibold">Unable to load reports</h2>
+      <h1 class="text-xl font-semibold">Could not load reports</h1>
       <p class="text-muted-foreground">
-        {remoteErrorMessage(reportsResource.error, "Something went wrong")}
+        {remoteErrorMessage(reportsResource.error, "An error occurred")}
       </p>
       <Button variant="outline" onclick={() => reportsResource.refresh()}>
         Try again
@@ -143,7 +140,7 @@
         <p class="mt-1 text-muted-foreground tabular-nums">
           {formatShortDate(startDate)} – {formatShortDate(endDate, true)}
           {#if canLoadSummary}
-            · {formatNumber(entries.length)} readings
+            · {formatNumber(readingCount)} readings
           {/if}
         </p>
       </div>
@@ -151,13 +148,13 @@
         {#if visibleHrefs.has("/reports/executive-summary")}
           <Button href="/reports/executive-summary">
             <Gauge />
-            Executive Summary
+            Executive summary
           </Button>
         {/if}
         {#if visibleHrefs.has("/reports/agp")}
           <Button href="/reports/agp" variant="outline">
             <BarChart3 />
-            AGP Report
+            AGP report
           </Button>
         {/if}
         {#if visibleHrefs.has("/reports/readings")}
@@ -178,12 +175,20 @@
               <h2 class="text-sm font-medium text-muted-foreground">Time in range</h2>
               {#if tirValue != null}
                 <div class="h-64 @sm:h-72">
-                  <TIRStackedChart percentages={tir} personalRange={personalRangeOverlay} showThresholds />
+                  <TIRStackedChart percentages={tir} personalRange={personalRangeOverlay} thresholds={consensusRange} />
                 </div>
               {:else}
                 <p class="text-xl text-muted-foreground">No data</p>
               {/if}
               <p class="text-sm text-muted-foreground">Consensus target: at least 70% of time in range.</p>
+              {#if queryData?.timeZoneUnavailableReason}
+                <p class="text-sm text-muted-foreground">
+                  <TimeZoneNote reason={queryData.timeZoneUnavailableReason}>
+                    Time in a personal target range that changes through the day is not shown.
+                    Days of data are counted on UTC days.
+                  </TimeZoneNote>
+                </p>
+              {/if}
               {#if analysis?.reliability?.meetsReliabilityCriteria === false}
                 <ReliabilityBadge reliability={analysis.reliability} />
               {/if}
@@ -233,30 +238,24 @@
           </CardHeader>
           <CardContent>
             <div class="h-64">
-              <AmbulatoryGlucoseProfile {averagedStats} />
+              <AmbulatoryGlucoseProfile {averagedStats} thresholds={analysis?.timeInRange?.thresholds} />
             </div>
           </CardContent>
         </Card>
       {:else if !isLoading}
-        <Card variant="dashed">
-          <CardContent class="text-center">
-            <h2 class="mb-2 text-lg font-semibold">No data in this range</h2>
-            <p class="mx-auto max-w-md text-muted-foreground">
-              There aren't enough glucose readings between these dates to
-              summarise. Choose a longer date range.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          art="report-pages"
+          variant="dashed"
+          title="No data in this range"
+          headingLevel={2}
+          body="There are not enough glucose readings between these dates to summarize. Choose a longer date range."
+        />
       {/if}
     {/if}
 
     <section
       class="grid gap-x-12 gap-y-10 @3xl:grid-cols-2"
       aria-label="All reports"
-      {@attach coachmark({
-        ...coachFor("setup-reports.categories"),
-        completeOn: { event: "click" },
-      })}
     >
       {#each categories as category (category.id)}
         {@const CategoryIcon = category.icon}
@@ -276,7 +275,7 @@
                   >
                     <div class="min-w-0 flex-1">
                       <div class="font-medium text-foreground">{report.title}</div>
-                      <div class="truncate text-sm text-muted-foreground">{report.description}</div>
+                      <div class="text-sm text-muted-foreground">{report.description}</div>
                     </div>
                     <ChevronRight class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/report:translate-x-0.5" aria-hidden="true" />
                   </a>

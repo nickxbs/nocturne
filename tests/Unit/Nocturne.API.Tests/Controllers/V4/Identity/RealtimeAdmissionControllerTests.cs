@@ -44,6 +44,27 @@ public class RealtimeAdmissionControllerTests
     }
 
     [Fact]
+    public void Admission_names_the_tenant_the_caller_was_admitted_to()
+    {
+        AdmissionFor(MemberSession()).TenantId.Should().Be(Tenant);
+    }
+
+    [Fact]
+    public void Admission_is_refused_when_no_tenant_is_resolved()
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.SetAuthContext(MemberSession());
+        httpContext.SetGrantedScopes(Scope.Normalize([Scope.GlucoseRead]));
+        var controller = new RealtimeAdmissionController
+        {
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
+        };
+
+        controller.GetRealtimeAdmission().Result.Should().BeOfType<StatusCodeResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+    }
+
+    [Fact]
     public void A_member_session_may_join_the_tenant_room()
     {
         TenantRelayFor(new AuthContext
@@ -149,11 +170,21 @@ public class RealtimeAdmissionControllerTests
         admission.HistoryClamped.Should().BeTrue();
     }
 
-    [Fact]
-    public void A_guest_session_is_admitted_to_no_category_whatever_its_scopes()
+    [Theory]
+    [InlineData(Scope.GlucoseRead, new[] { "entries", "glucose" })]
+    [InlineData(Scope.TreatmentsRead, new[] { "treatments", "care" })]
+    public void A_guest_session_is_admitted_to_the_categories_it_holds_a_read_scope_for(string scope, string[] expected)
     {
         AdmissionFor(
             new AuthContext { IsAuthenticated = true, AuthType = AuthType.Guest },
+            scope).Categories.Should().BeEquivalentTo(expected);
+    }
+
+    [Fact]
+    public void A_history_clamped_guest_session_is_admitted_to_no_category()
+    {
+        AdmissionFor(
+            new AuthContext { IsAuthenticated = true, AuthType = AuthType.Guest, LimitTo24Hours = true },
             Scope.GlucoseRead, Scope.TreatmentsRead).Categories.Should().BeEmpty();
     }
 
@@ -169,6 +200,44 @@ public class RealtimeAdmissionControllerTests
                 TenantId = Tenant,
             },
             Scope.GlucoseRead, Scope.TreatmentsRead).Categories.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void A_caller_holding_alerts_readwrite_may_silence_alarms()
+    {
+        AdmissionFor(MemberSession(), Scope.GlucoseRead, Scope.AlertsReadWrite).MayAck.Should().BeTrue();
+    }
+
+    [Fact]
+    public void A_caller_holding_alerts_acknowledge_may_silence_alarms()
+    {
+        AdmissionFor(MemberSession(), Scope.GlucoseRead, Scope.AlertsAcknowledge).MayAck.Should().BeTrue();
+    }
+
+    [Fact]
+    public void A_caller_holding_only_device_notify_may_not_silence_alarms()
+    {
+        AdmissionFor(MemberSession(), Scope.GlucoseRead, Scope.DeviceNotify).MayAck.Should().BeFalse();
+    }
+
+    [Fact]
+    public void A_caller_holding_only_glucose_read_may_not_silence_alarms()
+    {
+        AdmissionFor(MemberSession(), Scope.GlucoseRead).MayAck.Should().BeFalse();
+    }
+
+    [Fact]
+    public void A_read_only_follower_may_not_silence_alarms()
+    {
+        AdmissionFor(MemberSession(), Scope.GlucoseRead, Scope.AlertsRead).MayAck.Should().BeFalse();
+    }
+
+    [Fact]
+    public void A_guest_session_may_not_silence_alarms_whatever_its_scopes()
+    {
+        AdmissionFor(
+            new AuthContext { IsAuthenticated = true, AuthType = AuthType.Guest },
+            Scope.GlucoseRead, Scope.AlertsReadWrite).MayAck.Should().BeFalse();
     }
 
     [Fact]

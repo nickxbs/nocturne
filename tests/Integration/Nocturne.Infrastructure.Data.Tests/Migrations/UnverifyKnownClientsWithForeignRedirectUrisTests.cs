@@ -14,6 +14,7 @@ namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 public class UnverifyKnownClientsWithForeignRedirectUrisFixture : IAsyncLifetime
 {
     private const string PriorMigration = "20261021070431_AddRefreshTokenAndDeviceCodeClaims";
+    private const string MigrationUnderTest = "20261021070559_UnverifyKnownClientsWithForeignRedirectUris";
 
     internal static readonly Guid TenantA = Guid.Parse("11111111-1111-7111-8111-111111111111");
     internal static readonly Guid TenantB = Guid.Parse("22222222-2222-7222-8222-222222222222");
@@ -22,12 +23,11 @@ public class UnverifyKnownClientsWithForeignRedirectUrisFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        var database = await SharedPostgres.CreateEmptyDatabaseAsync("unverify_known_clients");
+        var database = await SharedPostgres.CreateDatabaseAtMigrationAsync(PriorMigration, "unverify_known_clients");
         _migratorConnectionString = database.MigratorConnectionString;
 
-        await MigrateToAsync(PriorMigration);
         await SeedAsync();
-        await MigrateToAsync(targetMigration: null);
+        await MigrateToAsync(MigrationUnderTest);
     }
 
     public Task DisposeAsync() => Task.CompletedTask;

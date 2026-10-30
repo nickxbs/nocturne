@@ -16,8 +16,8 @@ namespace Nocturne.API.Services.Alerts;
 /// each 5-minute tick's context as of that instant, through the same
 /// <see cref="ISensorContextEnricher"/> the live engine uses
 /// (<see cref="ISensorContextEnricher.EnrichAsOfAsync"/>), resolves Do Not Disturb per tick, and
-/// captures the fact timelines. The <see cref="IAlertReplayEngine"/> the <c>Alerts:Engine</c> flag
-/// selects evaluates the rules over those ticks (docs/alerts/engine-semantics.md §8).
+/// captures the fact timelines. The <see cref="IAlertReplayEngine"/> evaluates the rules over those
+/// ticks (docs/alerts/engine-semantics.md §8).
 /// </summary>
 internal sealed class AlertReplayService(
     IAlertRepository alertRepository,
@@ -26,7 +26,8 @@ internal sealed class AlertReplayService(
     ISensorContextEnricher enricher,
     ITenantAccessor tenantAccessor,
     IOptions<AlertEvaluationOptions> evaluationOptions,
-    IAlertReplayEngine replayEngine)
+    IAlertReplayEngine replayEngine,
+    TimeProvider timeProvider)
     : IAlertReplayService
 {
     /// <summary>
@@ -73,7 +74,8 @@ internal sealed class AlertReplayService(
         var tenantId = tenantAccessor.TenantId;
         if (tenantId == Guid.Empty)
         {
-            return new AlertReplayResult(DateTime.UtcNow, DateTime.UtcNow, []);
+            var now = timeProvider.GetUtcNow().UtcDateTime;
+            return new AlertReplayResult(now, now, []);
         }
 
         var stored = await alertRepository.GetEnabledRulesAsync(tenantId, ct);
@@ -216,7 +218,7 @@ internal sealed class AlertReplayService(
 
             var fetched = (await glucoseRepository.GetAsync(
                 from: windowStart, to: windowEnd, device: null, source: null,
-                limit: pageSize, offset: 0, descending: false, nativeOnly: false,
+                limit: pageSize, offset: 0, descending: false,
                 afterTimestamp: afterTimestamp, afterId: afterId, ct: ct)).ToList();
 
             // A short page is the last one.
@@ -412,7 +414,7 @@ internal sealed class AlertReplayService(
         Dictionary<string, decimal> prev,
         Dictionary<string, List<FactSnapshotPoint>> points)
     {
-        var tickMs = new DateTimeOffset(tickUtc).ToUnixTimeMilliseconds();
+        var tickMs = tickUtc.ToMills();
 
         foreach (var binding in FactBindings)
         {
@@ -449,7 +451,7 @@ internal sealed class AlertReplayService(
     /// midnight-to-midnight, converted to UTC. On DST-transition days the resulting UTC
     /// window is 23 or 25 hours wide rather than exactly 24.
     /// </summary>
-    private static (DateTime Start, DateTime End) ResolveWindow(
+    private (DateTime Start, DateTime End) ResolveWindow(
         DateOnly? localDate, string? timezone, DateTime? fromUtc, DateTime? toUtc)
     {
         // Absolute UTC range wins when both endpoints are provided. The caller is
@@ -465,7 +467,7 @@ internal sealed class AlertReplayService(
 
         if (localDate is null)
         {
-            var now = DateTime.UtcNow;
+            var now = timeProvider.GetUtcNow().UtcDateTime;
             return (now.AddHours(-24), now);
         }
 

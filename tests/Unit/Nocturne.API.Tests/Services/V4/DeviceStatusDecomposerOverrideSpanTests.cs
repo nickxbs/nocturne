@@ -49,7 +49,8 @@ public class DeviceStatusDecomposerOverrideSpanTests : IDisposable
                 MicrosecondPrecision<IStateSpanRepository>.Wrap(_spans), NullLogger<StateSpanService>.Instance),
             Mock.Of<IDeviceService>(),
             Mock.Of<IAuditContext>(),
-            NullLogger<DeviceStatusDecomposer>.Instance);
+            Mock.Of<ILoopClosedLoopStamper>(),
+            TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
     }
 
     public void Dispose()

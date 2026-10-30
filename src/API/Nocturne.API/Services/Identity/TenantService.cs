@@ -1,6 +1,5 @@
 using Nocturne.API.Multitenancy;
 using System.Net.Http.Json;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -11,6 +10,7 @@ using Nocturne.API.Services.Docs;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
@@ -24,7 +24,7 @@ namespace Nocturne.API.Services.Identity;
 /// <see cref="ITenantRoleService"/> default role seeding, and per-tenant <see cref="IMemoryCache"/> caching.
 /// </summary>
 /// <remarks>
-/// Slugs must match a <c>[a-z0-9][a-z0-9\-]{1,62}[a-z0-9]</c> pattern and cannot be reserved words.
+/// Slugs must match a <c>[a-z0-9][a-z0-9\-]{1,61}[a-z0-9]</c> pattern and cannot be reserved words.
 /// Tenant lookups by slug are cached with a short TTL to reduce database round-trips on every request.
 /// </remarks>
 /// <seealso cref="ITenantService"/>
@@ -38,6 +38,7 @@ public partial class TenantService : ITenantService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ITenantRoleService _roleService;
     private readonly GrantRevocationService _grantRevocation;
+    private readonly TimeProvider _time;
     private readonly ILogger<TenantService> _logger;
 
     private static readonly HashSet<string> ReservedSlugs =
@@ -65,7 +66,7 @@ public partial class TenantService : ITenantService
         "nightscout", "cgm", "patient", "clinic", "provider",
     ];
 
-    [GeneratedRegex(@"^[a-z0-9][a-z0-9\-]{1,62}[a-z0-9]$")]
+    [GeneratedRegex(@"^[a-z0-9][a-z0-9\-]{1,61}[a-z0-9]$")]
     private static partial Regex SlugPattern();
 
     /// <summary>
@@ -84,6 +85,7 @@ public partial class TenantService : ITenantService
         IHttpClientFactory httpClientFactory,
         ITenantRoleService roleService,
         GrantRevocationService grantRevocation,
+        TimeProvider timeProvider,
         ILogger<TenantService> logger)
     {
         _factory = factory;
@@ -92,6 +94,7 @@ public partial class TenantService : ITenantService
         _httpClientFactory = httpClientFactory;
         _roleService = roleService;
         _grantRevocation = grantRevocation;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -123,9 +126,6 @@ public partial class TenantService : ITenantService
 
         // Create Public subject membership (no roles = private by default)
         await CreatePublicSubjectMembershipAsync(context, tenant.Id, ct);
-
-        // Seed bundled known OAuth clients (Trio, xDrip+, etc.)
-        await SeedKnownOAuthClientsAsync(context, tenant.Id, ct);
 
         // Assign creator as owner
         var ownerRole = await context.TenantRoles
@@ -159,15 +159,12 @@ public partial class TenantService : ITenantService
         // Create Public subject membership (no roles = private by default)
         await CreatePublicSubjectMembershipAsync(context, tenant.Id, ct);
 
-        // Seed bundled known OAuth clients (Trio, xDrip+, etc.)
-        await SeedKnownOAuthClientsAsync(context, tenant.Id, ct);
-
         TenantResolutionMiddleware.EvictTenant(_cache, tenant.Slug);
         return ToCreatedDto(tenant);
     }
 
     /// <summary>
-    /// Re-seeds roles, public membership, and OAuth clients for an existing
+    /// Re-seeds roles and public membership for an existing
     /// tenant after its data has been purged. Used by the dev-only reset flow.
     /// </summary>
     public async Task SeedAfterResetAsync(Guid tenantId, CancellationToken ct = default)
@@ -176,7 +173,6 @@ public partial class TenantService : ITenantService
 
         await _roleService.SeedRolesForTenantAsync(tenantId, ct);
         await CreatePublicSubjectMembershipAsync(context, tenantId, ct);
-        await SeedKnownOAuthClientsAsync(context, tenantId, ct);
     }
 
     public async Task<List<TenantDto>> GetAllAsync(CancellationToken ct = default)
@@ -239,7 +235,7 @@ public partial class TenantService : ITenantService
                     m.Subject?.Name,
                     m.Subject != null && m.Subject.IsSystemSubject,
                     m.MemberRoles.Select(mr => new TenantMemberRoleDto(
-                        mr.TenantRoleId, mr.TenantRole.Name, mr.TenantRole.Slug)).ToList(),
+                        mr.TenantRoleId, mr.TenantRole.Name, mr.TenantRole.Slug, mr.TenantRole.Permissions)).ToList(),
                     m.DirectPermissions,
                     m.Label,
                     m.LimitTo24Hours,
@@ -274,7 +270,7 @@ public partial class TenantService : ITenantService
         var settings = await context.Tenants
             .AsNoTracking()
             .Where(t => t.Id == id)
-            .Select(t => new TenantSettingsDto(t.AllowPublicDocs))
+            .Select(t => new TenantSettingsDto(t.AllowPublicDocs, t.Slug, t.DisplayName, t.SysCreatedAt))
             .FirstOrDefaultAsync(ct);
 
         return settings ?? throw new KeyNotFoundException($"Tenant {id} not found");
@@ -294,7 +290,69 @@ public partial class TenantService : ITenantService
         // the opt-in.
         ScalarAuthProvider.EvictTenant(_cache, tenant.Slug);
 
-        return new TenantSettingsDto(tenant.AllowPublicDocs);
+        return ToSettingsDto(tenant);
+    }
+
+    public async Task<TenantSettingsDto> SetDisplayNameAsync(
+        Guid id, string displayName, CancellationToken ct = default)
+    {
+        await using var context = await _factory.CreatePlatformAsync(ct);
+        var tenant = await context.Tenants.FindAsync([id], ct)
+            ?? throw new KeyNotFoundException($"Tenant {id} not found");
+
+        tenant.DisplayName = displayName;
+        await context.SaveChangesAsync(ct);
+
+        // Both the host and the share-link resolutions cache a TenantContext, which carries the name.
+        TenantResolutionMiddleware.EvictTenant(_cache, tenant.Slug);
+        if (tenant.ShareToken is { } shareTokenHash)
+            ShareTokenCacheService.EvictByHash(_cache, shareTokenHash);
+
+        return ToSettingsDto(tenant);
+    }
+
+    public async Task<PatientRelationship?> GetPatientRelationshipAsync(Guid id, CancellationToken ct = default)
+    {
+        await using var context = await _factory.CreatePlatformAsync(ct);
+        var tenant = await context.Tenants
+            .AsNoTracking()
+            .Where(t => t.Id == id)
+            .Select(t => new { t.PatientRelationship })
+            .FirstOrDefaultAsync(ct)
+            ?? throw new KeyNotFoundException($"Tenant {id} not found");
+
+        return tenant.PatientRelationship;
+    }
+
+    public async Task SetPatientRelationshipAsync(
+        Guid id, PatientRelationship relationship, CancellationToken ct = default)
+    {
+        await using var context = await _factory.CreatePlatformAsync(ct);
+        var tenant = await context.Tenants.FindAsync([id], ct)
+            ?? throw new KeyNotFoundException($"Tenant {id} not found");
+
+        tenant.PatientRelationship = relationship;
+        await context.SaveChangesAsync(ct);
+    }
+
+    public async Task<string?> GetDefaultGlucoseUnitsAsync(Guid id, CancellationToken ct = default)
+    {
+        await using var context = await _factory.CreatePlatformAsync(ct);
+        return await context.Tenants
+            .AsNoTracking()
+            .Where(t => t.Id == id)
+            .Select(t => t.DefaultGlucoseUnits)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    public async Task SetDefaultGlucoseUnitsAsync(Guid id, string units, CancellationToken ct = default)
+    {
+        await using var context = await _factory.CreatePlatformAsync(ct);
+        var tenant = await context.Tenants.FindAsync([id], ct)
+            ?? throw new KeyNotFoundException($"Tenant {id} not found");
+
+        tenant.DefaultGlucoseUnits = units;
+        await context.SaveChangesAsync(ct);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
@@ -424,14 +482,22 @@ public partial class TenantService : ITenantService
         return new MemberRemovalResult(true);
     }
 
-    public async Task<List<TenantDto>> GetTenantsForSubjectAsync(
-        Guid subjectId, CancellationToken ct = default)
+    public Task<List<TenantDto>> GetTenantsForSubjectAsync(
+        Guid subjectId, CancellationToken ct = default) =>
+        QueryTenantsForSubjectAsync(subjectId, reachableOnly: false, ct);
+
+    public Task<List<TenantDto>> GetReachableTenantsForSubjectAsync(
+        Guid subjectId, CancellationToken ct = default) =>
+        QueryTenantsForSubjectAsync(subjectId, reachableOnly: true, ct);
+
+    private async Task<List<TenantDto>> QueryTenantsForSubjectAsync(
+        Guid subjectId, bool reachableOnly, CancellationToken ct)
     {
         // Genuinely cross-tenant: the answer is the set of tenants this person belongs to, which
         // no single tenant pin can express. The subject pin gives reach over their own rows only.
         await using var context = await _factory.CreateForSubjectAsync(subjectId, ct);
         return await context.TenantMembers.AsNoTracking()
-            .Where(tm => tm.SubjectId == subjectId)
+            .Where(tm => tm.SubjectId == subjectId && (!reachableOnly || tm.Tenant!.IsActive))
             .OrderByDescending(tm => tm.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner))
             .ThenBy(tm => tm.SysCreatedAt)
             .ThenBy(tm => tm.Tenant!.Slug)
@@ -441,14 +507,18 @@ public partial class TenantService : ITenantService
             .ToListAsync(ct);
     }
 
-    public async Task<SlugValidationResult> ValidateSlugAsync(string slug, CancellationToken ct = default)
+    public Task<SlugValidationResult> ValidateSlugAsync(string slug, CancellationToken ct = default) =>
+        ValidateSlugAsync(slug, allowReserved: false, ct);
+
+    public async Task<SlugValidationResult> ValidateSlugAsync(
+        string slug, bool allowReserved, CancellationToken ct = default)
     {
         var normalized = slug.ToLowerInvariant().Trim();
 
         if (!SlugPattern().IsMatch(normalized))
-            return new SlugValidationResult(false, "Slug must be 3-64 characters, alphanumeric and hyphens only, no leading/trailing hyphens");
+            return new SlugValidationResult(false, "Slug must be 3-63 characters, alphanumeric and hyphens only, no leading/trailing hyphens");
 
-        if (ReservedSlugs.Contains(normalized))
+        if (!allowReserved && ReservedSlugs.Contains(normalized))
             return new SlugValidationResult(false, "This name is reserved");
 
         await using var context = await _factory.CreatePlatformAsync(ct);
@@ -546,9 +616,6 @@ public partial class TenantService : ITenantService
                 _logger.LogWarning("Public system subject not found — skipping public access membership for tenant {TenantId}", tenant.Id);
             }
 
-            // Seed bundled known OAuth clients (Trio, xDrip+, etc.)
-            await SeedKnownOAuthClientsAsync(context, tenant.Id, token);
-
             // 2. Resolve the owner subject. An OIDC account maps to one subject reused across
             // tenants, so an already-linked identity names the owner even when the checkout email
             // differs. Nothing else does: the owner email is never matched to an existing subject,
@@ -630,14 +697,14 @@ public partial class TenantService : ITenantService
                         OidcSubjectId = oidcIdentity.OidcSubjectId,
                         Issuer = normalizedIssuer!,
                         Email = oidcIdentity.Email,
-                        LinkedAt = DateTime.UtcNow,
+                        LinkedAt = _time.GetUtcNow().UtcDateTime,
                     });
                 }
                 else
                 {
                     // Identity already links to the owner subject resolved above;
                     // just record the reuse.
-                    existingIdentity.LastUsedAt = DateTime.UtcNow;
+                    existingIdentity.LastUsedAt = _time.GetUtcNow().UtcDateTime;
                 }
             }
             await context.SaveChangesAsync(token);
@@ -694,45 +761,9 @@ public partial class TenantService : ITenantService
     private static TenantDto ToDto(TenantEntity t) =>
         new(t.Id, t.Slug, t.DisplayName, t.IsActive, t.SysCreatedAt);
 
+    private static TenantSettingsDto ToSettingsDto(TenantEntity t) =>
+        new(t.AllowPublicDocs, t.Slug, t.DisplayName, t.SysCreatedAt);
+
     private static TenantCreatedDto ToCreatedDto(TenantEntity t) =>
         new(t.Id, t.Slug, t.DisplayName, t.IsActive, t.SysCreatedAt);
-
-    /// <summary>
-    /// Seed the bundled known-app directory into a tenant's oauth_clients.
-    /// Idempotent: existing rows for the same software_id are left untouched.
-    /// </summary>
-    private static async Task SeedKnownOAuthClientsAsync(
-        NocturneDbContext context, Guid tenantId, CancellationToken ct)
-    {
-        var existingSoftwareIds = await context.OAuthClients
-            .IgnoreQueryFilters()
-            .Where(c => c.TenantId == tenantId && c.SoftwareId != null)
-            .Select(c => c.SoftwareId!)
-            .ToListAsync(ct);
-        var existingSet = new HashSet<string>(existingSoftwareIds, StringComparer.Ordinal);
-
-        var added = 0;
-        foreach (var entry in KnownOAuthClients.Entries.Where(e => !existingSet.Contains(e.SoftwareId)))
-        {
-            context.OAuthClients.Add(new OAuthClientEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = tenantId,
-                ClientId = Guid.CreateVersion7().ToString(),
-                SoftwareId = entry.SoftwareId,
-                ClientName = entry.DisplayName,
-                ClientUri = entry.Homepage,
-                LogoUri = entry.LogoUri,
-                DisplayName = entry.DisplayName,
-                IsKnown = true,
-                RedirectUris = JsonSerializer.Serialize(entry.RedirectUris),
-            });
-            added++;
-        }
-
-        if (added > 0)
-        {
-            await context.SaveChangesAsync(ct);
-        }
-    }
 }

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
@@ -107,7 +108,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// <summary>
     /// The subject whose own rows a subject-scoped cross-tenant read may reach (the tenant switcher,
     /// the caregiver overview, membership enumeration), carried to the <c>app.current_subject_id</c>
-    /// GUC. <see cref="Guid.Empty"/> leaves the GUC unset, so a policy arm reading it matches no row.
+    /// GUC. <see cref="Guid.Empty"/> leaves the GUC unset, and the <c>subject_pin</c> policy then
+    /// admits every row.
     /// </summary>
     public Guid SubjectId { get; internal set; }
 
@@ -239,6 +241,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// </summary>
     public DbSet<PlatformSettingsEntity> PlatformSettings { get; set; }
 
+    /// <summary>
+    /// One-time notices sent to tenant owners (not tenant-scoped), one per kind, version and owner.
+    /// </summary>
+    public DbSet<OwnerNoticeEntity> OwnerNotices { get; set; }
+
+    public DbSet<InstanceKeyCheckEntity> InstanceKeyChecks { get; set; }
+
     // In-App Notification entities
 
     public DbSet<InAppNotificationEntity> InAppNotifications { get; set; }
@@ -364,6 +373,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<AlertExcursionMuteEntity> AlertExcursionMutes { get; set; }
 
+    public DbSet<AlertExcursionReceiptEntity> AlertExcursionReceipts { get; set; }
+
     public DbSet<AlertInstanceEntity> AlertInstances { get; set; }
 
     public DbSet<AlertDeliveryEntity> AlertDeliveries { get; set; }
@@ -406,11 +417,17 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<CoachMarkStateEntity> CoachMarkStates { get; set; }
 
+    public DbSet<SetupHubItemEntity> SetupHubItems { get; set; }
+
+    public DbSet<SetupHubAdditionEntity> SetupHubAdditions { get; set; }
+
     public DbSet<TranslationDraftEntity> TranslationDrafts { get; set; }
 
     public DbSet<ReadAccessLogEntity> ReadAccessLog { get; set; }
 
     public DbSet<TenantAuditConfigEntity> TenantAuditConfig { get; set; }
+
+    public DbSet<BackfillCompletionEntity> BackfillCompletions { get; set; }
 
     public DbSet<TenantDataRetentionConfigEntity> TenantDataRetentionConfig { get; set; }
 
@@ -526,6 +543,23 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     ];
 
     /// <summary>
+    /// V4 record tables whose lists read one tenant newest-first by timestamp, then id on the tables
+    /// that tie-break on it.
+    /// </summary>
+    internal static readonly Type[] V4SortedListEntities =
+    [
+        typeof(SensorGlucoseEntity),
+        typeof(MeterGlucoseEntity),
+        typeof(CalibrationEntity),
+        typeof(BolusEntity),
+        typeof(CarbIntakeEntity),
+        typeof(BGCheckEntity),
+        typeof(NoteEntity),
+        typeof(DeviceEventEntity),
+        .. V4SnapshotEntities,
+    ];
+
+    /// <summary>
     /// V4 record tables whose legacy id is an insert-only dedup key, adding the span-shaped
     /// <see cref="TempBasalEntity"/>. The snapshots belong here too: their sync-identifier
     /// uniqueness is filtered on a non-null identifier, which a legacy import never carries.
@@ -571,6 +605,28 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         typeof(CarbRatioScheduleEntity),
         typeof(SensitivityScheduleEntity),
         typeof(TargetRangeScheduleEntity),
+    ];
+
+    /// <summary>
+    /// <c>SET NULL</c> foreign keys on the high-volume record tables that most rows leave empty.
+    /// The index only serves the referential action when a device, bolus calculation or APS
+    /// snapshot is deleted, which never looks for a null, so it is filtered to the non-null rows.
+    /// On production the columns are 67-100% null.
+    /// </summary>
+    internal static readonly (Type Entity, string Property)[] SparseForeignKeys =
+    [
+        (typeof(ApsSnapshotEntity), nameof(ApsSnapshotEntity.DeviceId)),
+        (typeof(ApsSnapshotEntity), nameof(ApsSnapshotEntity.PatientDeviceId)),
+        (typeof(PumpSnapshotEntity), nameof(PumpSnapshotEntity.DeviceId)),
+        (typeof(PumpSnapshotEntity), nameof(PumpSnapshotEntity.PatientDeviceId)),
+        (typeof(UploaderSnapshotEntity), nameof(UploaderSnapshotEntity.DeviceId)),
+        (typeof(TempBasalEntity), nameof(TempBasalEntity.DeviceId)),
+        (typeof(TempBasalEntity), nameof(TempBasalEntity.PatientDeviceId)),
+        (typeof(TempBasalEntity), nameof(TempBasalEntity.ApsSnapshotId)),
+        (typeof(BolusEntity), nameof(BolusEntity.DeviceId)),
+        (typeof(BolusEntity), nameof(BolusEntity.PatientDeviceId)),
+        (typeof(BolusEntity), nameof(BolusEntity.ApsSnapshotId)),
+        (typeof(BolusEntity), nameof(BolusEntity.BolusCalculationId)),
     ];
 
     /// <summary>
@@ -729,18 +785,36 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .HasFilter("deleted_at IS NULL");
         }
 
-        // GetLatestAsync and GetLatestBeforeAsync read a snapshot table newest-first for one
-        // tenant, with no data source to pin, so the watermark index above cannot serve them.
-        // ix_<table>_timestamp answers them today at 2,452 to 20,368 index tuples read per scan.
-        foreach (var entity in V4SnapshotEntities.Select(t => modelBuilder.Entity(t)))
+        // A V4 list reads one tenant newest-first by timestamp, then id on the tables that tie-break
+        // on it. With no index leading (tenant_id, timestamp), a LIMIT read reads every live row and
+        // sorts; the three tables that keep such an index for the dedup read still gain the id
+        // tie-break and the live-rows predicate here. GetLatestAsync and GetLatestBeforeAsync on a
+        // snapshot table walk the same index.
+        foreach (var entity in V4SortedListEntities.Select(t => modelBuilder.Entity(t)))
         {
             entity.HasIndex(
                     nameof(ITenantScoped.TenantId),
-                    nameof(IV4TimeSeriesEntity.Timestamp))
-                .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_timestamp")
-                .IsDescending(false, true)
+                    nameof(IV4TimeSeriesEntity.Timestamp),
+                    nameof(IIdentified.Id))
+                .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_timestamp_id")
+                .IsDescending(false, true, true)
                 .HasFilter("deleted_at IS NULL");
         }
+
+        // The closed-loop stamp bounds its range by the newest snapshot of one algorithm for one
+        // tenant; see ApsSnapshotRepository.StampLoopClosedLoopAsync. Without aps_system in an
+        // index, that max() reads every snapshot the tenant has.
+        modelBuilder.Entity<ApsSnapshotEntity>()
+            .HasIndex(e => new { e.TenantId, e.AidAlgorithm, e.Timestamp })
+            .HasDatabaseName("ix_aps_snapshots_tenant_algorithm_timestamp")
+            .IsDescending(false, false, true)
+            .HasFilter("deleted_at IS NULL");
+
+        modelBuilder.Entity<StateSpanEntity>()
+            .HasIndex(nameof(ITenantScoped.TenantId), nameof(StateSpanEntity.StartTimestamp), nameof(IIdentified.Id))
+            .HasDatabaseName("ix_state_spans_tenant_start_id")
+            .IsDescending(false, true, true)
+            .HasFilter("deleted_at IS NULL");
 
         // The device status list walks extras newest-first beside the snapshots; see
         // DeviceStatusGroupRepository.GetAsync.
@@ -809,6 +883,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .HasDatabaseName($"IX_{entity.Metadata.GetTableName()}_tenant_id");
         }
 
+        foreach (var (type, property) in SparseForeignKeys)
+        {
+            var entity = modelBuilder.Entity(type);
+            var column = entity.Property(property).Metadata.GetColumnName();
+            entity.HasIndex(property)
+                .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_{column}")
+                .HasFilter($"{column} IS NOT NULL");
+        }
+
         foreach (var entity in V4ProfileNamedEntities.Select(t => modelBuilder.Entity(t)))
         {
             entity.HasIndex(nameof(BasalScheduleEntity.ProfileName))
@@ -834,6 +917,22 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_source_sync_id")
                 .IsUnique()
                 .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
+        }
+
+        // The sync-key lookups also want the user tombstones the unique index above leaves out, for
+        // the same reason as the legacy-id companion above: the planner BitmapOrs the two. Named, as there.
+        foreach (var entity in SyncDedupedEntities.Select(t => modelBuilder.Entity(t)))
+        {
+            var name = $"ix_{entity.Metadata.GetTableName()}_tenant_source_sync_id_user_deleted";
+            entity.HasIndex(
+                    [
+                        nameof(ITenantScoped.TenantId),
+                        nameof(ISyncDedupable.DataSource),
+                        nameof(ISyncDedupable.SyncIdentifier),
+                    ],
+                    name)
+                .HasDatabaseName(name)
+                .HasFilter("sync_identifier IS NOT NULL AND deleted_by_user");
         }
     }
 
@@ -928,8 +1027,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder
             .Entity<TreatmentFoodEntity>()
-            .HasIndex(tf => tf.FoodId)
-            .HasDatabaseName("ix_treatment_foods_food_id");
+            .HasIndex(tf => new { tf.TenantId, tf.FoodId })
+            .HasDatabaseName("ix_treatment_foods_tenant_id_food_id");
 
         modelBuilder
             .Entity<TreatmentFoodEntity>()
@@ -943,8 +1042,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder
             .Entity<UserFoodFavoriteEntity>()
-            .HasIndex(f => f.FoodId)
-            .HasDatabaseName("ix_user_food_favorites_food_id");
+            .HasIndex(f => new { f.TenantId, f.FoodId })
+            .HasDatabaseName("ix_user_food_favorites_tenant_id_food_id");
 
         modelBuilder
             .Entity<UserFoodFavoriteEntity>()
@@ -1213,28 +1312,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder
             .Entity<TrackerDefinitionEntity>()
-            .HasIndex(d => d.UserId)
-            .HasDatabaseName("ix_tracker_definitions_user_id");
-
-        modelBuilder
-            .Entity<TrackerDefinitionEntity>()
-            .HasIndex(d => new { d.UserId, d.Category })
-            .HasDatabaseName("ix_tracker_definitions_user_category");
-
-        modelBuilder
-            .Entity<TrackerDefinitionEntity>()
-            .HasIndex(d => d.IsFavorite)
-            .HasDatabaseName("ix_tracker_definitions_is_favorite");
-
-        modelBuilder
-            .Entity<TrackerDefinitionEntity>()
             .HasIndex(d => d.CreatedAt)
             .HasDatabaseName("ix_tracker_definitions_created_at");
-
-        modelBuilder
-            .Entity<TrackerInstanceEntity>()
-            .HasIndex(i => i.UserId)
-            .HasDatabaseName("ix_tracker_instances_user_id");
 
         modelBuilder
             .Entity<TrackerInstanceEntity>()
@@ -1249,19 +1328,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder
             .Entity<TrackerInstanceEntity>()
-            .HasIndex(i => new { i.UserId, i.CompletedAt })
-            .HasDatabaseName("ix_tracker_instances_user_completed");
-
-        modelBuilder
-            .Entity<TrackerInstanceEntity>()
             .HasIndex(i => i.StartedAt)
             .HasDatabaseName("ix_tracker_instances_started_at")
             .IsDescending();
-
-        modelBuilder
-            .Entity<TrackerPresetEntity>()
-            .HasIndex(p => p.UserId)
-            .HasDatabaseName("ix_tracker_presets_user_id");
 
         modelBuilder
             .Entity<TrackerPresetEntity>()
@@ -1289,6 +1358,18 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(r => r.ManagedBy)
             .HasDatabaseName("ix_alert_rules_managed_by")
             .HasFilter("managed_by IS NOT NULL");
+
+        modelBuilder
+            .Entity<AlertRuleEntity>()
+            .Property(r => r.StarterKind)
+            .HasConversion<string>();
+
+        modelBuilder
+            .Entity<AlertRuleEntity>()
+            .HasIndex(r => new { r.StarterKind, r.TenantId })
+            .IsUnique()
+            .HasFilter("starter_kind IS NOT NULL")
+            .HasDatabaseName("ix_alert_rules_starter_kind_tenant");
 
         modelBuilder
             .Entity<TrackerNotificationThresholdEntity>()
@@ -1328,8 +1409,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(s => s.Source)
             .HasDatabaseName("ix_state_spans_source");
 
-        // Connector resume watermark: MAX(start_timestamp) over the activity categories for one
-        // data source. Tenant leads because a source id is the same string installation-wide, so
+        // Connector resume watermarks: the latest start of one data source, activity and non-activity,
+        // each probing this index once per category (see StateSpanRepository.GetLatestStartAsync).
+        // Tenant leads because a source id is the same string installation-wide, so
         // ix_state_spans_source would walk every tenant's spans for that source.
         modelBuilder
             .Entity<StateSpanEntity>()
@@ -1352,14 +1434,14 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder
             .Entity<StateSpanEntity>()
-            .HasIndex(s => s.SupersededById)
-            .HasDatabaseName("ix_state_spans_superseded_by_id");
+            .HasIndex(s => new { s.TenantId, s.SupersededById })
+            .HasDatabaseName("ix_state_spans_tenant_id_superseded_by_id");
 
         modelBuilder
             .Entity<StateSpanEntity>()
             .HasOne<StateSpanEntity>()
             .WithMany()
-            .HasForeignKey(s => s.SupersededById)
+            .HasForeignKey(s => new { s.TenantId, s.SupersededById })
             .OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder
@@ -1411,25 +1493,25 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .Entity<SleepStageEntity>()
             .HasOne(s => s.SleepSession)
             .WithMany(ss => ss.Stages)
-            .HasForeignKey(s => s.SleepSessionId)
+            .HasForeignKey(s => new { s.TenantId, s.SleepSessionId })
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder
             .Entity<SleepBiometricSampleEntity>()
             .HasOne(b => b.SleepSession)
             .WithMany(ss => ss.BiometricSamples)
-            .HasForeignKey(b => b.SleepSessionId)
+            .HasForeignKey(b => new { b.TenantId, b.SleepSessionId })
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder
             .Entity<SleepStageEntity>()
-            .HasIndex(s => s.SleepSessionId)
-            .HasDatabaseName("ix_sleep_stages_sleep_session_id");
+            .HasIndex(s => new { s.TenantId, s.SleepSessionId })
+            .HasDatabaseName("ix_sleep_stages_tenant_id_sleep_session_id");
 
         modelBuilder
             .Entity<SleepBiometricSampleEntity>()
-            .HasIndex(b => b.SleepSessionId)
-            .HasDatabaseName("ix_sleep_biometric_samples_sleep_session_id");
+            .HasIndex(b => new { b.TenantId, b.SleepSessionId })
+            .HasDatabaseName("ix_sleep_biometric_samples_tenant_id_sleep_session_id");
 
         // Sources dedupe per tenant: the identifier alone must not be unique, or tenant B
         // migrating from the same URL as tenant A would collide with (and read) A's source row.
@@ -1490,6 +1572,17 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .Entity<ConnectorResetJobEntity>()
             .HasIndex(j => j.State)
             .HasDatabaseName("ix_connector_reset_jobs_state");
+
+        modelBuilder
+            .Entity<BackfillCompletionEntity>()
+            .HasKey(c => new { c.Backfill, c.TenantId });
+
+        modelBuilder
+            .Entity<BackfillCompletionEntity>()
+            .HasOne<TenantEntity>()
+            .WithMany()
+            .HasForeignKey(c => c.TenantId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder
             .Entity<PendingTenantJobEntity>()
@@ -1558,6 +1651,21 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_platform_settings_category")
             .IsUnique();
 
+        modelBuilder.Entity<OwnerNoticeEntity>()
+            .HasIndex(n => new { n.Kind, n.Version, n.TenantId, n.SubjectId })
+            .HasDatabaseName("ux_owner_notices_kind_version_tenant_subject")
+            .IsUnique();
+
+        modelBuilder.Entity<OwnerNoticeEntity>()
+            .HasOne<TenantEntity>()
+            .WithMany()
+            .HasForeignKey(n => n.TenantId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<InstanceKeyCheckEntity>()
+            .Property(c => c.Id)
+            .ValueGeneratedNever();
+
         modelBuilder
             .Entity<InAppNotificationEntity>()
             .HasIndex(n => n.UserId)
@@ -1611,7 +1719,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .Entity<OAuthClientEntity>()
             .HasIndex(c => new { c.TenantId, c.SoftwareId })
             .HasDatabaseName("ix_oauth_clients_tenant_software_id")
-            .IsUnique()
             .HasFilter("\"software_id\" IS NOT NULL");
 
         modelBuilder
@@ -1759,6 +1866,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_sensor_glucose_patient_device_id")
             .HasFilter("patient_device_id IS NOT NULL");
 
+        // These also serve the dedup unlinked read in DeduplicationService, which ranges on timestamp
+        // over soft-deleted rows too and so cannot use the partial list indexes.
         modelBuilder
             .Entity<SensorGlucoseEntity>()
             .HasIndex(e => new { e.TenantId, e.Timestamp })
@@ -1769,6 +1878,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .Entity<BolusEntity>()
             .HasIndex(e => new { e.TenantId, e.Timestamp })
             .HasDatabaseName("ix_boluses_tenant_timestamp")
+            .IsDescending(false, true);
+
+        modelBuilder
+            .Entity<CarbIntakeEntity>()
+            .HasIndex(e => new { e.TenantId, e.Timestamp })
+            .HasDatabaseName("ix_carb_intakes_tenant_timestamp")
             .IsDescending(false, true);
 
         // TimezoneTimeline: one zone-change boundary per tenant per instant (the ordered list is
@@ -1792,12 +1907,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(e => new { e.TenantId, e.Connector, e.Source, e.ObservedAt })
             .HasDatabaseName("ix_device_clock_observations_tenant_connector_source_observed")
             .IsUnique();
-
-        modelBuilder
-            .Entity<CarbIntakeEntity>()
-            .HasIndex(e => new { e.TenantId, e.Timestamp })
-            .HasDatabaseName("ix_carb_intakes_tenant_timestamp")
-            .IsDescending(false, true);
 
         // Latest-of-a-kind lookups (device age, alert enrichment) filter on tenant + event type
         // and take the newest row. Without the event_type column the plan walks the whole
@@ -1901,6 +2010,27 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_alert_invites_token")
             .IsUnique();
 
+        modelBuilder.Entity<TenantEntity>()
+            .Property(t => t.PatientRelationship)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<SetupHubItemEntity>(entity =>
+        {
+            entity.Property(e => e.ItemKey).HasConversion<string>();
+            entity.Property(e => e.State).HasConversion<string>();
+            entity.HasIndex(e => new { e.TenantId, e.ItemKey })
+                .IsUnique()
+                .HasDatabaseName("ix_setup_hub_items_tenant_item_key");
+        });
+
+        modelBuilder.Entity<SetupHubAdditionEntity>(entity =>
+        {
+            entity.Property(e => e.ItemKey).HasConversion<string>();
+            entity.Property(e => e.RecordKind).HasConversion<string>();
+            entity.HasIndex(e => new { e.TenantId, e.ItemKey, e.RecordKind })
+                .HasDatabaseName("ix_setup_hub_additions_tenant_item_kind");
+        });
+
         // Signal loss sweep: find tenants that haven't reported recently
         modelBuilder.Entity<TenantEntity>()
             .HasIndex(t => t.LastReadingAt)
@@ -1988,13 +2118,38 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         });
     }
 
+    /// <summary>
+    /// Keys <paramref name="entity"/> on <c>(TenantId, Id)</c>. The writer derives these ids from the
+    /// client's record id, and two tenants fed from one upstream send the same one. Every lookup by id
+    /// is tenant-filtered, so a global key would reject the second tenant's row without either tenant
+    /// seeing why. EF generates no value for a member of a composite key by convention, so <c>Id</c>
+    /// is marked generated to keep the UUID v7 backstop in <see cref="OnModelCreating"/>, and
+    /// <c>TenantId</c> takes <see cref="ResolvedTenantValueGenerator"/>.
+    /// </summary>
+    private static void ScopeKeyToTenant<TEntity>(EntityTypeBuilder<TEntity> entity)
+        where TEntity : class, ITenantScoped
+    {
+        entity.HasKey(nameof(ITenantScoped.TenantId), "Id");
+        entity.Property<Guid>(nameof(ITenantScoped.TenantId)).HasValueGenerator<ResolvedTenantValueGenerator>();
+        entity.Property<Guid>("Id").ValueGeneratedOnAdd();
+    }
+
     private static void ConfigureEntities(ModelBuilder modelBuilder)
     {
+        ScopeKeyToTenant(modelBuilder.Entity<SettingsEntity>());
+        ScopeKeyToTenant(modelBuilder.Entity<StepCountEntity>());
+        ScopeKeyToTenant(modelBuilder.Entity<HeartRateEntity>());
+        ScopeKeyToTenant(modelBuilder.Entity<BodyWeightEntity>());
+        ScopeKeyToTenant(modelBuilder.Entity<SystemEventEntity>());
+        ScopeKeyToTenant(modelBuilder.Entity<FoodEntity>());
+        ScopeKeyToTenant(modelBuilder.Entity<StateSpanEntity>());
+        ScopeKeyToTenant(modelBuilder.Entity<SleepSessionEntity>());
+
         modelBuilder
             .Entity<ConnectorFoodEntryEntity>()
             .HasOne(e => e.Food)
             .WithMany()
-            .HasForeignKey(e => e.FoodId)
+            .HasForeignKey(e => new { e.TenantId, e.FoodId })
             .OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder
@@ -2188,7 +2343,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity
                 .HasOne(tf => tf.Food)
                 .WithMany()
-                .HasForeignKey(tf => tf.FoodId)
+                .HasForeignKey(tf => new { tf.TenantId, tf.FoodId })
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
@@ -2197,7 +2352,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity
                 .HasOne(f => f.Food)
                 .WithMany()
-                .HasForeignKey(f => f.FoodId)
+                .HasForeignKey(f => new { f.TenantId, f.FoodId })
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -2577,6 +2732,20 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .IsUnique()
                 .HasDatabaseName("ix_alert_excursion_mutes_tenant_subject_excursion");
             entity.HasIndex(e => e.AlertExcursionId);
+        });
+
+        modelBuilder.Entity<AlertExcursionReceiptEntity>(entity =>
+        {
+            entity.Property(e => e.ActorKind).HasConversion<string>();
+
+            entity.HasOne(e => e.AlertExcursion)
+                .WithMany()
+                .HasForeignKey(e => e.AlertExcursionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.TenantId, e.AlertExcursionId, e.ActorKind, e.ActorId })
+                .IsUnique()
+                .HasDatabaseName("ix_alert_excursion_receipts_tenant_excursion_actor");
         });
 
         modelBuilder.Entity<AlertInstanceEntity>(entity =>

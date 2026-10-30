@@ -20,7 +20,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 {
     private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly IRateLimitingStrategy _rateLimitingStrategy;
-    private readonly TimeProvider _timeProvider;
 
     // Starts as the startup defaults (from IConnectorRegistration); replaced with the
     // per-tenant config when AuthenticateWithConfigAsync runs at the start of a sync.
@@ -40,9 +39,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
     )
-        : base(httpClient, serverResolver, logger, publisher)
+        : base(httpClient, serverResolver, logger, publisher, timeProvider)
     {
-        _timeProvider = timeProvider ?? TimeProvider.System;
         _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
         _rateLimitingStrategy = rateLimitingStrategy ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
         _currentConfig = registration?.Defaults ?? throw new ArgumentNullException(nameof(registration));
@@ -231,7 +229,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     ? ResumeFrom(request.From, await CalculateTreatmentSinceTimestampAsync(config))
                     : request.From;
 
-                var now = _timeProvider.GetUtcNow().UtcDateTime;
+                var now = Clock.GetUtcNow().UtcDateTime;
                 var recent = openEnded && treatmentFrom is { } crawlFrom
                     ? await RecentTreatmentsForAsync(crawlFrom, now)
                     : null;
@@ -364,8 +362,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     ///     pagination loop. Anchoring the bound to "now" keeps every request explicitly
     ///     dated; requests that already carry a bound pass through unchanged.
     /// </summary>
-    private static DateTime? AnchorUnboundedFetch(DateTime? from, DateTime? to) =>
-        from is null && to is null ? DateTime.UtcNow : to;
+    internal static DateTime? AnchorUnboundedFetch(DateTime? from, DateTime? to, DateTime now) =>
+        from is null && to is null ? now : to;
 
     /// <summary>Outcome of one crawled collection, spanning every page of the crawl.</summary>
     private sealed record PagedCrawlOutcome(int Count, bool Success)
@@ -529,7 +527,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     {
         var pages = BackwardTimePager.PageAsync<T>(
             from,
-            AnchorUnboundedFetch(from, to),
+            AnchorUnboundedFetch(from, to, Clock.GetUtcNow().UtcDateTime),
             _currentConfig.MaxCount,
             BackwardTimePager.WidestPageSize(_currentConfig.MaxCount),
             async (bound, count) =>
@@ -590,7 +588,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         Action<T[]>? observe = null)
         where T : ProcessableDocumentBase
     {
-        var anchoredTo = AnchorUnboundedFetch(from, to);
+        var anchoredTo = AnchorUnboundedFetch(from, to, Clock.GetUtcNow().UtcDateTime);
 
         return FetchPagesAsync<T>(
             from - BackwardTimePager.CreatedAtOffsetEnvelope,
@@ -825,7 +823,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         IReadOnlyDictionary<string, DateTime> read,
         CancellationToken cancellationToken)
     {
-        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var now = Clock.GetUtcNow().UtcDateTime;
         var stored = await treatments.GetStoredTreatmentIdsAsync(ConnectorSource, windowStart, now, cancellationToken);
         var candidates = stored
             .Where(s => !read.ContainsKey(s.Key) && !IsConfirmedPresent(s.Key, now))
@@ -995,13 +993,13 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
         if (from.HasValue)
         {
-            var fromMs = new DateTimeOffset(from.Value, TimeSpan.Zero).ToUnixTimeMilliseconds();
+            var fromMs = from.Value.ToMills();
             url += $"&find[date][$gte]={fromMs}";
         }
 
         if (to.HasValue)
         {
-            var toMs = new DateTimeOffset(to.Value, TimeSpan.Zero).ToUnixTimeMilliseconds();
+            var toMs = to.Value.ToMills();
             url += $"&find[date][$lte]={toMs}";
         }
 

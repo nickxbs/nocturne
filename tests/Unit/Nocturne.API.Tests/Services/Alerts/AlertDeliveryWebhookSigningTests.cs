@@ -101,8 +101,10 @@ public class AlertDeliveryWebhookSigningTests
             factory.AsNocturneFactory(),
             Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
             Mock.Of<ISignalRBroadcastService>(),
+            Mock.Of<IEngineAlarmRelay>(),
             services.BuildServiceProvider(),
-            NullLogger<AlertDeliveryService>.Instance);
+            NullLogger<AlertDeliveryService>.Instance,
+            TimeProvider.System);
 
         return (service, channels);
     }

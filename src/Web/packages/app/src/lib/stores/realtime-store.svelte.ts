@@ -1,8 +1,8 @@
 // Real-time data store using Svelte 5 Runes and WebSocket integration
-import { WebSocketClient } from "$lib/websocket/websocket-client.svelte";
-import { entryIdentity, isSameEntry, unseenEntries } from "./entry-identity";
+import { WebSocketClient } from "#lib/websocket/websocket-client.svelte.js";
+import { entryIdentity, namedEntry, unseenEntries } from "./entry-identity";
 import { markedRead } from "./notification-read";
-import { untilNow } from "$lib/utils/now";
+import { untilNow } from "#lib/utils/now.js";
 import {
   DAY_MS,
   initialReadWindows,
@@ -10,8 +10,8 @@ import {
   initialReadsStash,
   releaseInitialReads,
 } from "./initial-reads";
-import { toDate } from "$lib/utils/formatting";
-import { afterNextPaint } from "$lib/utils/after-next-paint";
+import { relativeAge, toDate } from "#lib/utils/formatting.js";
+import { afterNextPaint } from "#lib/utils/after-next-paint.js";
 import type {
   Entry,
   WebSocketConfig,
@@ -20,11 +20,15 @@ import type {
   AnnouncementEvent,
   AlarmEvent,
   TrackerUpdateEvent,
+  TrackerDefinitionUpdateEvent,
   SyncProgressEvent,
-} from "$lib/websocket/types";
+} from "#lib/websocket/types.js";
 import type {
   TrackerInstanceDto,
   TrackerDefinitionDto,
+  LegacyCoverageDto,
+  LegacyFallbackDto,
+  LegacyFallbacksDto,
   InAppNotificationDto,
   Bolus,
   CarbIntake,
@@ -36,7 +40,7 @@ import type {
   ChartThresholdsDto,
   SensorGlucose,
   SensorGlucoseClient,
-} from "$lib/api";
+} from "#lib/api/index.js";
 
 /**
  * Nightscout v1/v2 device status shape received via WebSocket and legacy API.
@@ -46,15 +50,16 @@ export interface DeviceStatus extends PillsDeviceStatus {
   _id?: string;
   uploader?: Record<string, unknown>;
 }
-import { NotificationUrgency, TrackerRealtimeAction } from "$lib/api";
-import { reachedStep } from "$lib/components/trackers/schedule";
+import { NotificationUrgency, TrackerRealtimeAction } from "#lib/api/index.js";
+import { reachedStep } from "#lib/components/trackers/schedule.js";
 import {
   mergeEntryRecords,
   type EntryRecord,
-} from "$lib/constants/entry-categories";
+} from "#lib/constants/entry-categories.js";
 import { toast } from "svelte-sonner";
 import { isErrorStatus, presentConnection } from "./connection-indicator.svelte";
-import * as alarmState from "$lib/stores/alarm-state.svelte";
+import * as alarmState from "#lib/stores/alarm-state.svelte.js";
+import { closeAlertNotification, raiseAlertNotification } from "./alert-notifications.svelte";
 import { getContext, setContext } from "svelte";
 import {
   apsSnapshotClient,
@@ -67,20 +72,23 @@ import {
   nutritionClient,
   profileClient,
   sensorGlucoseClient,
+  trackerLegacyFallbacksClient,
   trackersClient,
-} from "$lib/api/browser-clients";
+} from "#lib/api/browser-clients.js";
 import {
   processPillsData,
   type DeviceStatus as PillsDeviceStatus,
   type ProcessedPillsData,
-} from "$api/pills-processor";
-import { isEntryDocument, isRecordDocument } from "$lib/websocket/payloads";
-import { isRecord } from "$lib/utils/type-guards";
-import { toIsoString } from "$lib/utils/api-date";
+} from "#lib/api/pills-processor.js";
+import { isEntryDocument, isRecordDocument } from "#lib/websocket/payloads.js";
+import { isRecord } from "#lib/utils/type-guards.js";
+import { SyncPhase } from "#lib/api/generated/nocturne-api-client.js";
+import { NightscoutEventType } from "#lib/constants/nightscout-event-types.js";
+import { toIsoString } from "#lib/utils/api-date.js";
 import {
   resolveChartThresholds,
   type ChartThresholds,
-} from "$lib/constants/glucose-thresholds";
+} from "#lib/constants/glucose-thresholds.js";
 
 /** The tracker levels loud enough for the notifications list; Info stays on the pill. */
 const TRACKER_NOTIFICATION_LEVELS: Partial<Record<NotificationUrgency, "warn" | "hazard" | "urgent">> = {
@@ -113,11 +121,11 @@ export function sensorGlucoseToEntry(sg: SensorGlucose): Entry {
 export const RECENT_READINGS = 5;
 
 /**
- * The readings the store starts from: those since `from`, which the caller sets to cover today and
- * the last day. The window is left open-ended so a reading stamped ahead of the browser's clock is
- * still the current one. An uploader that has been quiet for most of the window still has a
- * current reading, delta and recent list to show, so a sparse window is topped up with the newest
- * readings.
+ * The readings the store starts from: those since `from`, which the caller sets to the sidebar
+ * sparkline's window ({@link GLUCOSE_WINDOW_HOURS}), the only reader of the store's history. The
+ * window is left open-ended so a reading stamped ahead of the browser's clock is still the current
+ * one. An uploader that has been quiet for most of the window still has a current reading, delta and
+ * recent list to show, so a sparse window is topped up with the newest readings.
  */
 export async function loadInitialGlucose(
   sensorGlucose: SensorGlucoseClient,
@@ -189,6 +197,10 @@ export class RealtimeStore {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- batch buffer; the flush commits it to $state as one update
   private pendingEntryCreates = new Map<string, Entry>();
   private entryCreateFlushTimeout: ReturnType<typeof setTimeout> | null = null;
+  private pendingRemovals: Record<string, InAppNotificationDto> = {};
+  /** Ids the server has archived, newest last. A broadcast that crosses the archive on the wire
+   *  (mark all read sends an update for every notification it touched) must not list one again. */
+  private archivedIds: string[] = [];
   private static readonly ENTRY_CREATE_BATCH_MS = 100;
 
   /** True once every starting read is applied, not only the current reading ({@link currentReadingLoaded}). */
@@ -201,8 +213,11 @@ export class RealtimeStore {
   now = $state(Date.now());
   private timeInterval: ReturnType<typeof setTimeout> | null = null;
 
-  /** Track when we last received data for backfill purposes */
-  private lastDataReceived = Date.now();
+  /** When any realtime event last arrived; drives the stale check and the backfill skip. */
+  private lastEventReceived = Date.now();
+
+  /** Where the next backfill starts, before the margin and the newest-held check. */
+  private backfillCursor = Date.now();
 
   /** Track if sync/backfill is in progress (public for UI feedback) */
   isSyncing = $state(false);
@@ -235,9 +250,19 @@ export class RealtimeStore {
   private static readonly FOREGROUND_POLL_MS = 60_000; // re-check staleness every 60s while visible
   private static readonly DATA_STALE_MS = 5 * 60_000;
 
+  /** How far before the cursor a backfill reaches, to catch records stamped just before an event. */
+  private static readonly BACKFILL_MARGIN_MS = 2 * 60_000;
+
   /** Pending refetch of the records the backend derives from devicestatus. */
   private decompositionRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly DECOMPOSITION_REFRESH_MS = 3_000;
+  private static readonly ARCHIVED_IDS_KEPT = 200;
+
+  /** Whether the socket connected once already, so a connect is a reconnection. */
+  private connectedBefore = false;
+
+  /** Pending refetch of the legacy fallbacks after device events arrived. */
+  private legacyFallbacksRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Reactive state using Svelte 5 runes - using $state.raw for arrays to avoid deep proxy issues */
   entries = $state.raw<Entry[]>([]);
@@ -245,6 +270,10 @@ export class RealtimeStore {
   profile = $state<ProfileSummary | null>(null);
   trackerInstances = $state.raw<TrackerInstanceDto[]>([]);
   trackerDefinitions = $state.raw<TrackerDefinitionDto[]>([]);
+  /** The legacy consumable ages no tracker covers; empty for a reader the server shows none. */
+  legacyFallbacks = $state.raw<LegacyFallbackDto[]>([]);
+  /** The legacy consumables trackers cover, with the definitions covering each. */
+  legacyCoverage = $state.raw<LegacyCoverageDto[]>([]);
   inAppNotifications = $state.raw<InAppNotificationDto[]>([]);
 
   /**
@@ -349,12 +378,7 @@ export class RealtimeStore {
   });
 
   /** Human readable time since last update */
-  timeSinceReading = $derived.by(() => {
-    const mins = Math.floor(this.timeSinceUpdate / 60000);
-    if (mins < 1) return "just now";
-    if (mins === 1) return "1 min ago";
-    return `${mins} min ago`;
-  });
+  timeSinceReading = $derived(relativeAge(this.lastUpdated, { now: this.now }));
 
   /** `now` at minute resolution, so windows cut from it re-evaluate once a minute rather than every tick. */
   nowMinute = $derived(Math.floor(this.now / 60_000) * 60_000);
@@ -371,7 +395,7 @@ export class RealtimeStore {
     });
   });
 
-  /** Processed pills data (COB, IOB, CAGE, SAGE, Loop, Basal) */
+  /** Processed pills data (COB, IOB, Loop, Basal) */
   pillsData = $derived.by((): ProcessedPillsData => {
     // Use hardcoded mg/dL - components handle display formatting themselves
     return processPillsData(
@@ -379,7 +403,6 @@ export class RealtimeStore {
       this.apsSnapshots,
       this.boluses,
       this.carbIntakes,
-      this.deviceEvents,
       this.profile,
       { units: "mg/dL" }
     );
@@ -451,8 +474,9 @@ export class RealtimeStore {
           if (!this.websocketClient.isConnected) this.scheduleDisconnectNotice();
           console.log('[RealtimeStore] Page became visible, backfilling missed data...');
           // Always backfill on return — timers are unreliable in hidden tabs
-          // so we can't trust lastDataReceived to be meaningful
+          // so we can't trust lastEventReceived to be meaningful
           this.performBackfillIfNeeded(true);
+          void this.refreshTrackers();
         } else {
           this.clearDisconnectNotice();
           console.log('[RealtimeStore] Page hidden, starting background polling...');
@@ -487,10 +511,11 @@ export class RealtimeStore {
         apsSnapshotClient().getAll(oneDayAgo, now, APS_SNAPSHOT_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load apsSnapshots:", e); return []; }),
         currentTherapyStateClient().getCurrentTherapyState().catch((e) => { console.error("Failed to load currentTherapyState:", e); return null; }),
       ]);
+      void this.readLegacyFallbacks();
       const rest = Promise.all([
         profileClient().getProfileSummary().catch(() => null),
-        trackersClient().getDefinitions().catch(() => []),
-        trackersClient().getActiveInstances().catch(() => []),
+        trackersClient().getDefinitions().catch(() => null),
+        trackersClient().getActiveInstances().catch(() => null),
         notificationsClient().getNotifications().catch(() => []),
         bolusClient().getAll(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load boluses:", e); return []; }),
         nutritionClient().getCarbIntakes(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load carbIntakes:", e); return []; }),
@@ -535,10 +560,11 @@ export class RealtimeStore {
       if (profileData) {
         this.profile = profileData;
       }
-      if (trackerDefs.length > 0) {
+      // An empty list is an answer (no trackers, or none running); only a failed read keeps state.
+      if (trackerDefs) {
         this.trackerDefinitions = trackerDefs;
       }
-      if (trackerActive.length > 0) {
+      if (trackerActive) {
         this.trackerInstances = trackerActive;
       }
       if (notifications.length > 0) {
@@ -585,6 +611,9 @@ export class RealtimeStore {
       // Always force backfill on reconnection — any disconnection may have
       // caused missed data, even if the gap was under 5 minutes.
       this.performBackfillIfNeeded(true);
+      // The first connect follows the starting reads; a later one may have missed tracker events.
+      if (this.connectedBefore) void this.refreshTrackers();
+      this.connectedBefore = true;
     });
 
     this.websocketClient.on("disconnect", () => {
@@ -627,6 +656,10 @@ export class RealtimeStore {
       this.handleTrackerUpdate(event);
     });
 
+    this.websocketClient.on("trackerDefinitionUpdate", (_event: TrackerDefinitionUpdateEvent) => {
+      void this.refreshTrackers();
+    });
+
     // In-app notification events
     this.websocketClient.on("notificationCreated", (notification: InAppNotificationDto) => {
       this.handleNotificationCreated(notification);
@@ -642,7 +675,7 @@ export class RealtimeStore {
 
     this.websocketClient.on("syncProgress", (event: SyncProgressEvent) => {
       this.syncProgressByConnector = { ...this.syncProgressByConnector, [event.connectorId]: event };
-      if (event.phase === "Syncing") return;
+      if (event.phase === SyncPhase.Syncing) return;
 
       // Show the completed/failed state briefly, then clear — unless a new run for the same
       // connector has already replaced it.
@@ -659,12 +692,13 @@ export class RealtimeStore {
   private handleDataUpdate(event: DataUpdateEvent): void {
     if (!Array.isArray(event.data)) return;
 
-    this.updateLastDataReceived();
+    this.markEventReceived();
 
     // Merge new entries with existing ones, avoiding duplicates
     const newEntries = unseenEntries(this.entries, event.data);
 
     if (newEntries.length > 0) {
+      this.advanceBackfillCursor();
       this.entries = [...this.entries, ...newEntries]
         .sort((a, b) => (b.mills || 0) - (a.mills || 0))
         .slice(0, 1000); // Keep last 1000 entries
@@ -676,7 +710,10 @@ export class RealtimeStore {
     const windowStart = Date.now() - DAY_MS;
     const apply = <T extends { id?: string; mills?: number }>(records: T[], cap: number): T[] => {
       const next = withRecordEvent<T>(records, action, event, windowStart, cap);
-      if (next !== records) this.treatmentRevision++;
+      if (next !== records) {
+        this.treatmentRevision++;
+        if (action !== "delete") this.advanceBackfillCursor();
+      }
       return next;
     };
     switch (event.recordType) {
@@ -694,6 +731,7 @@ export class RealtimeStore {
         break;
       case "deviceEvent":
         this.deviceEvents = apply<DeviceEvent>(this.deviceEvents, CARE_RECORD_CAP);
+        this.scheduleLegacyFallbacksRefresh();
         break;
       case "apsSnapshot":
         this.apsSnapshots = apply<ApsSnapshot>(this.apsSnapshots, APS_SNAPSHOT_CAP);
@@ -703,7 +741,7 @@ export class RealtimeStore {
 
   /** Handle storage create events */
   private handleCreate(event: StorageEvent): void {
-    this.updateLastDataReceived();
+    this.markEventReceived();
     if (event.recordType) {
       this.handleRecordEvent("create", event);
       return;
@@ -720,6 +758,7 @@ export class RealtimeStore {
       );
 
       if (!exists) {
+        this.advanceBackfillCursor();
         this.deviceStatuses = [doc, ...this.deviceStatuses]
           .sort((a, b) => (b.mills || 0) - (a.mills || 0))
           .slice(0, 100);
@@ -753,6 +792,7 @@ export class RealtimeStore {
     const additions = unseenEntries(this.entries, pending);
 
     if (additions.length > 0) {
+      this.advanceBackfillCursor();
       this.entries = [...additions.reverse(), ...this.entries]
         .sort((a, b) => (b.mills || 0) - (a.mills || 0))
         .slice(0, 1000);
@@ -770,7 +810,7 @@ export class RealtimeStore {
     if (colName === "treatments") this.treatmentRevision++;
 
     if (colName === "entries" && this.isEntry(doc)) {
-      const index = this.entries.findIndex((entry) => isSameEntry(entry, doc));
+      const index = this.entries.findIndex(namedEntry(this.entries, doc));
       if (index !== -1) {
         this.entries = [
           ...this.entries.slice(0, index),
@@ -796,7 +836,8 @@ export class RealtimeStore {
 
     if (colName === "entries" && isEntryDocument(doc)) {
       this.pendingEntryCreates.delete(entryIdentity(doc));
-      this.entries = this.entries.filter((entry) => !isSameEntry(entry, doc));
+      const named = namedEntry(this.entries, doc);
+      this.entries = this.entries.filter((entry) => !named(entry));
     }
   }
 
@@ -810,7 +851,7 @@ export class RealtimeStore {
           : "info";
 
     toast[level](event.message, {
-      description: event.title !== "Announcement" ? event.title : undefined,
+      description: event.title !== NightscoutEventType.Announcement ? event.title : undefined,
     });
   }
 
@@ -837,9 +878,85 @@ export class RealtimeStore {
     toast.success("Glucose alarm cleared");
   }
 
+  private trackersStarted = 0;
+  private trackersApplied = 0;
+  /** Bumped by every realtime tracker event, so a read in flight knows it may be behind. */
+  private trackerMutations = 0;
+  private legacyFallbacksStarted = 0;
+  private legacyFallbacksApplied = 0;
+
+  /** Re-reads the tenant's tracker definitions and running instances together after a definition
+   *  was created, changed or deleted: an instance carries its definition's name, icon and schedule,
+   *  and a deleted definition takes its instances with it. The legacy fallbacks, which a new
+   *  definition can cover, are re-read beside them under their own guard. */
+  async refreshTrackers(): Promise<void> {
+    const fallbacks = this.readLegacyFallbacks();
+    await this.readTrackers();
+    await fallbacks;
+  }
+
+  /**
+   * Reads the definitions and running instances and applies them unless a read started later was
+   * applied first. A failed read applies nothing and holds back no other read. A realtime tracker
+   * event that lands while the read is in flight may be missing from it, so that read is dropped
+   * and one fresh read takes its place. Never rejects.
+   */
+  private async readTrackers(retry = true): Promise<void> {
+    const read = ++this.trackersStarted;
+    const mutations = this.trackerMutations;
+    let definitions: TrackerDefinitionDto[];
+    let instances: TrackerInstanceDto[];
+    try {
+      [definitions, instances] = await Promise.all([
+        trackersClient().getDefinitions(),
+        trackersClient().getActiveInstances(),
+      ]);
+    } catch (error) {
+      console.error("Failed to refresh trackers:", error);
+      return;
+    }
+    if (read <= this.trackersApplied) return;
+    if (mutations !== this.trackerMutations) {
+      if (retry) await this.readTrackers(false);
+      return;
+    }
+    this.trackersApplied = read;
+    this.trackerDefinitions = definitions;
+    this.trackerInstances = instances;
+  }
+
+  /**
+   * Reads the legacy fallbacks and applies them unless a read started later was applied first. A
+   * failed read applies nothing and holds back no other read. Never rejects.
+   */
+  private async readLegacyFallbacks(): Promise<void> {
+    const read = ++this.legacyFallbacksStarted;
+    let found: LegacyFallbacksDto;
+    try {
+      found = await trackerLegacyFallbacksClient().getLegacyFallbacks();
+    } catch (error) {
+      console.error("Failed to read legacy fallbacks:", error);
+      return;
+    }
+    if (read <= this.legacyFallbacksApplied) return;
+    this.legacyFallbacksApplied = read;
+    this.legacyFallbacks = found.fallbacks ?? [];
+    this.legacyCoverage = found.covered ?? [];
+  }
+
+  /** A connector sync writes device events in bursts; a pending refresh absorbs the burst. */
+  private scheduleLegacyFallbacksRefresh(): void {
+    if (this.legacyFallbacksRefreshTimer) return;
+    this.legacyFallbacksRefreshTimer = setTimeout(() => {
+      this.legacyFallbacksRefreshTimer = null;
+      void this.readLegacyFallbacks();
+    }, RealtimeStore.DECOMPOSITION_REFRESH_MS);
+  }
+
   /** Handle tracker updates from SignalR */
   private handleTrackerUpdate(event: TrackerUpdateEvent): void {
     const { action, instance } = event;
+    this.trackerMutations++;
 
     switch (action) {
       case TrackerRealtimeAction.Create:
@@ -847,6 +964,13 @@ export class RealtimeStore {
         if (!this.trackerInstances.some((i) => i.id === instance.id)) {
           this.trackerInstances = [instance, ...this.trackerInstances];
           toast.info(`Tracker started: ${instance.definitionName}`);
+        }
+        // A run of a definition this store does not hold yet (a conversion, or a tracker created
+        // and started at once) can arrive before the definition update, and its fallback should
+        // not wait for that. A run of a known definition changes no coverage; a device event that
+        // restarted it re-reads the fallbacks on its own.
+        if (!this.trackerDefinitions.some((d) => d.id === instance.definitionId)) {
+          void this.readLegacyFallbacks();
         }
         break;
 
@@ -876,34 +1000,83 @@ export class RealtimeStore {
     }
   }
 
-  /** Optimistically mark every loaded notification read so the badge and styling
-   *  update instantly; the server's notificationUpdated broadcast reconciles other
-   *  clients (and this one). */
-  markAllNotificationsRead(): void {
-    this.inAppNotifications = markedRead(this.inAppNotifications);
+  /** Optimistically marks the notifications `match` accepts read, ahead of the server's
+   *  notificationUpdated broadcast. The returned function undoes it for each one no
+   *  broadcast has replaced since. */
+  markNotificationsRead(match?: (notification: InAppNotificationDto) => boolean): () => void {
+    const before = this.inAppNotifications;
+    const marked = markedRead(before, match);
+    const changed = marked.flatMap((n, i) => (n === before[i] ? [] : [[n, before[i]] as const]));
+    this.inAppNotifications = marked;
+    return () => {
+      this.inAppNotifications = this.inAppNotifications.map(
+        (n) => changed.find(([optimistic]) => optimistic === n)?.[1] ?? n
+      );
+    };
   }
 
-  /** Optimistically mark a single notification read by id. */
-  markNotificationRead(id: string): void {
-    this.inAppNotifications = markedRead(this.inAppNotifications, (n) => n.id === id);
+  /** Optimistically takes a notification off the list, ahead of the server's
+   *  notificationArchived broadcast. Until the removal settles, an update broadcast
+   *  for it does not bring it back. `settle` records the server archived it; `release` ends the
+   *  wait without that record, for an answer that does not say the notification was archived.
+   *  `restore` puts it back unless its archive broadcast has arrived since. */
+  removeNotification(id: string): { settle(): void; release(): void; restore(): void } {
+    const removed = this.inAppNotifications.find((n) => n.id === id);
+    if (removed) this.pendingRemovals[id] = removed;
+    this.inAppNotifications = this.inAppNotifications.filter((n) => n.id !== id);
+    return {
+      settle: () => {
+        delete this.pendingRemovals[id];
+        this.rememberArchived(id);
+      },
+      release: () => {
+        delete this.pendingRemovals[id];
+      },
+      restore: () => {
+        const pending = this.pendingRemovals[id];
+        delete this.pendingRemovals[id];
+        if (pending) this.addNotification(pending);
+      },
+    };
   }
 
   /** Handle new in-app notification from SignalR */
   private handleNotificationCreated(notification: InAppNotificationDto): void {
-    // Add if not already present
-    if (!this.inAppNotifications.some((n) => n.id === notification.id)) {
-      this.inAppNotifications = [notification, ...this.inAppNotifications];
-    }
+    this.archivedIds = this.archivedIds.filter((id) => id !== notification.id);
+    if (!this.addNotification(notification)) return;
+    raiseAlertNotification(notification);
+  }
+
+  /** Adds a notification not yet listed; false when it already was. */
+  private addNotification(notification: InAppNotificationDto): boolean {
+    if (this.inAppNotifications.some((n) => n.id === notification.id)) return false;
+    this.inAppNotifications = [notification, ...this.inAppNotifications];
+    return true;
   }
 
   /** Handle notification archived from SignalR */
   private handleNotificationArchived(notification: InAppNotificationDto): void {
-    // Remove from active notifications
+    if (notification.id) {
+      delete this.pendingRemovals[notification.id];
+      this.rememberArchived(notification.id);
+    }
     this.inAppNotifications = this.inAppNotifications.filter((n) => n.id !== notification.id);
+    closeAlertNotification(notification);
+  }
+
+  private rememberArchived(id: string): void {
+    this.archivedIds = [...this.archivedIds.filter((archived) => archived !== id), id].slice(
+      -RealtimeStore.ARCHIVED_IDS_KEPT
+    );
   }
 
   /** Handle notification updated from SignalR */
   private handleNotificationUpdated(notification: InAppNotificationDto): void {
+    if (notification.id && this.archivedIds.includes(notification.id)) return;
+    if (notification.id && this.pendingRemovals[notification.id]) {
+      this.pendingRemovals[notification.id] = notification;
+      return;
+    }
     const index = this.inAppNotifications.findIndex((n) => n.id === notification.id);
     if (index !== -1) {
       this.inAppNotifications = [
@@ -912,8 +1085,7 @@ export class RealtimeStore {
         ...this.inAppNotifications.slice(index + 1),
       ];
     } else {
-      // If not found, treat as create
-      this.handleNotificationCreated(notification);
+      this.addNotification(notification);
     }
   }
 
@@ -1062,6 +1234,10 @@ export class RealtimeStore {
       clearTimeout(this.decompositionRefreshTimer);
       this.decompositionRefreshTimer = null;
     }
+    if (this.legacyFallbacksRefreshTimer) {
+      clearTimeout(this.legacyFallbacksRefreshTimer);
+      this.legacyFallbacksRefreshTimer = null;
+    }
     if (this.timeInterval) {
       clearInterval(this.timeInterval);
     }
@@ -1116,7 +1292,7 @@ export class RealtimeStore {
   }
 
   private isDataStale(): boolean {
-    return Date.now() - this.lastDataReceived > RealtimeStore.DATA_STALE_MS;
+    return Date.now() - this.lastEventReceived > RealtimeStore.DATA_STALE_MS;
   }
 
   /** Stop background polling (called when tab becomes visible again) */
@@ -1183,22 +1359,22 @@ export class RealtimeStore {
       return;
     }
 
-    const timeSinceLastData = Date.now() - this.lastDataReceived;
-    const fiveMinutes = 5 * 60 * 1000;
+    const timeSinceLastData = Date.now() - this.lastEventReceived;
 
     // Only backfill if more than 5 minutes have passed (unless forced)
-    if (!force && timeSinceLastData < fiveMinutes) {
+    if (!force && timeSinceLastData < RealtimeStore.DATA_STALE_MS) {
       console.log('[RealtimeStore] Data is recent, skipping backfill');
       return;
     }
 
     this.isSyncing = true;
-    const backfillFrom = this.lastDataReceived;
+    const backfillFrom = this.backfillStart();
     const { from: backfillFromDate, to: nowDate } = untilNow(backfillFrom);
+    const backfillTo = Date.parse(nowDate);
 
     console.log(
       `[RealtimeStore] Backfilling data from ${backfillFromDate} ` +
-      `(${Math.round(timeSinceLastData / 60000)} minutes ago)`
+      `(${Math.round((Date.now() - backfillFrom) / 60000)} minutes ago)`
     );
 
     try {
@@ -1300,8 +1476,7 @@ export class RealtimeStore {
         }
       }
 
-      // Update last data received timestamp
-      this.lastDataReceived = Date.now();
+      this.backfillCursor = backfillTo;
 
       if (backfilledCount > 0) {
         console.log(`[RealtimeStore] Backfilled ${backfilledCount} items`);
@@ -1317,12 +1492,37 @@ export class RealtimeStore {
     }
   }
 
+  /** Any realtime event, whether or not it changed a held array. */
+  private markEventReceived(): void {
+    this.lastEventReceived = Date.now();
+  }
+
+  /** A realtime event merged a record into a held array. */
+  private advanceBackfillCursor(): void {
+    this.backfillCursor = Date.now();
+  }
+
   /**
-   * Update the last data received timestamp.
-   * Called when new data arrives via WebSocket.
+   * Where a backfill starts: a margin before the cursor or the newest held record, whichever is
+   * earlier, and never before the store's window.
    */
-  private updateLastDataReceived(): void {
-    this.lastDataReceived = Date.now();
+  private backfillStart(): number {
+    const newestHeld = Math.max(
+      this.newestMills(this.entries),
+      this.newestMills(this.deviceStatuses),
+      this.newestMills(this.boluses),
+      this.newestMills(this.carbIntakes),
+      this.newestMills(this.bgChecks),
+      this.newestMills(this.notes),
+      this.newestMills(this.deviceEvents),
+      this.newestMills(this.apsSnapshots)
+    );
+    const earliest = Math.min(this.backfillCursor, newestHeld);
+    return Math.max(earliest - RealtimeStore.BACKFILL_MARGIN_MS, Date.now() - DAY_MS);
+  }
+
+  private newestMills(records: readonly { mills?: number }[]): number {
+    return records.reduce((newest, record) => Math.max(newest, record.mills ?? 0), 0);
   }
 }
 

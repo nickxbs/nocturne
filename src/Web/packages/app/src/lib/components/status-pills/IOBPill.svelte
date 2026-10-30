@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { formatInsulinDisplay, formatLocale } from "$lib/utils/formatting";
+  import { formatInsulinDisplay, formatLocale } from "#lib/utils/formatting.js";
   import StatusPill from "./StatusPill.svelte";
   import type {
     IOBPillData,
     PillInfoItem,
     AlertLevel,
-  } from "$lib/types/status-pills";
+  } from "#lib/types/status-pills.js";
 
   interface IOBPillProps {
     data: IOBPillData | null;
@@ -30,7 +30,7 @@
         }
       );
       const amount = `${formatInsulinDisplay(data.lastBolus.insulin)}U`;
-      items.push({ label: "Last Bolus", value: `${amount} @ ${when}` });
+      items.push({ label: "Last bolus", value: `${amount} @ ${when}` });
 
       if (data.lastBolus.notes) {
         items.push({ label: "Notes", value: data.lastBolus.notes });

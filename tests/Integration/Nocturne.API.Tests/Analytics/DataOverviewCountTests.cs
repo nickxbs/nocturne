@@ -1,10 +1,8 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Moq;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Services;
 using Nocturne.Infrastructure.Data.Entities;
@@ -15,6 +13,7 @@ using Xunit.Abstractions;
 
 namespace Nocturne.API.Tests.Integration.Analytics;
 
+[Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
 public class DataOverviewCountTests(ApiIntegrationTestFixture fixture, ITestOutputHelper output)
     : ApiIntegrationTestBase(fixture, output)
@@ -160,10 +159,7 @@ public class DataOverviewCountTests(ApiIntegrationTestFixture fixture, ITestOutp
             else if (clamped)
                 readContext.ClampMemberHistory();
 
-            var settings = new Mock<ITherapySettingsResolver>();
-            settings.Setup(resolver => resolver.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(timezone);
-            return await ActivatorUtilities.CreateInstance<DataOverviewService>(services, settings.Object)
+            return await ActivatorUtilities.CreateInstance<DataOverviewService>(services, DataOverviewClock.Resolving(timezone))
                 .GetDailySummaryAsync(year, sources);
         });
     }

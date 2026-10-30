@@ -4,6 +4,7 @@ import logger from './logger.js';
 import type { ClientInfo, AlarmData, AlarmEvent, ServerStats } from '../types.js';
 import {
   verifyHandshakeTicket,
+  isHandshakeTicketShaped,
   normalizeHandshakeHost,
   REALTIME_ADMISSION_PATH,
   HANDSHAKE_TICKET_LIFETIME_MS,
@@ -19,9 +20,14 @@ interface BridgeSocketData {
   /** The tenant the socket's host resolved to, before it has authorized. */
   pendingTenantSlug?: string;
   /**
+   * An access token a legacy client put in its handshake query, which its
+   * `authorize` presents when it carries no credential of its own.
+   */
+  handshakeToken?: string;
+  /**
    * Whether the socket's credential may join the tenant-wide room. The room
-   * carries live payloads of more than one category, so a guest link or
-   * anonymous share that holds single categories stays out of it.
+   * carries live payloads of more than one category, so a guest link that
+   * holds single categories stays out of it and joins only its category rooms.
    */
   tenantRelay?: boolean;
   /**
@@ -32,6 +38,8 @@ interface BridgeSocketData {
   subjectId?: string;
   /** The API broadcast categories whose storage events the socket receives. */
   categories?: string[];
+  /** Whether an `/alarm` socket's credential may silence the tenant's alarms. */
+  mayAck?: boolean;
   /** How the socket proves its admission again; absent until it is admitted. */
   readmission?: Readmission;
   /** The pending re-check of the socket's admission. */
@@ -71,6 +79,9 @@ export const TICKET_REFRESH_TIMEOUT_MS = 10_000;
 /** How soon a browser that could not produce a fresh ticket is asked again. */
 export const TICKET_RETRY_MS = 30_000;
 
+/** The handshake error for a share host. The web client treats it as final and does not retry. */
+export const SHARE_REALTIME_UNSUPPORTED = 'share_realtime_unsupported';
+
 /** A probe the API did not answer: unreachable, timed out, or failing itself. */
 const UNANSWERED = 'unanswered';
 type Unanswered = typeof UNANSWERED;
@@ -104,13 +115,18 @@ function storageCategories(grant: RealtimeGrant): string[] {
   return grant.historyClamped ? [] : grant.categories;
 }
 
-/** The default-namespace rooms a socket's admission entitles it to. */
+/**
+ * The default-namespace rooms a socket's admission entitles it to. A restricted socket joins only
+ * its category rooms, as a guest reaches only its categories through the API hub's `Subscribe`.
+ */
 function grantedRooms(data: BridgeSocketData): string[] {
   const { tenantSlug, tenantRelay, subjectId, categories = [] } = data;
-  if (!tenantSlug || tenantRelay !== true) return [];
+  if (!tenantSlug) return [];
+  const rooms = categories.map((category) => categoryRoom(tenantSlug, category));
+  if (tenantRelay !== true) return rooms;
   return [
     `tenant:${tenantSlug}`,
-    ...categories.map((category) => categoryRoom(tenantSlug, category)),
+    ...rooms,
     ...(subjectId ? [subjectRoom(tenantSlug, subjectId)] : []),
   ];
 }
@@ -251,6 +267,12 @@ function hostTenant(host: string | undefined, baseDomain: string): string | type
   return hostname === baseDomainHost ? APEX : null;
 }
 
+/** Whether a host is a public share link, `<anything>.share.<baseDomain>`. The bare `share.<baseDomain>` is a tenant slug. */
+export function isShareHost(host: string | undefined, baseDomain: string): boolean {
+  const tenant = hostTenant(host, baseDomain);
+  return typeof tenant === 'string' && /^[^.]+\.share$/i.test(tenant);
+}
+
 /** Resolve the tenant slug a host belongs to. A subdomain resolves to its slug;
  *  the apex domain resolves to `apexTenantSlug`, the tenant the API serves there
  *  (see `discoverApexTenant`). Returns null when the host is foreign or the apex
@@ -338,7 +360,22 @@ class SocketIOServer {
    *  rejected so the socket never receives broadcasts. */
   private setupHandshakeAuth(): void {
     if (!this.io) return;
-    this.io.use((socket, next) => this.authorizeHandshake(socket, next));
+    this.useHandshake(this.io.of('/'), (socket, next) => this.authorizeHandshake(socket, next));
+  }
+
+  /** Registers a namespace's handshake middleware behind the one share-host refusal, which
+   *  runs ahead of any tenant resolution, registry read or API probe. */
+  private useHandshake(
+    nsp: BridgeNamespace,
+    handshake: (socket: BridgeSocket, next: (err?: Error) => void) => unknown,
+  ): void {
+    nsp.use((socket, next) => {
+      if (isShareHost(pickHandshakeHost(socket.handshake.headers), this.baseDomain)) {
+        logger.debug(`Rejecting connection ${socket.id}: share hosts have no realtime`);
+        return next(new Error(SHARE_REALTIME_UNSUPPORTED));
+      }
+      return handshake(socket, next);
+    });
   }
 
   /** Resolve the tenant for a handshake and authorize it from its ticket. Sets
@@ -354,10 +391,14 @@ class SocketIOServer {
       }
 
       // Engine.IO v3 clients have no `auth` payload — that arrived with the v4
-      // protocol — so also accept the ticket from the handshake query.
+      // protocol — so also accept the ticket from the handshake query. A query
+      // token that is not shaped as a ticket is a legacy client's access token
+      // (LoopFollow sends one there), which its `authorize` presents to the API.
+      const queryToken = queryValue(socket.handshake.query?.token);
+      const clientToken = queryToken && !isHandshakeTicketShaped(queryToken) ? queryToken : undefined;
       const token =
         stringField(socket.handshake.auth, 'token')
-        ?? queryValue(socket.handshake.query?.token);
+        ?? (clientToken ? undefined : queryToken);
       if (token) {
         // A ticket was offered, so this is the browser path: reject it outright if
         // it doesn't verify. Admitting it silently would leave a client whose
@@ -376,7 +417,17 @@ class SocketIOServer {
           return next(new Error('unauthorized'));
         }
 
+        if (!(await this.isCurrentTenant(tenantSlug, ticket.t))) {
+          logger.warn(`Rejecting connection ${socket.id}: handshake ticket names a tenant ${tenantSlug} no longer serves`);
+          return next(new Error('unauthorized'));
+        }
+
         this.setGrant(socket, tenantSlug, ticket);
+        if (!this.holdsTenantNow(tenantSlug, ticket.t)) {
+          logger.warn(`Rejecting connection ${socket.id}: tenant ${tenantSlug} changed while the handshake was admitted`);
+          this.clearGrant(socket);
+          return next(new Error('unauthorized'));
+        }
         socket.data.readmission = { kind: 'ticket' };
         this.scheduleReadmission(socket, ticket.exp - Date.now());
         return next();
@@ -388,6 +439,7 @@ class SocketIOServer {
       // so it receives nothing in the meantime.
       logger.debug(`Connection ${socket.id} carries no ticket; awaiting classic authorize for tenant ${tenantSlug}`);
       socket.data.pendingTenantSlug = tenantSlug;
+      socket.data.handshakeToken = clientToken;
       next();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -437,23 +489,13 @@ class SocketIOServer {
     });
   }
 
-  /** Join an authorized socket to its tenant room, the category rooms it was granted and, when its
-   *  credential owns a subject, that subject's room. A restricted socket stays authorized and joins
-   *  nothing, category rooms included, so a guest link or share receives no storage events. A socket
-   *  with no subject receives no per-subject notifications. */
+  /** Join an authorized socket to the rooms its admission grants (see {@link grantedRooms}). */
   private joinTenantRoom(socket: BridgeSocket): void {
-    const { tenantSlug, tenantRelay } = socket.data;
-    if (!tenantSlug) return;
-
-    if (tenantRelay !== true) {
-      logger.info(`Client ${socket.id} is restricted; not joining tenant room: ${tenantSlug}`);
-      return;
-    }
-
-    for (const room of grantedRooms(socket.data)) {
+    const rooms = grantedRooms(socket.data);
+    for (const room of rooms) {
       socket.join(room);
     }
-    logger.info(`Client ${socket.id} joined tenant room: ${tenantSlug}`);
+    if (rooms.length > 0) logger.info(`Client ${socket.id} joined ${rooms.length} rooms of tenant ${socket.data.tenantSlug}`);
   }
 
   /** Records an admission on the socket, for the rooms it joins. */
@@ -464,6 +506,13 @@ class SocketIOServer {
     socket.data.tenantRelay = grant.tenantRelay;
     socket.data.subjectId = grant.subjectId;
     socket.data.categories = storageCategories(grant);
+  }
+
+  private clearGrant(socket: BridgeSocket): void {
+    socket.data.tenantSlug = undefined;
+    socket.data.tenantRelay = undefined;
+    socket.data.subjectId = undefined;
+    socket.data.categories = undefined;
   }
 
   /** Moves an admitted socket onto the rooms of a fresh admission, leaving any it no longer holds. */
@@ -512,7 +561,7 @@ class SocketIOServer {
   ): Promise<number | null> {
     switch (readmission.kind) {
       case 'ticket': {
-        const answer = await this.requestFreshTicket(socket);
+        const answer = await this.requestFreshTicket(socket, tenantSlug);
         if (answer === 'retry') {
           // A browser that could not reach its ticket endpoint, or a bundle that
           // predates the request and never answers, keeps its admission for one
@@ -531,6 +580,11 @@ class SocketIOServer {
         }
         socket.data.ticketGraceUntil = undefined;
         this.regrant(socket, tenantSlug, answer);
+        if (!this.holdsTenantNow(tenantSlug, answer.t)) {
+          logger.warn(`Client ${socket.id} is bound to tenant ${tenantSlug}, which changed during its re-check; closing its transport`);
+          this.disconnectSocket(socket);
+          return null;
+        }
         return answer.exp - Date.now();
       }
       case 'credential': {
@@ -572,16 +626,18 @@ class SocketIOServer {
           socket.disconnect(true);
           return null;
         }
+        socket.data.mayAck = admission.mayAck;
         return ADMISSION_RECHECK_INTERVAL_MS;
       }
     }
   }
 
   /** Asks a browser socket for a fresh handshake ticket. Resolves to the
-   *  ticket once it verifies for the host the socket arrived on; `refused` for
-   *  a denial or a ticket that does not verify; `retry` when the browser gave no
-   *  ticket and no denial, or no answer at all. */
-  private async requestFreshTicket(socket: BridgeSocket) {
+   *  ticket once it verifies for the host the socket arrived on and the tenant
+   *  `tenantSlug` serves; `refused` for a denial or a ticket that does not
+   *  verify; `retry` when the browser gave no ticket and no denial, or no answer
+   *  at all. */
+  private async requestFreshTicket(socket: BridgeSocket, tenantSlug: string) {
     let reply: unknown;
     try {
       reply = await socket.timeout(TICKET_REFRESH_TIMEOUT_MS).emitWithAck('realtime_ticket');
@@ -593,7 +649,8 @@ class SocketIOServer {
 
     const host = pickHandshakeHost(socket.handshake.headers);
     const ticket = verifyHandshakeTicket(this.signingSecret, token);
-    return ticket && host && ticket.h === normalizeHandshakeHost(host) ? ticket : 'refused';
+    if (!ticket || !host || ticket.h !== normalizeHandshakeHost(host)) return 'refused';
+    return (await this.isCurrentTenant(tenantSlug, ticket.t)) ? ticket : 'refused';
   }
 
   /** Handle the classic Nightscout `authorize` message.
@@ -602,7 +659,10 @@ class SocketIOServer {
    *  obtain — a handshake ticket, because /realtime/ticket mints one only for a
    *  browser session the API admits to realtime. They
    *  authenticate the way they do against classic Nightscout instead: an API
-   *  secret (already SHA-1 hashed by the client) and/or a subject token.
+   *  secret (already SHA-1 hashed by the client) and/or a subject token, in the
+   *  payload or, for the token, in the handshake query. A client may send its
+   *  access token as `secret`, so a secret the API refuses is presented again as
+   *  a token. With no credential at all the admission is asked anonymously.
    *
    *  Rather than interpret those credentials here, replay them against the same
    *  admission the ticket endpoint asks for. The API applies its own per-tenant
@@ -634,15 +694,18 @@ class SocketIOServer {
     if (!this.apiBaseUrl) return deny('bridge has no API base URL configured');
 
     const secret = stringField(payload, 'secret');
-    const token = stringField(payload, 'token');
-    if (!secret && !token) return deny('no credentials supplied');
-
-    const admission = await this.probeRealtimeAdmission(tenantSlug, { apiSecret: secret, token });
+    let credential = { apiSecret: secret, token: stringField(payload, 'token') ?? socket.data.handshakeToken };
+    let admission = await this.probeRealtimeAdmission(tenantSlug, credential);
+    if (admission === null && secret) {
+      credential = { apiSecret: undefined, token: secret };
+      admission = await this.probeRealtimeAdmission(tenantSlug, credential);
+    }
     if (admission === null || admission === UNANSWERED) return deny('API denied the credential');
 
     this.setGrant(socket, tenantSlug, admission);
+    socket.data.handshakeToken = undefined;
     this.joinTenantRoom(socket);
-    socket.data.readmission = { kind: 'credential', apiSecret: secret, token };
+    socket.data.readmission = { kind: 'credential', ...credential };
     this.scheduleReadmission(socket, ADMISSION_RECHECK_INTERVAL_MS);
     logger.info(`Client ${socket.id} authorized via legacy credentials for tenant: ${tenantSlug}`);
     callback?.({ read: true, write: false, write_treatment: false });
@@ -722,52 +785,50 @@ class SocketIOServer {
     target.emit('trackerUpdate', data);
   }
 
-  broadcastAnnouncement(message: unknown, tenantSlug?: string): void {
+  broadcastTrackerDefinitionUpdate(data: unknown, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
     if (!target) return;
 
-    logger.debug(`Broadcasting announcement${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
-    target.emit('announcement', message);
+    logger.debug(`Broadcasting trackerDefinitionUpdate${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
+    target.emit('trackerDefinitionUpdate', data);
+  }
 
-    if (this.alarmNsp && tenantSlug) {
-      this.alarmNsp.to(alarmRoom(tenantSlug)).emit('announcement', message);
-    }
+  broadcastAnnouncement(message: unknown, tenantSlug?: string): void {
+    this.broadcastToBothNamespaces('announcement', message, tenantSlug);
   }
 
   broadcastAlarm(event: AlarmEvent, alarm: AlarmData, tenantSlug?: string): void {
-    const target = this.emitTarget(tenantSlug);
-    if (!target) return;
-
-    logger.debug(`Broadcasting ${event}${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
-    target.emit(event, alarm);
-
-    if (this.alarmNsp && tenantSlug) {
-      this.alarmNsp.to(alarmRoom(tenantSlug)).emit(event, alarm);
-    }
+    this.broadcastToBothNamespaces(event, alarm, tenantSlug);
   }
 
   broadcastClearAlarm(clear: unknown, tenantSlug?: string): void {
-    const target = this.emitTarget(tenantSlug);
-    if (!target) return;
-
-    logger.debug(`Broadcasting clear_alarm${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
-    target.emit('clear_alarm', clear);
-
-    if (this.alarmNsp && tenantSlug) {
-      this.alarmNsp.to(alarmRoom(tenantSlug)).emit('clear_alarm', clear);
-    }
+    this.broadcastToBothNamespaces('clear_alarm', clear, tenantSlug);
   }
 
   broadcastNotification(notification: unknown, tenantSlug?: string): void {
-    const target = this.emitTarget(tenantSlug);
-    if (!target) return;
+    this.broadcastToBothNamespaces('notification', notification, tenantSlug);
+  }
 
-    logger.debug(`Broadcasting notification${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
-    target.emit('notification', notification);
-
-    if (this.alarmNsp && tenantSlug) {
-      this.alarmNsp.to(alarmRoom(tenantSlug)).emit('notification', notification);
+  /** Emit an event to a tenant's `/alarm` subscribers alone, as the API's
+   *  engine alarms go out. */
+  broadcastToAlarmNamespace(event: AlarmEvent | 'clear_alarm', payload: unknown, tenantSlug?: string): void {
+    if (!this.alarmNsp) return;
+    if (!tenantSlug) {
+      logger.warn('Refusing to broadcast without a tenant slug');
+      return;
     }
+
+    logger.debug(`Broadcasting ${event} to /alarm for tenant ${tenantSlug}`);
+    this.alarmNsp.to(alarmRoom(tenantSlug)).emit(event, payload);
+  }
+
+  private broadcastToBothNamespaces(event: string, payload: unknown, tenantSlug?: string): void {
+    const target = this.emitTarget(tenantSlug);
+    if (!target || !tenantSlug) return;
+
+    logger.debug(`Broadcasting ${event} to tenant ${tenantSlug}`);
+    target.emit(event, payload);
+    this.alarmNsp?.to(alarmRoom(tenantSlug)).emit(event, payload);
   }
 
   broadcastStatusUpdate(status: unknown, tenantSlug?: string): void {
@@ -879,6 +940,15 @@ class SocketIOServer {
    *  tenant created since it last read the tenant list. */
   onTenantAdmitted: (tenantSlug: string) => void = () => {};
 
+  /** Whether `tenantId` is the tenant `tenantSlug` names now. Refuses every ticket until it is wired
+   *  to the bridge's tenant list. */
+  isCurrentTenant: (tenantSlug: string, tenantId: string) => Promise<boolean> = async () => false;
+
+  /** Whether `tenantId` is the tenant `tenantSlug` names right now, from what the bridge already holds.
+   *  Asked straight after an `await` to close the window in which a tenant list read removed or
+   *  recreated the slug. Refuses every ticket until it is wired to the bridge's tenant list. */
+  holdsTenantNow: (tenantSlug: string, tenantId: string) => boolean = () => false;
+
   /** Awaited when a connection arrives on the apex while the apex serves no tenant, before it is
    *  refused: an install's first tenant is created after the bridge starts. */
   onApexUnresolved: () => Promise<void> = async () => {};
@@ -898,12 +968,16 @@ class SocketIOServer {
     for (const nsp of [this.io?.of('/'), this.storageNsp, this.alarmNsp]) {
       for (const socket of nsp?.sockets.values() ?? []) {
         if (socket.data.tenantSlug !== tenantSlug && socket.data.pendingTenantSlug !== tenantSlug) continue;
-        for (const room of [...socket.rooms]) {
-          if (room !== socket.id) socket.leave(room);
-        }
-        socket.conn.close();
+        this.disconnectSocket(socket);
       }
     }
+  }
+
+  private disconnectSocket(socket: BridgeSocket): void {
+    for (const room of [...socket.rooms]) {
+      if (room !== socket.id) socket.leave(room);
+    }
+    socket.conn.close();
   }
 
   getIO(): BridgeServer | null {
@@ -1002,7 +1076,7 @@ class SocketIOServer {
 
     // Admit the socket unauthorized; the tenant is resolved for room routing
     // but no room is joined until `subscribe` succeeds.
-    this.storageNsp.use(async (socket, next) => {
+    this.useHandshake(this.storageNsp, async (socket, next) => {
       const tenantSlug = await this.resolveNamespaceTenant(socket);
       if (!tenantSlug) {
         logger.warn(`Rejecting /storage connection ${socket.id}: no resolvable tenant`);
@@ -1118,11 +1192,19 @@ class SocketIOServer {
       );
     };
 
+  /**
+   * The tenant's alarm still sounding, as the event and payload an `/alarm`
+   * subscriber hears, or null. The bridge setup wires it to the tenant's
+   * SignalR client.
+   */
+  currentAlarm: (tenantSlug: string) => Promise<{ event: AlarmEvent; alarm: unknown } | null> =
+    async () => null;
+
   private setupAlarmNamespace(): void {
     if (!this.io) return;
     this.alarmNsp = this.io.of('/alarm');
 
-    this.alarmNsp.use(async (socket, next) => {
+    this.useHandshake(this.alarmNsp, async (socket, next) => {
       const tenantSlug = await this.resolveNamespaceTenant(socket);
       if (!tenantSlug) {
         logger.warn(`Rejecting /alarm connection ${socket.id}: no resolvable tenant`);
@@ -1142,14 +1224,7 @@ class SocketIOServer {
       // Positional ack: AAPS emits ("ack", level, group, silenceTime) — three
       // separate arguments, not a JSON object (matches cgm-remote-monitor).
       socket.on('ack', (level: unknown, group: unknown, silenceTime: unknown) => {
-        const tenantSlug = socket.data.tenantSlug;
-        if (!tenantSlug) return;
-        this.onAlarmAck(
-          tenantSlug,
-          typeof level === 'number' ? level : Number(level) || 0,
-          typeof group === 'string' ? group : String(group ?? ''),
-          typeof silenceTime === 'number' ? silenceTime : Number(silenceTime) || 0,
-        );
+        this.handleAlarmAck(socket, level, group, silenceTime);
       });
 
       socket.on('disconnect', (reason: string) => {
@@ -1157,6 +1232,26 @@ class SocketIOServer {
         logger.info(`v3 /alarm client disconnected: ${socket.id}, reason: ${reason}`);
       });
     });
+  }
+
+  /**
+   * Handle a v3 `/alarm` `ack`. The bridge forwards it on its own AlarmHub
+   * connection, which the API always lets ack, so the subscriber's own right to
+   * silence the tenant's alarms is checked here. Exposed for unit testing.
+   */
+  handleAlarmAck(socket: BridgeSocket, level: unknown, group: unknown, silenceTime: unknown): void {
+    const tenantSlug = socket.data.tenantSlug;
+    if (!tenantSlug) return;
+    if (socket.data.mayAck !== true) {
+      logger.warn(`/alarm ack from ${socket.id} (tenant ${tenantSlug}) dropped: its credential may not silence alarms`);
+      return;
+    }
+    this.onAlarmAck(
+      tenantSlug,
+      typeof level === 'number' ? level : Number(level) || 0,
+      typeof group === 'string' ? group : String(group ?? ''),
+      typeof silenceTime === 'number' ? silenceTime : Number(silenceTime) || 0,
+    );
   }
 
   /**
@@ -1199,11 +1294,24 @@ class SocketIOServer {
     socket.join(alarmRoom(tenantSlug));
     socket.data.tenantSlug = tenantSlug;
     socket.data.pendingTenantSlug = undefined;
+    socket.data.mayAck = admitted.mayAck;
     this.onTenantAdmitted(tenantSlug);
     socket.data.readmission = { kind: 'alarm', accessToken };
     this.scheduleReadmission(socket, ADMISSION_RECHECK_INTERVAL_MS);
     logger.info(`/alarm client ${socket.id} subscribed for tenant ${tenantSlug}`);
     ack?.({ success: true, message: 'Subscribed for alarms' });
+    await this.replayCurrentAlarm(socket, tenantSlug);
+  }
+
+  /** The API raises an alarm once, so a socket that subscribes after it was
+   *  raised hears it only from this replay. */
+  private async replayCurrentAlarm(socket: BridgeSocket, tenantSlug: string): Promise<void> {
+    try {
+      const current = await this.currentAlarm(tenantSlug);
+      if (current) socket.emit(current.event, current.alarm);
+    } catch (error) {
+      logger.error(`Failed to replay the sounding alarm to /alarm client ${socket.id}:`, error);
+    }
   }
 
   async stop(): Promise<void> {

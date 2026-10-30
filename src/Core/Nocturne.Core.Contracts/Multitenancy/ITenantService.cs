@@ -1,3 +1,5 @@
+using Nocturne.Core.Models.V4;
+
 namespace Nocturne.Core.Contracts.Multitenancy;
 
 /// <summary>
@@ -20,7 +22,7 @@ public interface ITenantService
     /// <summary>Creates a new tenant without assigning an owner.</summary>
     Task<TenantCreatedDto> CreateWithoutOwnerAsync(string slug, string displayName, CancellationToken ct = default);
 
-    /// <summary>Re-seeds roles, public membership, and OAuth clients for an existing tenant after a data purge.</summary>
+    /// <summary>Re-seeds roles and public membership for an existing tenant after a data purge.</summary>
     Task SeedAfterResetAsync(Guid tenantId, CancellationToken ct = default);
 
     Task<List<TenantDto>> GetAllAsync(CancellationToken ct = default);
@@ -34,6 +36,20 @@ public interface ITenantService
     Task<TenantSettingsDto> GetSettingsAsync(Guid id, CancellationToken ct = default);
 
     Task<TenantSettingsDto> SetAllowPublicDocsAsync(Guid id, bool allowPublicDocs, CancellationToken ct = default);
+
+    /// <summary>Renames the tenant, leaving its slug and active state as they are.</summary>
+    Task<TenantSettingsDto> SetDisplayNameAsync(Guid id, string displayName, CancellationToken ct = default);
+
+    Task<PatientRelationship?> GetPatientRelationshipAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Records the onboarder's relationship to the patient, replacing any earlier answer.</summary>
+    Task SetPatientRelationshipAsync(Guid id, PatientRelationship relationship, CancellationToken ct = default);
+
+    /// <summary>The glucose units the owner chose for the tenant, or null when none was chosen.</summary>
+    Task<string?> GetDefaultGlucoseUnitsAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Records the owner's choice of tenant glucose units, "mg/dl" or "mmol".</summary>
+    Task SetDefaultGlucoseUnitsAsync(Guid id, string units, CancellationToken ct = default);
 
     /// <summary>Permanently deletes a tenant and all associated data.</summary>
     Task DeleteAsync(Guid id, CancellationToken ct = default);
@@ -54,8 +70,23 @@ public interface ITenantService
     /// </summary>
     Task<List<TenantDto>> GetTenantsForSubjectAsync(Guid subjectId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Returns the tenants the specified subject can go to: those of
+    /// <see cref="GetTenantsForSubjectAsync"/> that are active, in the same order. An inactive
+    /// tenant's host answers 403 on every path, so it is never somewhere to send anyone.
+    /// </summary>
+    Task<List<TenantDto>> GetReachableTenantsForSubjectAsync(Guid subjectId, CancellationToken ct = default);
+
     /// <summary>Checks whether a slug is valid and available for use.</summary>
     Task<SlugValidationResult> ValidateSlugAsync(string slug, CancellationToken ct = default);
+
+    /// <summary>
+    /// <see cref="ValidateSlugAsync(string, CancellationToken)"/>, except that a reserved name passes
+    /// when <paramref name="allowReserved"/> is set. Reserved names keep the platform's own subdomains
+    /// out of tenants' hands. Only the dev-only seed endpoint sets it (enabled in Development, or by
+    /// <c>NOCTURNE_ENABLE_DEV_ONLY_ENDPOINTS</c>), which already hands out owner sessions to anyone.
+    /// </summary>
+    Task<SlugValidationResult> ValidateSlugAsync(string slug, bool allowReserved, CancellationToken ct = default);
 
     /// <summary>Creates a new tenant and its owner subject in a single operation, using either a passkey credential or an OIDC identity.</summary>
     /// <exception cref="ProvisionConflictException">
@@ -77,7 +108,7 @@ public record TenantDto(
     string? OwnerName = null,
     string? OwnerEmail = null);
 
-public record TenantSettingsDto(bool AllowPublicDocs);
+public record TenantSettingsDto(bool AllowPublicDocs, string Slug, string DisplayName, DateTime SysCreatedAt);
 
 public record TenantCreatedDto(Guid Id, string Slug, string DisplayName, bool IsActive, DateTime SysCreatedAt);
 
@@ -100,9 +131,9 @@ public record TenantMemberDto(
     bool IsPlatformAdmin);
 
 /// <summary>
-/// Lightweight role reference attached to a <see cref="TenantMemberDto"/>.
+/// A role a <see cref="TenantMemberDto"/> holds, with the permissions it confers.
 /// </summary>
-public record TenantMemberRoleDto(Guid RoleId, string Name, string Slug);
+public record TenantMemberRoleDto(Guid RoleId, string Name, string Slug, List<string> Permissions);
 
 public record SlugValidationResult(bool IsValid, string? Message = null);
 

@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Checkbox } from "$lib/components/ui/checkbox";
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import TokenScopeSelector from "./TokenScopeSelector.svelte";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Plus from "@lucide/svelte/icons/plus";
@@ -15,16 +17,16 @@
   import Check from "@lucide/svelte/icons/check";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import { formatMediumDateTime } from "$lib/utils/formatting";
+  import { formatMediumDateTime } from "#lib/utils/formatting.js";
   import {
     list as listGrants,
     create as createGrant,
     revoke as revokeGrant,
-  } from "$lib/api/generated/directGrants.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import type { DirectGrantDto } from "$api";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  } from "#lib/api/generated/directGrants.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import type { DirectGrantDto } from "#lib/api/index.js";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
 
   // ============================================================================
   // Props
@@ -111,7 +113,6 @@
         limitTo24Hours: newTokenLimitTo24Hours,
       });
       createdToken = data.token ?? null;
-      await grantsQuery.refresh();
     } catch (err) {
       mutationError = describeSubmitError(err, "Failed to create token.");
       closeCreateDialog();
@@ -154,7 +155,6 @@
 
     try {
       await revokeGrant(revokeTarget.id!);
-      await grantsQuery.refresh();
       successMessage = "API token revoked.";
       clearMessages();
     } catch (err) {
@@ -183,16 +183,7 @@
 {/if}
 
 {#if successMessage}
-  <div
-    class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
-  >
-    <Check
-      class="mt-0.5 h-4 w-4 shrink-0 text-success"
-    />
-    <p class="text-sm text-success">
-      {successMessage}
-    </p>
-  </div>
+  <SuccessBanner wash={false}>{successMessage}</SuccessBanner>
 {/if}
 
 {#if isLoading}
@@ -205,11 +196,11 @@
   <!-- Create Token -->
   <Card.Root>
     <Card.Header>
-      <div class="flex items-center justify-between">
+      <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Card.Title class="flex items-center gap-2">
             <KeyRound class="h-5 w-5" />
-            API Tokens
+            API tokens
           </Card.Title>
           <Card.Description>
             Tokens use the <code class="text-xs font-mono">noc_</code> prefix and
@@ -226,23 +217,15 @@
     <Card.Content class="space-y-3">
       {#if loadError}
         <p class="text-sm text-muted-foreground">
-          Your tokens couldn't be loaded, so this list may be incomplete.
+          Your tokens could not be loaded. This list can be incomplete.
           Refresh the page to try again.
         </p>
       {:else if grants.length === 0}
-        <div
-          class="flex flex-col items-center justify-center py-8 text-center"
-        >
-          <div
-            class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted"
-          >
-            <KeyRound class="h-6 w-6 text-muted-foreground" />
-          </div>
-          <p class="text-sm text-muted-foreground max-w-sm">
-            No API tokens. Create a token to enable programmatic access to
-            your data.
-          </p>
-        </div>
+        <EmptyState
+          art="key"
+          title="No API tokens"
+          body="Create a token to enable programmatic access to your data."
+        />
       {:else}
         {#each grants as grant (grant.id)}
           <div class="rounded-md border p-3 space-y-3">
@@ -252,7 +235,7 @@
                   <p class="text-sm font-medium">{grant.label}</p>
                   {#if grant.isLegacy}
                     <Badge variant="warning">
-                      Legacy — rotate to per-device key
+                      Legacy: rotate to per-device key
                     </Badge>
                   {/if}
                 </div>
@@ -356,7 +339,7 @@
       <Dialog.Header>
         <Dialog.Title>Create API token</Dialog.Title>
         <Dialog.Description>
-          Choose a label and select the scopes this token should have access to.
+          Choose a label and select the scopes that this token can access.
         </Dialog.Description>
       </Dialog.Header>
       <div class="space-y-4 py-4">

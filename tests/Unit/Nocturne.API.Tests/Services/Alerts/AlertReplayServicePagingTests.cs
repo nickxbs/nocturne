@@ -1,3 +1,5 @@
+using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Core.Clinical.Treatments;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
@@ -7,6 +9,7 @@ using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Alerts;
+using Nocturne.Alerts.Corpus;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
@@ -72,11 +75,11 @@ public class AlertReplayServicePagingTests
     private AlertReplayService CreateSut(int pageSize, TimeSpan? maxWindow = null)
     {
         var enricherDeps = new SensorContextEnricherDependencies(
+            new IobCobReader(_iobCalculator.Object, _cobCalculator.Object, _bolusRepository.Object,
+                _tempBasalRepository.Object, _carbIntakeRepository.Object, TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
             _iobCalculator.Object,
             _cobCalculator.Object,
             _treatmentService.Object,
-            _bolusRepository.Object,
-            _carbIntakeRepository.Object,
             _deviceEventRepository.Object,
             _pumpSnapshotRepository.Object,
             _apsSnapshotRepository.Object,
@@ -108,7 +111,8 @@ public class AlertReplayServicePagingTests
             enricher,
             _tenantAccessor.Object,
             Options.Create(options),
-            new ManagedAlertReplayEngine(NullLogger<ManagedAlertReplayEngine>.Instance));
+            new RustAlertReplayEngine(new AlertEngineErrors(new Nocturne.API.Tests.Services.BackgroundServices.TestMeterFactory(), TimeProvider.System)),
+            TimeProvider.System);
     }
 
     /// <summary>
@@ -137,10 +141,10 @@ public class AlertReplayServicePagingTests
         _glucoseRepository
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, false,
+                It.IsAny<int>(), It.IsAny<int>(), false,
                 It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .Returns((DateTime? from, DateTime? to, string? _, string? _,
-                int limit, int _, bool _, bool _,
+                int limit, int _, bool _,
                 DateTime? afterTimestamp, Guid? afterId, CancellationToken _, Guid? _) =>
             {
                 IEnumerable<SensorGlucose> rows = all
@@ -203,7 +207,7 @@ public class AlertReplayServicePagingTests
     /// ticks that follow it, including across a page boundary. A cursor rebuilt per page would see
     /// no reading at-or-before those ticks and clear the excursion, producing extra fired events.
     /// </summary>
-    [Fact]
+    [NativeFact]
     public async Task PageSize_DoesNotChangeReplayOutput_SparseSeries()
     {
         var ruleId = Guid.NewGuid();
@@ -247,7 +251,7 @@ public class AlertReplayServicePagingTests
     /// per page by design (see <see cref="AlertEvaluationOptions.ReplayGlucosePageSize"/>), so
     /// whole-bucket resolution is only guaranteed once a bucket fits in a page.
     /// </remarks>
-    [Fact]
+    [NativeFact]
     public async Task PageSize_DoesNotChangeReplayOutput_WhenABucketStraddlesAPageBoundary()
     {
         var rankedDevice = new PatientDevice
@@ -302,7 +306,7 @@ public class AlertReplayServicePagingTests
     /// The fetch must page rather than ask for the whole window in one go — an unpaged read is
     /// what let a multi-month replay allocate the entire series.
     /// </summary>
-    [Fact]
+    [NativeFact]
     public async Task GlucoseFetch_RequestsBoundedPages()
     {
         _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
@@ -314,11 +318,11 @@ public class AlertReplayServicePagingTests
 
         _glucoseRepository.Verify(r => r.GetAsync(
             It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-            250, It.IsAny<int>(), false, false,
+            250, It.IsAny<int>(), false,
             It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
         _glucoseRepository.Verify(r => r.GetAsync(
             It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-            int.MaxValue, It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(),
+            int.MaxValue, It.IsAny<int>(), It.IsAny<bool>(),
             It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -327,7 +331,7 @@ public class AlertReplayServicePagingTests
     /// the resident set stays within a page. Every reading here is one stream, so per-page
     /// selection is identity and the flushed result still matches the single-page reference.
     /// </summary>
-    [Fact]
+    [NativeFact]
     public async Task ABucketWiderThanAPage_IsFlushedRatherThanHeldBack()
     {
         var ruleId = Guid.NewGuid();
@@ -384,7 +388,7 @@ public class AlertReplayServicePagingTests
         _glucoseRepository
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), It.IsAny<int>(), false, false,
+                It.IsAny<int>(), It.IsAny<int>(), false,
                 It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(stuck);
 
@@ -398,7 +402,7 @@ public class AlertReplayServicePagingTests
     /// The shipped default has to clear the widest window a first-party caller asks for — a
     /// DST-stretched calendar day — while still rejecting something far beyond it.
     /// </summary>
-    [Fact]
+    [NativeFact]
     public async Task TheDefaultWindowCap_ClearsACalendarDayAndRejectsFarBeyondIt()
     {
         var shipped = new AlertEvaluationOptions().MaxReplayWindow;
@@ -423,7 +427,7 @@ public class AlertReplayServicePagingTests
             .Should().ThrowAsync<ReplayWindowTooLargeException>();
     }
 
-    [Fact]
+    [NativeFact]
     public async Task WindowExactlyAtTheMaximum_IsReplayed()
     {
         _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
@@ -440,7 +444,7 @@ public class AlertReplayServicePagingTests
         result.Events.Should().ContainSingle();
     }
 
-    [Fact]
+    [NativeFact]
     public async Task WindowOneTickOverTheMaximum_IsRejected()
     {
         var max = TimeSpan.FromHours(2);
@@ -458,7 +462,7 @@ public class AlertReplayServicePagingTests
     /// The cap is input validation, so it must reject before any tenant data is touched — an
     /// over-wide window is the same error whatever the rule set or reading count is.
     /// </summary>
-    [Fact]
+    [NativeFact]
     public async Task OverWideWindow_IsRejectedWithoutFetchingRulesOrReadings()
     {
         var sut = CreateSut(pageSize: 1000, maxWindow: TimeSpan.FromHours(2));
@@ -471,11 +475,11 @@ public class AlertReplayServicePagingTests
             r => r.GetEnabledRulesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
         _glucoseRepository.Verify(
             r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
                 It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task DryRunReplay_IsSubjectToTheSameWindowCap()
     {
         var sut = CreateSut(pageSize: 1000, maxWindow: TimeSpan.FromHours(2));
@@ -490,7 +494,7 @@ public class AlertReplayServicePagingTests
             .Should().ThrowAsync<ReplayWindowTooLargeException>();
     }
 
-    [Fact]
+    [NativeFact]
     public async Task Controller_MapsAnOverWideWindowToBadRequest()
     {
         var replayService = new Mock<IAlertReplayService>();

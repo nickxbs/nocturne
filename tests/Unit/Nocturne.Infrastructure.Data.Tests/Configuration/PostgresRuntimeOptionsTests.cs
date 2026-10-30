@@ -21,10 +21,11 @@ public class PostgresRuntimeOptionsTests
     /// </summary>
     private static NpgsqlConnectionStringBuilder RegisteredPool(
         IConfiguration? configuration = null,
-        Action<PostgreSqlConfiguration>? configure = null)
+        Action<PostgreSqlConfiguration>? configure = null,
+        string connectionString = PostgreSqlSection.AppConnectionString)
     {
         var services = new ServiceCollection();
-        services.AddPostgreSqlInfrastructure(PostgreSqlSection.AppConnectionString, configuration, configure);
+        services.AddPostgreSqlInfrastructure(connectionString, configuration, configure);
 
         var dataSource = (NpgsqlDataSource)services
             .Single(d => d.ServiceType == typeof(NpgsqlDataSource))
@@ -47,6 +48,84 @@ public class PostgresRuntimeOptionsTests
         RegisteredPool(PostgreSqlSection.With(("MaxPoolSize", "33"))).MaxPoolSize.Should().Be(
             33,
             "an operator must be able to retune the pool without a code change and redeploy");
+    }
+
+    [Fact]
+    public void RuntimePool_ClosesIdleConnectionsAfterAMinute_WithNoFloor()
+    {
+        var pool = RegisteredPool();
+
+        pool.ConnectionIdleLifetime.Should().Be(60);
+        pool.MinPoolSize.Should().Be(0);
+    }
+
+    [Fact]
+    public void ConfigurationSection_ReachesThePoolFloorAndIdleLifetime()
+    {
+        var pool = RegisteredPool(PostgreSqlSection.With(
+            ("MinPoolSize", "5"),
+            ("ConnectionIdleLifetimeSeconds", "120")));
+
+        pool.MinPoolSize.Should().Be(5);
+        pool.ConnectionIdleLifetime.Should().Be(120);
+    }
+
+    [Theory]
+    [InlineData("MinPoolSize", "-1")]
+    [InlineData("MinPoolSize", "101")]
+    [InlineData("ConnectionIdleLifetimeSeconds", "0")]
+    [InlineData("ConnectionIdleLifetimeSeconds", "-5")]
+    [InlineData("ConnectionIdleLifetimeSeconds", "5")]
+    public void OutOfRangePoolSetting_FailsAtStartup(string key, string value)
+    {
+        var register = () => RegisteredPool(PostgreSqlSection.With((key, value)));
+
+        register.Should().Throw<InvalidOperationException>().WithMessage($"*{key}*");
+    }
+
+    [Fact]
+    public void RuntimePool_KeepsTheConnectionStringsOwnPoolFloorAndIdleLifetime()
+    {
+        var pool = RegisteredPool(
+            PostgreSqlSection.With(("MinPoolSize", "5"), ("ConnectionIdleLifetimeSeconds", "120")),
+            connectionString: PostgreSqlSection.AppConnectionString
+                + ";Minimum Pool Size=7;Connection Idle Lifetime=300");
+
+        pool.MinPoolSize.Should().Be(7);
+        pool.ConnectionIdleLifetime.Should().Be(300);
+    }
+
+    [Fact]
+    public void IdleLifetimeBelowTheConnectionStringsPruningInterval_FailsNamingTheKey()
+    {
+        var register = () => RegisteredPool(
+            connectionString: PostgreSqlSection.AppConnectionString + ";Connection Pruning Interval=90");
+
+        register.Should().Throw<InvalidOperationException>()
+            .WithMessage("*PostgreSql:ConnectionIdleLifetimeSeconds*90*");
+    }
+
+    [Fact]
+    public void MinPoolSizeAboveAConfiguredMaxPoolSize_FailsAtStartup()
+    {
+        var register = () => RegisteredPool(PostgreSqlSection.With(("MaxPoolSize", "10"), ("MinPoolSize", "11")));
+
+        register.Should().Throw<InvalidOperationException>().WithMessage("*MinPoolSize*");
+    }
+
+    [Fact]
+    public void RuntimePool_PreparesItsMostUsedStatements_AndConfigurationCanTurnItOff()
+    {
+        RegisteredPool().MaxAutoPrepare.Should().BePositive(
+            "planning every execution afresh was over a third of the database's time under load");
+        RegisteredPool(PostgreSqlSection.With(("MaxAutoPrepare", "0"))).MaxAutoPrepare.Should().Be(0);
+    }
+
+    [Fact]
+    public void RuntimePool_KeepsTheConnectionStringsOwnMaxAutoPrepare()
+    {
+        RegisteredPool(connectionString: PostgreSqlSection.AppConnectionString + ";Max Auto Prepare=0")
+            .MaxAutoPrepare.Should().Be(0, "an operator behind a transaction-mode pooler turns preparation off there");
     }
 
     [Fact]

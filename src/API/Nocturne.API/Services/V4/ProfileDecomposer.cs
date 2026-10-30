@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.V4;
@@ -29,6 +30,8 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     private readonly ISensitivityScheduleRepository _sensitivityScheduleRepo;
     private readonly ITargetRangeScheduleRepository _targetRangeScheduleRepo;
     private readonly ITempBasalRateReresolver _tempBasalRates;
+    private readonly ILoopClosedLoopStamper _closedLoop;
+    private readonly TimeProvider _time;
 
     /// <param name="therapySettingsRepo">Repository for <see cref="V4Models.TherapySettings"/> records.</param>
     /// <param name="basalScheduleRepo">Repository for <see cref="V4Models.BasalSchedule"/> records.</param>
@@ -36,6 +39,8 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     /// <param name="sensitivityScheduleRepo">Repository for <see cref="V4Models.SensitivitySchedule"/> records.</param>
     /// <param name="targetRangeScheduleRepo">Repository for <see cref="V4Models.TargetRangeSchedule"/> records.</param>
     /// <param name="tempBasalRates">Re-resolves the percent temp basals a written basal schedule covers.</param>
+    /// <param name="closedLoop">Restamps the Loop snapshots written Loop settings govern.</param>
+    /// <param name="timeProvider">Clock that marks when a batch began writing.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
     public ProfileDecomposer(
         ITherapySettingsRepository therapySettingsRepo,
@@ -44,6 +49,8 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         ISensitivityScheduleRepository sensitivityScheduleRepo,
         ITargetRangeScheduleRepository targetRangeScheduleRepo,
         ITempBasalRateReresolver tempBasalRates,
+        ILoopClosedLoopStamper closedLoop,
+        TimeProvider timeProvider,
         ILogger<ProfileDecomposer> logger)
         : base(logger)
     {
@@ -53,6 +60,8 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         _sensitivityScheduleRepo = sensitivityScheduleRepo;
         _targetRangeScheduleRepo = targetRangeScheduleRepo;
         _tempBasalRates = tempBasalRates;
+        _closedLoop = closedLoop;
+        _time = timeProvider;
     }
 
     /// <inheritdoc />
@@ -77,16 +86,30 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         IReadOnlyList<Profile> profiles, WriteOrigin origin, CancellationToken ct = default)
     {
         var changed = new List<(string ProfileName, DateTime Start)>();
-        var result = await DecomposeCoreAsync(profiles, origin, changed, ct);
+        var loopSettings = new List<DateTime>();
+        var result = await DecomposeCoreAsync(profiles, origin, changed, loopSettings, ct);
         await _tempBasalRates.AfterSchedulesWrittenAsync(changed, ct);
+        await _closedLoop.AfterLoopSettingsWrittenAsync(loopSettings, ct);
         return result;
     }
 
+    /// <summary>
+    /// Whether <paramref name="storeName"/> has the <c>{name}@@@@@{mills}</c> shape of a Profile
+    /// Switch's inline profile. Nightscout only ever builds such a store in memory
+    /// (lib/profilefunctions.js); one arriving stored is a pre-activation instance's switch snapshot,
+    /// which is the switch's <see cref="V4Models.ProfileActivation"/> snapshot here and no profile.
+    /// </summary>
+    internal static bool IsProfileSwitchStoreName(string storeName) => ProfileSwitchStoreName.IsMatch(storeName);
+
+    private static readonly Regex ProfileSwitchStoreName = new("@@@@@[0-9]+$", RegexOptions.Compiled);
+
     /// <param name="changed">Receives the store versions whose basal schedule or settings changed.</param>
+    /// <param name="loopSettings">Receives the starts of the changed settings, any of which may carry or drop <c>dosingEnabled</c>.</param>
     private async Task<V4Models.DecompositionResult> DecomposeCoreAsync(
         IReadOnlyList<Profile> profiles,
         WriteOrigin origin,
         List<(string ProfileName, DateTime Start)> changed,
+        List<DateTime> loopSettings,
         CancellationToken ct)
     {
         var firstMinted = Guid.CreateVersion7();
@@ -107,7 +130,15 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
             var minted = first ? firstMinted : Guid.CreateVersion7();
             first = false;
             foreach (var (storeName, profileData) in profile.Store)
+            {
+                if (IsProfileSwitchStoreName(storeName))
+                {
+                    Logger.LogDebug("Skipped profile switch store {StoreName} of profile {Id}", storeName, profile.Id);
+                    continue;
+                }
+
                 entries.Add(new StoreEntry(profile, storeName, profileData, $"{profile.Id}:{storeName}", minted));
+            }
         }
 
         if (entries.Count == 0)
@@ -119,7 +150,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
             : (await _therapySettingsRepo.GetDefaultsAsync(ct))
                 .Select(d => d.LegacyId).OfType<string>().ToHashSet(StringComparer.Ordinal);
 
-        var writtenSince = DateTime.UtcNow;
+        var writtenSince = _time.GetUtcNow().UtcDateTime;
         var anchors = await _therapySettingsRepo.BulkUpsertByLegacyIdAsync(
             entries.Select(e => MapToTherapySettings(
                 e.Profile, e.Data, e.StoreName, e.LegacyId,
@@ -127,7 +158,9 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
                 e.MintedCorrelationId)).ToList(),
             origin, preserveStoredCorrelationId: true, ct);
         Record(result, anchors);
-        changed.AddRange(ChangedSince(anchors, writtenSince));
+        var changedSettings = ChangedSince(anchors, writtenSince).ToList();
+        changed.AddRange(changedSettings.Select(VersionKey));
+        loopSettings.AddRange(changedSettings.Select(s => s.Timestamp));
 
         if (claim.Claims)
         {
@@ -165,7 +198,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
             groups.Select(g => MapToTargetRangeSchedule(g.Entry.Profile, g.Entry.Data, g.Entry.StoreName, g.Entry.LegacyId, g.CorrelationId, Logger)).ToList(),
             origin, ct: ct));
 
-        changed.AddRange(ChangedSince(basal, writtenSince));
+        changed.AddRange(ChangedSince(basal, writtenSince).Select(VersionKey));
 
         return result;
     }
@@ -182,7 +215,6 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     /// Nightscout finds none, and so does a claim whose store row was not written. A batch that does
     /// not claim keeps the stored flags as they are, so re-syncing an older document neither takes
     /// the default nor drops a user's choice.
-    /// Profile-switch snapshots are not documents, so they neither claim nor count as stored newer.
     /// </remarks>
     private async Task<DefaultClaim> ResolveDefaultClaimAsync(List<StoreEntry> entries, CancellationToken ct)
     {
@@ -212,12 +244,16 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         Profile Profile, string StoreName, ProfileData Data, string LegacyId, Guid MintedCorrelationId);
 
     /// <summary>The upserted versions a write created or changed, rather than left as they were.</summary>
-    private static IEnumerable<(string ProfileName, DateTime Start)> ChangedSince<TRecord>(
+    private static IEnumerable<TRecord> ChangedSince<TRecord>(
         LegacyUpsertBatch<TRecord> batch, DateTime writtenSince)
-        where TRecord : class, V4Models.IV4Record, V4Models.IProfileScoped =>
+        where TRecord : class, V4Models.IV4Record =>
         batch.Outcomes.Values
             .Where(o => o.Created || o.Record.ModifiedAt >= writtenSince)
-            .Select(o => (o.Record.ProfileName, o.Record.Timestamp));
+            .Select(o => o.Record);
+
+    private static (string ProfileName, DateTime Start) VersionKey<TRecord>(TRecord version)
+        where TRecord : V4Models.IV4Record, V4Models.IProfileScoped =>
+        (version.ProfileName, version.Timestamp);
 
     private static void Record<TRecord>(
         V4Models.DecompositionResult result, LegacyUpsertBatch<TRecord> batch)
@@ -558,7 +594,8 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     /// </remarks>
     public async Task<bool> ReplaceDocumentAsync(Profile profile, WriteOrigin origin, CancellationToken ct = default)
     {
-        if (profile.Store.Count == 0)
+        var stores = profile.Store.Keys.Where(store => !IsProfileSwitchStoreName(store)).ToList();
+        if (stores.Count == 0)
             return false;
 
         var documentId = profile.Id!;
@@ -572,15 +609,17 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         }
 
         var changed = new List<(string ProfileName, DateTime Start)>();
-        var result = await DecomposeCoreAsync([profile], origin, changed, ct);
+        var loopSettings = stored.Select(row => row.Start).ToList();
+        var result = await DecomposeCoreAsync([profile], origin, changed, loopSettings, ct);
         var written = result.CreatedRecords.Concat(result.UpdatedRecords).OfType<V4Models.TherapySettings>().Count();
-        if (written < profile.Store.Count)
+        if (written < stores.Count)
         {
             await _tempBasalRates.AfterSchedulesWrittenAsync(changed, ct);
+            await _closedLoop.AfterLoopSettingsWrittenAsync(loopSettings, ct);
             return false;
         }
 
-        var carried = profile.Store.Keys.Select(store => $"{documentId}:{store}").ToHashSet(StringComparer.Ordinal);
+        var carried = stores.Select(store => $"{documentId}:{store}").ToHashSet(StringComparer.Ordinal);
         foreach (var dropped in stored.Where(row => !carried.Contains(row.LegacyId)))
         {
             await _therapySettingsRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
@@ -592,6 +631,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         }
 
         await _tempBasalRates.AfterSchedulesWrittenAsync(changed, ct);
+        await _closedLoop.AfterLoopSettingsWrittenAsync(loopSettings, ct);
         return true;
     }
 
@@ -613,7 +653,10 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         }
 
         if (deleted > 0)
+        {
             await _tempBasalRates.AfterSchedulesWrittenAsync(rows.Select(r => (r.ProfileName, r.Timestamp)).ToList(), ct);
+            await _closedLoop.AfterLoopSettingsWrittenAsync(rows.Select(r => r.Timestamp).ToList(), ct);
+        }
         return deleted;
     }
 

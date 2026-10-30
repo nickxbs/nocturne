@@ -10,6 +10,7 @@ using Nocturne.Connectors.Core.Utilities;
 using OpenApi.Remote.Attributes;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Models.Authorization;
 
@@ -138,6 +139,7 @@ public class ConfigurationController : ControllerBase
     /// Saves or updates runtime configuration for a connector.
     /// Only properties marked with [RuntimeConfigurable] are accepted.
     /// Validates the configuration against the connector's schema before saving.
+    /// Refused for Google Health, whose options are saved by the Google Health endpoint.
     /// </summary>
     /// <param name="connectorName">The connector name</param>
     /// <param name="configuration">Configuration values as JSON</param>
@@ -157,6 +159,11 @@ public class ConfigurationController : ControllerBase
         _logger.LogInformation("Saving configuration for connector {ConnectorName} by {ModifiedBy}",
             connectorName, modifiedBy);
 
+        if (IsGrantDrivenConnector(connectorName))
+        {
+            return SetsEnabled(configuration) ? RefuseGrantDrivenEnabled() : RefuseGrantDrivenConfiguration();
+        }
+
         // Validate the configuration against the schema
         var validationErrors = await ValidateConfigurationAsync(connectorName, configuration, ct);
         if (validationErrors.Count > 0)
@@ -169,6 +176,32 @@ public class ConfigurationController : ControllerBase
         var result = await _configService.SaveConfigurationAsync(connectorName, configuration, modifiedBy, ct);
         return Ok(result);
     }
+
+    private static bool IsGrantDrivenConnector(string connectorName) =>
+        ConnectorNames.Canonical(connectorName) == ConnectorNames.Canonical(nameof(ConnectSource.GoogleHealth));
+
+    private static bool SetsEnabled(JsonDocument configuration) =>
+        configuration.RootElement.ValueKind == JsonValueKind.Object &&
+        configuration.RootElement.EnumerateObject()
+            .Any(property => property.Name.Equals("enabled", StringComparison.OrdinalIgnoreCase));
+
+    private ObjectResult RefuseGrantDrivenEnabled() =>
+        Problem(
+            detail: "Google Health is enabled while it holds a Google sign-in. Disconnect it to stop syncing.",
+            statusCode: 400,
+            title: "Bad Request");
+
+    private ObjectResult RefuseGrantDrivenConfiguration() =>
+        Problem(
+            detail: "Google Health options are saved at PUT /api/v4/google-health/options, which validates them.",
+            statusCode: 400,
+            title: "Bad Request");
+
+    private ObjectResult RefuseGrantDrivenGrant() =>
+        Problem(
+            detail: "Google Health holds a Google sign-in. Connect and disconnect it at /api/v4/google-health.",
+            statusCode: 400,
+            title: "Bad Request");
 
     /// <summary>
     /// Validates the configuration against the connector's schema.
@@ -364,6 +397,11 @@ public class ConfigurationController : ControllerBase
         [FromBody] Dictionary<string, string> secrets,
         CancellationToken ct)
     {
+        if (IsGrantDrivenConnector(connectorName))
+        {
+            return RefuseGrantDrivenGrant();
+        }
+
         // Saving a Nightscout API secret adopts it as a working credential (see
         // RequireInteractiveSessionAttribute); other connector credentials hand out nothing.
         if (ConnectorConfigurationService.AdoptedSecret(connectorName, secrets) is not null
@@ -393,7 +431,9 @@ public class ConfigurationController : ControllerBase
     /// Accepts the combined configuration and secrets payload (the same field shapes the
     /// configuration and secrets PUT endpoints take) and attempts a live authentication.
     /// Connectors that do not support verification return <c>supported = false</c>.
-    /// The submitted values are never stored, logged, or echoed back.
+    /// The submitted values are never stored, logged, or echoed back. A secret named in
+    /// <c>storedSecrets</c> is read from the tenant's stored secrets and verified against the
+    /// stored configuration, with the same outcome a submitted secret would give.
     /// </summary>
     /// <param name="connectorName">The connector name</param>
     /// <param name="request">The configuration and secrets to verify</param>
@@ -431,9 +471,19 @@ public class ConfigurationController : ControllerBase
                 return BadRequest(new { message = "Configuration validation failed", errors = validationErrors });
         }
 
-        var result = await verifier.VerifyAsync(
-            request.Configuration, request.Secrets ?? new Dictionary<string, string>(), ct);
-        return Ok(result);
+        try
+        {
+            var result = await verifier.VerifyAsync(
+                request.Configuration,
+                request.Secrets ?? new Dictionary<string, string>(),
+                request.StoredSecrets ?? [],
+                ct);
+            return Ok(result);
+        }
+        catch (InvalidVerificationRequestException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     /// <summary>
@@ -464,11 +514,17 @@ public class ConfigurationController : ControllerBase
     [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
     [RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SetActive(
         string connectorName,
         [FromBody] SetActiveRequest request,
         CancellationToken ct)
     {
+        if (IsGrantDrivenConnector(connectorName))
+        {
+            return RefuseGrantDrivenEnabled();
+        }
+
         var modifiedBy = User.Identity?.Name ?? "api";
         _logger.LogInformation("Setting connector {ConnectorName} active={IsActive} by {ModifiedBy}",
             connectorName, request.IsActive, modifiedBy);
@@ -486,11 +542,17 @@ public class ConfigurationController : ControllerBase
     [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
     [RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteConfiguration(
         string connectorName,
         CancellationToken ct)
     {
+        if (IsGrantDrivenConnector(connectorName))
+        {
+            return RefuseGrantDrivenGrant();
+        }
+
         _logger.LogInformation("Deleting configuration for connector {ConnectorName}", connectorName);
 
         var deleted = await _configService.DeleteConfigurationAsync(connectorName, ct);

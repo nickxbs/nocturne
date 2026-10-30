@@ -85,6 +85,12 @@ public class TestNocturneDbContext : NocturneDbContext
 
         modelBuilder.Entity<TestNonAuditableEntity>(e => e.ClearQueryFilters());
     }
+
+    private static readonly SqliteSchemaTemplate Schema = new(connection =>
+        new TestNocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options));
+
+    /// <summary>Gives <paramref name="connection"/> this context's schema, from <see cref="SqliteSchemaTemplate"/>.</summary>
+    public static void CreateSchema(SqliteConnection connection) => Schema.CopyInto(connection);
 }
 
 #endregion
@@ -100,8 +106,10 @@ public class MutationAuditInterceptorTests : IDisposable
 
     public MutationAuditInterceptorTests()
     {
-        _connection = new SqliteConnection("Filename=:memory:");
-        _connection.Open();
+        var connection = new SqliteConnection("Filename=:memory:");
+        connection.Open();
+        TestNocturneDbContext.CreateSchema(connection);
+        _connection = connection;
 
         var httpContextAccessor = new Mock<IHttpContextAccessor>();
         httpContextAccessor.Setup(x => x.HttpContext).Returns((HttpContext)null!);
@@ -118,7 +126,6 @@ public class MutationAuditInterceptorTests : IDisposable
             .Options;
 
         using var context = CreateContext();
-        context.Database.EnsureCreated();
 
         // Seed the tenant so FK constraints are satisfied
         context.Tenants.Add(new TenantEntity { Id = _tenantId, Slug = "test" });
@@ -425,12 +432,12 @@ public class MutationAuditInterceptorTests : IDisposable
         await context.SaveChangesAsync();
 
         using var userContext = CreateContext();
-        var trackedByUser = await userContext.HeartRates.FindAsync(userDeleted.Id);
+        var trackedByUser = await userContext.HeartRates.FindAsync(_tenantId, userDeleted.Id);
         trackedByUser!.DeletedAt = DateTime.UtcNow;
         await InvokeSavingChanges(userContext);
 
         using var systemContext = CreateContext(new StubAuditContext { IsSystem = true });
-        var trackedBySystem = await systemContext.HeartRates.FindAsync(systemDeleted.Id);
+        var trackedBySystem = await systemContext.HeartRates.FindAsync(_tenantId, systemDeleted.Id);
         trackedBySystem!.DeletedAt = DateTime.UtcNow;
         await InvokeSavingChanges(systemContext);
 
@@ -628,6 +635,15 @@ public class MutationAuditInterceptorTests : IDisposable
         var secretChange = changes!["SecretField"];
         secretChange.GetProperty("old").GetString().Should().Be("[redacted]");
         secretChange.GetProperty("new").GetString().Should().Be("[redacted]");
+    }
+
+    [Theory]
+    [InlineData(nameof(SettingsEntity.Value))]
+    [InlineData(nameof(SettingsEntity.AdditionalPropertiesJson))]
+    public void Settings_values_are_redacted_since_settings_documents_carry_credentials(string property)
+    {
+        typeof(SettingsEntity).GetProperty(property)!
+            .IsDefined(typeof(AuditRedactedAttribute), inherit: true).Should().BeTrue();
     }
 
     [Fact]

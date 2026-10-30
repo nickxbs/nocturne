@@ -1,14 +1,15 @@
 <script lang="ts">
+    import { Artwork } from "water-ui";
     import { Button } from "@nocturne/ui/ui/button";
     import ArrowRight from "@lucide/svelte/icons/arrow-right";
     import Play from "@lucide/svelte/icons/play";
-    import { DEMO_ENABLED } from "$lib/config";
-    import AuroraCanvas from "$lib/components/AuroraCanvas.svelte";
-    import AuroraPool from "$lib/components/AuroraPool.svelte";
-    import FeaturePillars from "$lib/components/features/FeaturePillars.svelte";
-    import { getCommunityData } from "$lib/data/portal";
-    import { DATA_SOURCES } from "$lib/data/connectors";
-    import { FlowField } from "$lib/utils/aurora-flow";
+    import { DEMO_ENABLED } from "#lib/config.js";
+    import AuroraCanvas from "#lib/components/AuroraCanvas.svelte";
+    import AuroraPool from "#lib/components/AuroraPool.svelte";
+    import FeaturePillars from "#lib/components/features/FeaturePillars.svelte";
+    import { getCommunityData } from "#lib/data/portal.js";
+    import { DATA_SOURCES } from "#lib/data/connectors.js";
+    import { FlowField } from "#lib/utils/aurora-flow.js";
 
     let textBlockEl: HTMLElement | null = $state(null);
     const flow = new FlowField();
@@ -155,6 +156,13 @@
                 Read the docs
             </Button>
         </div>
+        <Artwork
+            artwork="key"
+            palette="ember"
+            motion="auto"
+            autoplay="once"
+            class="hidden size-[200px] shrink-0 lg:block xl:size-[240px]"
+        />
     </div>
 
     <pre

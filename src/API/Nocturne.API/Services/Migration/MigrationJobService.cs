@@ -48,6 +48,12 @@ public interface IMigrationJobService
 
     /// <summary>Lists the calling tenant's migration sources. Source URLs frequently identify a person, so sources are never listed cross-tenant.</summary>
     Task<IReadOnlyList<MigrationSourceDto>> GetSourcesAsync(Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>Reads a Nightscout instance's display units and current profile's units and timezone.</summary>
+    /// <exception cref="MigrationSourceException">The instance could not be read.</exception>
+    /// <exception cref="System.Text.Json.JsonException">The instance answered with something other than JSON.</exception>
+    Task<NightscoutDisplaySettings> ReadDisplaySettingsAsync(
+        string nightscoutUrl, string? apiSecret, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -70,6 +76,7 @@ public class MigrationJobService : IMigrationJobService
     private readonly IConfiguration _configuration;
     private readonly ConcurrentDictionary<Guid, MigrationJob> _jobs = new();
     private readonly TenantRunGuard _runGuard;
+    private readonly TimeProvider _timeProvider;
 
     internal const string MigrationRunName = "migration";
 
@@ -77,13 +84,15 @@ public class MigrationJobService : IMigrationJobService
         ILogger<MigrationJobService> logger,
         IServiceProvider serviceProvider,
         IConfiguration configuration,
-        TenantRunGuard runGuard
+        TenantRunGuard runGuard,
+        TimeProvider timeProvider
     )
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _configuration = configuration;
         _runGuard = runGuard;
+        _timeProvider = timeProvider;
     }
 
     private static readonly TimeSpan TerminalHolderWait = TimeSpan.FromSeconds(30);
@@ -118,24 +127,24 @@ public class MigrationJobService : IMigrationJobService
         {
             Id = jobId,
             Mode = request.Mode,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = _timeProvider.GetUtcNow().UtcDateTime,
             SourceDescription = sourceDesc,
         };
 
-        var job = new MigrationJob(jobId, tenantId, request, jobInfo, tenantContext, _logger, _serviceProvider);
+        var job = new MigrationJob(jobId, tenantId, request, jobInfo, tenantContext, _logger, _serviceProvider, _timeProvider);
 
         // One migration per tenant at a time: two runs over the same target race on their inserts.
         // The lease is held for the whole run and records the job id, so a refused start can report
         // which job it collided with rather than a bare conflict.
         IDisposable lease;
-        var terminalHolderDeadline = DateTime.UtcNow + TerminalHolderWait;
+        var terminalHolderDeadline = _timeProvider.GetUtcNow().UtcDateTime + TerminalHolderWait;
         while ((lease = _runGuard.TryAcquire(tenantId, MigrationRunName, jobId)) is null)
         {
             if (_runGuard.TryGetHolder(tenantId, MigrationRunName, out var runningJobId))
             {
                 // A job reports its terminal state before it writes its final record and releases
                 // the lease, so a caller who saw it finish must not be refused for that window.
-                if (IsTerminal(runningJobId) && DateTime.UtcNow < terminalHolderDeadline)
+                if (IsTerminal(runningJobId) && _timeProvider.GetUtcNow().UtcDateTime < terminalHolderDeadline)
                 {
                     await Task.Delay(TerminalHolderPollInterval, ct);
                     continue;
@@ -191,7 +200,7 @@ public class MigrationJobService : IMigrationJobService
             "Started migration job {JobId} in {Mode} mode from {Source}",
             jobId,
             request.Mode,
-            sourceDesc
+            SanitizeForLog(sourceDesc)
         );
 
         return jobInfo;
@@ -300,16 +309,7 @@ public class MigrationJobService : IMigrationJobService
             };
         }
 
-        using var scope = _serviceProvider.CreateScope();
-        var httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
-        var httpClient = httpClientFactory.CreateClient(HttpClientName);
-        httpClient.BaseAddress = baseAddress;
-
-        // Add API secret header if provided (Nightscout expects the SHA1 hash)
-        if (!string.IsNullOrEmpty(request.NightscoutApiSecret))
-        {
-            httpClient.DefaultRequestHeaders.Add("api-secret", MigrationJob.HashApiSecret(request.NightscoutApiSecret));
-        }
+        var httpClient = CreateSourceClient(baseAddress, request.NightscoutApiSecret);
 
         try
         {
@@ -334,6 +334,31 @@ public class MigrationJobService : IMigrationJobService
                 ErrorMessage = ex.Message,
             };
         }
+    }
+
+    public async Task<NightscoutDisplaySettings> ReadDisplaySettingsAsync(
+        string nightscoutUrl, string? apiSecret, CancellationToken ct = default)
+    {
+        if (!NightscoutBaseUri.TryFor(nightscoutUrl, out var baseAddress))
+            throw new MigrationSourceException(NightscoutBaseUri.InvalidUrlMessage, MigrationFailureCause.Unreachable);
+
+        var httpClient = CreateSourceClient(baseAddress, apiSecret);
+        var status = await MigrationJob.ReadFromSourceAsync(
+            httpClient, "api/v1/status.json", "status", ct, NightscoutRead.ImportProbe);
+        var profiles = await MigrationJob.ReadFromSourceAsync(httpClient, "api/v1/profile.json", "profile", ct);
+        return NightscoutDisplaySettings.Parse(status, profiles);
+    }
+
+    private HttpClient CreateSourceClient(Uri baseAddress, string? apiSecret)
+    {
+        var httpClient = _serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName);
+        httpClient.BaseAddress = baseAddress;
+
+        // Nightscout expects the SHA1 hash of the secret.
+        if (!string.IsNullOrEmpty(apiSecret))
+            httpClient.DefaultRequestHeaders.Add("api-secret", MigrationJob.HashApiSecret(apiSecret));
+
+        return httpClient;
     }
 
     private async Task<TestMigrationConnectionResult> TestMongoConnectionAsync(
@@ -452,6 +477,13 @@ public class MigrationJobService : IMigrationJobService
 
         return sources;
     }
+
+    /// <summary>
+    /// The source description carries the caller's Nightscout URL or Mongo database name;
+    /// stripping CR/LF keeps it from forging log lines.
+    /// </summary>
+    private static string? SanitizeForLog(string? value) =>
+        value?.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
 
 /// <summary>
@@ -466,10 +498,17 @@ internal class MigrationJob
     private readonly TenantContext? _tenantContext;
     private readonly ILogger _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly TimeProvider _timeProvider;
     private readonly CancellationTokenSource _cts = new();
+
+    private DateTime UtcNow => _timeProvider.GetUtcNow().UtcDateTime;
 
     /// <summary>The tenant that owns this migration job. Used to scope status/cancel lookups.</summary>
     public Guid TenantId => _tenantId;
+
+    // A terminal state and the fields that describe it are written together under this lock, and
+    // every reader copies them under it, so none sees a terminal state before the fields it carries.
+    private readonly Lock _statusLock = new();
     private MigrationJobState _state = MigrationJobState.Pending;
     private string? _currentOperation;
     private string? _errorMessage;
@@ -477,6 +516,14 @@ internal class MigrationJob
     private DateTime _startedAt;
     private DateTime? _completedAt;
     private readonly ConcurrentDictionary<string, CollectionProgress> _collectionProgress = new();
+
+    /// <summary>
+    /// Newest source timestamp this run actually brought across, for
+    /// <see cref="MigrationSourceEntity.LastMigratedDataTimestamp"/>. Collections are pulled one
+    /// after another on the job's own task, so a plain field suffices.
+    /// </summary>
+    private DateTime? _newestMigratedData;
+
     private static readonly System.Text.Json.JsonSerializerOptions s_caseInsensitiveJson = new() { PropertyNameCaseInsensitive = true };
 
     /// <summary>
@@ -496,7 +543,8 @@ internal class MigrationJob
         MigrationJobInfo info,
         TenantContext? tenantContext,
         ILogger logger,
-        IServiceProvider serviceProvider
+        IServiceProvider serviceProvider,
+        TimeProvider timeProvider
     )
     {
         _id = id;
@@ -506,6 +554,7 @@ internal class MigrationJob
         _tenantContext = tenantContext;
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>Audit endpoint recorded for migration-owned writes.</summary>
@@ -519,18 +568,23 @@ internal class MigrationJob
     private AsyncServiceScope CreateTenantScope() =>
         TenantJobScope.Open(_serviceProvider, _tenantContext, AuditEndpoint);
 
-    public MigrationJobStatus GetStatus() =>
-        new()
+    public MigrationJobStatus GetStatus()
+    {
+        lock (_statusLock)
         {
-            JobId = _id,
-            State = _state,
-            ProgressPercentage = _progressPercentage,
-            CurrentOperation = _currentOperation,
-            ErrorMessage = _errorMessage,
-            StartedAt = _startedAt,
-            CompletedAt = _completedAt,
-            CollectionProgress = _collectionProgress.ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
-        };
+            return new()
+            {
+                JobId = _id,
+                State = _state,
+                ProgressPercentage = _progressPercentage,
+                CurrentOperation = _currentOperation,
+                ErrorMessage = _errorMessage,
+                StartedAt = _startedAt,
+                CompletedAt = _completedAt,
+                CollectionProgress = _collectionProgress.ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
+            };
+        }
+    }
 
     public void Cancel()
     {
@@ -538,8 +592,14 @@ internal class MigrationJob
         // Leave terminal states untouched — cancelling a job that already Completed/Failed must
         // not rewrite its (now persisted) outcome, which would also un-satisfy the startup
         // "was this source ever migrated?" check.
-        if (_state.IsLive())
-            _state = MigrationJobState.Cancelled;
+        lock (_statusLock)
+        {
+            if (_state.IsLive())
+            {
+                _completedAt = UtcNow;
+                _state = MigrationJobState.Cancelled;
+            }
+        }
     }
 
     public async Task ExecuteAsync(CancellationToken externalCt)
@@ -550,8 +610,12 @@ internal class MigrationJob
         );
         var ct = linkedCts.Token;
 
-        _startedAt = DateTime.UtcNow;
-        _state = MigrationJobState.Running;
+        lock (_statusLock)
+        {
+            _startedAt = UtcNow;
+            if (_state == MigrationJobState.Pending)
+                _state = MigrationJobState.Running;
+        }
         await PersistSnapshotAsync(CancellationToken.None);
 
         try
@@ -568,20 +632,26 @@ internal class MigrationJob
             // A run that got some collections through stays Completed rather than gaining a state
             // the UI's badge switch does not know; the summary is what stops it reading as a clean
             // import.
-            _state = MigrationJobState.Completed;
-            _errorMessage = FailureSummary();
-            _progressPercentage = 100;
-            _completedAt = DateTime.UtcNow;
+            var summary = FailureSummary();
+            lock (_statusLock)
+            {
+                _errorMessage = summary;
+                _progressPercentage = 100;
+                _completedAt = UtcNow;
+                _state = MigrationJobState.Completed;
+            }
         }
         catch (OperationCanceledException)
         {
-            _state = MigrationJobState.Cancelled;
-            _completedAt = DateTime.UtcNow;
+            lock (_statusLock)
+            {
+                _completedAt = UtcNow;
+                _state = MigrationJobState.Cancelled;
+            }
         }
         catch (Exception ex)
         {
-            _state = MigrationJobState.Failed;
-            _errorMessage = ex switch
+            var message = ex switch
             {
                 // Already worded for the person who has to fix it; an inner transport message
                 // appended to it would only add jargon.
@@ -589,7 +659,12 @@ internal class MigrationJob
                 { InnerException: not null } => $"{ex.Message} Inner: {ex.InnerException.Message}",
                 _ => ex.Message,
             };
-            _completedAt = DateTime.UtcNow;
+            lock (_statusLock)
+            {
+                _errorMessage = message;
+                _completedAt = UtcNow;
+                _state = MigrationJobState.Failed;
+            }
             _logger.LogError(ex, "Migration job {JobId} failed", _id);
         }
         finally
@@ -606,6 +681,15 @@ internal class MigrationJob
     /// </summary>
     public async Task PersistSnapshotAsync(CancellationToken ct)
     {
+        MigrationJobState state;
+        DateTime startedAt;
+        DateTime? completedAt;
+        string? errorMessage;
+        lock (_statusLock)
+        {
+            (state, startedAt, completedAt, errorMessage) = (_state, _startedAt, _completedAt, _errorMessage);
+        }
+
         try
         {
             using var scope = _serviceProvider.CreateScope();
@@ -624,27 +708,35 @@ internal class MigrationJob
             run.TenantId = _tenantId;
             run.Mode = _request.Mode.ToString();
             run.SourceDescription = _info.SourceDescription is { Length: > 512 } d ? d[..512] : _info.SourceDescription;
-            run.State = _state.ToString();
-            run.StartedAt = _startedAt == default ? _info.CreatedAt : _startedAt;
-            run.CompletedAt = _completedAt;
+            run.State = state.ToString();
+            run.StartedAt = startedAt == default ? _info.CreatedAt : startedAt;
+            run.CompletedAt = completedAt;
             run.DateRangeStart = _request.StartDate?.AsUtc();
             run.DateRangeEnd = _request.EndDate?.AsUtc();
-            run.ErrorMessage = _errorMessage;
+            run.ErrorMessage = errorMessage;
             run.EntriesMigrated = (int)Math.Min(int.MaxValue, MigratedCount("entries"));
             run.TreatmentsMigrated = (int)Math.Min(int.MaxValue, MigratedCount("treatments"));
             run.CollectionOutcomes = _collectionProgress.IsEmpty
                 ? null
                 : System.Text.Json.JsonSerializer.Serialize(_collectionProgress.Values.ToList(), s_outcomeJson);
 
-            if (_state == MigrationJobState.Completed)
+            if (state == MigrationJobState.Completed)
             {
                 var source = await db.MigrationSources.FirstAsync(s => s.Id == sourceId, ct);
-                source.LastMigrationAt = _completedAt ?? DateTime.UtcNow;
+                source.LastMigrationAt = completedAt ?? UtcNow;
+
+                // A run bounded to an older date range covers ground an earlier run already
+                // covered, so the watermark only ever advances.
+                if (_newestMigratedData is { } newest
+                    && newest > (source.LastMigratedDataTimestamp ?? DateTime.MinValue))
+                {
+                    source.LastMigratedDataTimestamp = newest;
+                }
             }
 
             await db.SaveChangesAsync(ct);
         }
-        catch (Exception ex) when (_state is not MigrationJobState.Pending)
+        catch (Exception ex) when (state is not MigrationJobState.Pending)
         {
             _logger.LogError(ex, "Failed to persist migration job {JobId}", _id);
         }
@@ -652,6 +744,12 @@ internal class MigrationJob
 
     private long MigratedCount(string collection) =>
         _collectionProgress.TryGetValue(collection, out var p) ? p.DocumentsMigrated : 0;
+
+    private void ObserveDataWatermark(DateTime? candidate)
+    {
+        if (candidate is { } stamp && stamp > (_newestMigratedData ?? DateTime.MinValue))
+            _newestMigratedData = stamp;
+    }
 
     /// <summary>
     /// Finds or creates the migration source row for this job's target. Sources dedupe per
@@ -698,7 +796,7 @@ internal class MigrationJob
                 ? HashUtils.Sha256Hex(_request.NightscoutApiSecret)
                 : null,
             MongoDatabaseName = isApi ? null : _request.MongoDatabaseName,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = UtcNow,
         };
         db.MigrationSources.Add(source);
         return source.Id;
@@ -928,7 +1026,7 @@ internal class MigrationJob
             : failure.Message;
 
     /// <summary>Marks a collection finished-and-failed, keeping whatever it managed to import.</summary>
-    private void RecordCollectionFailure(string collectionName, string reason) =>
+    internal void RecordCollectionFailure(string collectionName, string reason) =>
         _collectionProgress[collectionName] = Progress(collectionName) with
         {
             IsComplete = true,
@@ -936,7 +1034,7 @@ internal class MigrationJob
         };
 
     /// <summary>Marks a collection passed over rather than attempted. See <see cref="CollectionProgress.SkippedReason"/>.</summary>
-    private void RecordCollectionSkipped(string collectionName, string reason) =>
+    internal void RecordCollectionSkipped(string collectionName, string reason) =>
         _collectionProgress[collectionName] = Progress(collectionName) with
         {
             IsComplete = true,
@@ -1142,13 +1240,12 @@ internal class MigrationJob
         }
     }
 
-    private void UpdateCollectionProgress(
+    internal void UpdateCollectionProgress(
         string collectionName, long totalDocuments, long migrated, long failed, bool isComplete,
         DecompositionTally tally = default)
     {
-        _collectionProgress[collectionName] = new CollectionProgress
+        _collectionProgress[collectionName] = Progress(collectionName) with
         {
-            CollectionName = collectionName,
             TotalDocuments = totalDocuments,
             DocumentsMigrated = migrated,
             DocumentsFailed = failed,
@@ -1161,7 +1258,7 @@ internal class MigrationJob
     }
 
     /// <summary>What a collection's decompositions stored and passed over; see <see cref="DecompositionResult"/>.</summary>
-    private readonly record struct DecompositionTally(
+    internal readonly record struct DecompositionTally(
         long RecordsStored, long RecordsSkippedDeleted, long DocumentsSkippedDeleted, long DocumentsSkippedUnsupported)
     {
         public long DocumentsSkipped => DocumentsSkippedDeleted + DocumentsSkippedUnsupported;
@@ -1184,7 +1281,7 @@ internal class MigrationJob
     ///     silently importing days of history instead of years. Anchoring the upper bound
     ///     keeps every request explicitly dated.
     /// </summary>
-    private static DateTime FirstPageAnchor => DateTime.UtcNow;
+    private DateTime FirstPageAnchor => UtcNow;
 
     /// <summary>
     ///     Page size for every legacy-API pull. The merged v1 reads (devicestatus, activity) clamp
@@ -1199,20 +1296,23 @@ internal class MigrationJob
     ///     <paramref name="Oldest"/> reads the page's oldest record, answering <c>null</c> when the
     ///     page carries no usable timestamp to page back from, <paramref name="AdmittedThrough"/>
     ///     is the latest record time the filter for a cursor admits, <paramref name="Envelope"/> is
-    ///     how far above the anchor the first page reaches, and <paramref name="AtOrBefore"/> is
-    ///     whether a record's instant is at or before the anchor.
+    ///     how far above the anchor the first page reaches, <paramref name="AtOrBefore"/> is
+    ///     whether a record's instant is at or before the anchor, and <paramref name="Newest"/>
+    ///     reads the page's newest instant, for
+    ///     <see cref="MigrationSourceEntity.LastMigratedDataTimestamp"/>.
     /// </summary>
     private sealed record PageCursor(
         Func<DateTime, string> Filter,
         Func<IReadOnlyList<ProcessableDocumentBase>, DateTime?> Oldest,
         Func<DateTime, DateTime> AdmittedThrough,
         TimeSpan Envelope,
-        Func<ProcessableDocumentBase, DateTime, bool> AtOrBefore
+        Func<ProcessableDocumentBase, DateTime, bool> AtOrBefore,
+        Func<IReadOnlyList<ProcessableDocumentBase>, DateTime?> Newest
     );
 
     /// <summary>Entries page on the numeric <c>date</c> field, which mirrors mills exactly.</summary>
     private static readonly PageCursor s_dateCursor = new(
-        to => $"&find[date][$lte]={new DateTimeOffset(to, TimeSpan.Zero).ToUnixTimeMilliseconds()}",
+        to => $"&find[date][$lte]={to.ToMills()}",
         page =>
         {
             var dated = page.Where(d => d.Mills > 0).ToList();
@@ -1222,7 +1322,10 @@ internal class MigrationJob
         },
         to => to,
         TimeSpan.Zero,
-        (_, _) => true);
+        (_, _) => true,
+        page => page.Any(d => d.Mills > 0)
+            ? DateTimeOffset.FromUnixTimeMilliseconds(page.Max(d => d.Mills)).UtcDateTime
+            : null);
 
     /// <summary>
     ///     Every other collection pages on the ISO-8601 <c>created_at</c> string, inside the
@@ -1233,7 +1336,12 @@ internal class MigrationJob
         page => BackwardTimePager.OldestWrittenCreatedAt(page, d => d.CreatedAt),
         BackwardTimePager.CreatedAtAdmittedThrough,
         BackwardTimePager.CreatedAtOffsetEnvelope,
-        (d, anchor) => BackwardTimePager.CreatedAtWithin(d.CreatedAt, null, anchor));
+        (d, anchor) => BackwardTimePager.CreatedAtWithin(d.CreatedAt, null, anchor),
+        page => page
+            .Select(d => UploaderTimestamp.TryParse(d.CreatedAt, out var parsed)
+                ? parsed.UtcDateTime
+                : (DateTime?)null)
+            .Max());
 
     /// <summary>
     ///     A legacy collection pulled page by page over a time cursor. <paramref name="Name"/> is
@@ -1389,6 +1497,7 @@ internal class MigrationJob
                     var before = tally.DocumentsSkipped;
                     tally = tally.Add(await decompose(page, ct), collection.OneRecordPerDocument);
                     totalMigrated += page.Length - (tally.DocumentsSkipped - before);
+                    ObserveDataWatermark(collection.Cursor.Newest(page));
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
                 {
@@ -1793,9 +1902,8 @@ internal class MigrationJob
 
             await dbContext.SaveChangesAsync(ct);
 
-            _collectionProgress[collectionName] = new CollectionProgress
+            _collectionProgress[collectionName] = Progress(collectionName) with
             {
-                CollectionName = collectionName,
                 TotalDocuments = totalDocs,
                 DocumentsMigrated = totalMigrated,
                 DocumentsFailed = totalFailed,
@@ -1851,10 +1959,7 @@ internal class MigrationJob
             OutputMode = MongoDB.Bson.IO.JsonOutputMode.RelaxedExtendedJson
         };
         var json = doc.ToJson(jsonWriterSettings);
-        var status = System.Text.Json.JsonSerializer.Deserialize<DeviceStatus>(json, new System.Text.Json.JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        });
+        var status = System.Text.Json.JsonSerializer.Deserialize<DeviceStatus>(json, JsonDefaults.CaseInsensitive);
 
         if (status == null)
             return;
@@ -1879,7 +1984,7 @@ internal class MigrationJob
             : doc.Contains("created_at")
               && UploaderTimestamp.TryParse(doc["created_at"].AsString, out var createdAt)
                 ? createdAt.ToUnixTimeMilliseconds()
-            : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            : _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
 
         var defaultProfile = doc.Contains("defaultProfile") ? doc["defaultProfile"].AsString : "Default";
         var originalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null;

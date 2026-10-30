@@ -4,14 +4,14 @@ import type {
   GlucosePoint,
   SeriesPoint,
 } from "./chart-data-view.svelte";
-import { BasalDeliveryOrigin } from "$api-clients";
-import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
+import { BasalDeliveryOrigin, type MealPeriod } from "#lib/api/generated/nocturne-api-client.js";
+import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import {
   bg,
   bgLabel,
   formatCarbDisplay,
   formatInsulinDisplay,
-} from "$lib/utils/formatting";
+} from "#lib/utils/formatting.js";
 
 // ===== Types =====
 
@@ -42,6 +42,7 @@ export interface InspectionContext {
   nearbyCarbs?: {
     carbs?: number;
     label?: string;
+    mealPeriod?: MealPeriod;
     treatmentId?: string;
     dataSource?: string;
   };
@@ -175,6 +176,7 @@ export function createPointInspection(
         ? {
             carbs: nearbyCarb.carbs,
             label: nearbyCarb.label,
+            mealPeriod: nearbyCarb.mealPeriod,
             treatmentId: nearbyCarb.treatmentId,
             dataSource: nearbyCarb.dataSource,
           }

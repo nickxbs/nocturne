@@ -27,8 +27,9 @@ public class MyLifeConnectorService(
     IMyLifeSessionCache sessionCache,
     ITenantAccessor tenantAccessor,
     MyLifeSyncService syncService,
-    IConnectorPublisher? publisher = null
-) : BaseConnectorService<MyLifeConnectorConfiguration>(httpClient, serverResolver, logger, publisher)
+    IConnectorPublisher? publisher = null,
+    TimeProvider? timeProvider = null
+) : BaseConnectorService<MyLifeConnectorConfiguration>(httpClient, serverResolver, logger, publisher, timeProvider)
 {
 
     public override string ServiceName => "MyLife";
@@ -129,7 +130,8 @@ public class MyLifeConnectorService(
                 request, await CalculateTreatmentSinceTimestampAsync(config) ?? floor, floor);
 
             var overallSince = glucoseSince < treatmentSince ? glucoseSince : treatmentSince;
-            var until = request.To ?? DateTime.UtcNow;
+            var now = Clock.GetUtcNow().UtcDateTime;
+            var until = request.To ?? now;
 
             // Overlap window for cross-month consolidation context
             var overlapMs = Math.Max(
@@ -137,8 +139,8 @@ public class MyLifeConnectorService(
                 (long)config.TempBasalConsolidationWindowMinutes * 60_000);
 
             var previousTail = new List<MyLifeEvent>();
-            var glucoseSinceTicks = new DateTimeOffset(glucoseSince).ToUnixTimeMilliseconds() * 10_000;
-            var treatmentSinceTicks = new DateTimeOffset(treatmentSince).ToUnixTimeMilliseconds() * 10_000;
+            var glucoseSinceTicks = glucoseSince.ToMills() * 10_000;
+            var treatmentSinceTicks = treatmentSince.ToMills() * 10_000;
 
             // Stream month by month
             await foreach (var batch in syncService.FetchEventsPerMonthAsync(
@@ -158,7 +160,7 @@ public class MyLifeConnectorService(
                 if (needGlucose)
                 {
                     var sgList = eventProcessor
-                        .MapSensorGlucose(batch.Events.Where(e => e.EventDateTime >= glucoseSinceTicks))
+                        .MapSensorGlucose(batch.Events.Where(e => e.EventDateTime >= glucoseSinceTicks), now)
                         .ToList();
 
                     await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
@@ -176,7 +178,8 @@ public class MyLifeConnectorService(
                         contextEvents,
                         config.EnableMealCarbConsolidation,
                         config.EnableTempBasalConsolidation,
-                        config.TempBasalConsolidationWindowMinutes);
+                        config.TempBasalConsolidationWindowMinutes,
+                        now);
 
                     // Treatment records
                     if (needRecords)
@@ -212,7 +215,7 @@ public class MyLifeConnectorService(
                 UpdatePreviousTail(previousTail, batch.Events, overlapMs);
             }
 
-            // Publish Profile records and active-profile state spans from pump settings
+            // Publish Profile records and profile activations from pump settings
             // (one SOAP call, two derived data shapes).
             if (activeTypes.Contains(SyncDataType.Profiles))
             {

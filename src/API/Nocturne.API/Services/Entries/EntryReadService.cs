@@ -184,7 +184,7 @@ public class EntryReadService : IEntryStore
         const int fetchLimit = 60;
         var results = await _sgRepo.GetForEntriesAsync(
             from: null, to: null, device: null, source: source,
-            limit: fetchLimit, offset: 0, descending: true, nativeOnly: false, ct: ct);
+            limit: fetchLimit, offset: 0, descending: true, ct: ct);
 
         var visible = ExcludeDemoIfNeeded(results, excludeDemo).ToList();
         var canonical = await _canonicalGlucose.SelectAsync(visible, ct);
@@ -205,9 +205,12 @@ public class EntryReadService : IEntryStore
     /// <inheritdoc />
     public async Task<IV4Record?> GetStoredByIdAsync(string id, CancellationToken ct = default)
     {
-        // A uuid-shaped id may also be a legacy id: older v1 uploads without an _id were given one.
+        // A uuid-shaped id may also be a client-supplied legacy id, or the dashless uuid an older v1
+        // POST assigned and served, since stored as the ObjectId it coerces to.
         if (Guid.TryParse(id, out var guid))
-            return await GetByGuidAsync(guid, ct) ?? await GetByLegacyIdAsync(id, ct);
+            return await GetByGuidAsync(guid, ct)
+                ?? await GetByLegacyIdAsync(id, ct)
+                ?? await GetByLegacyIdAsync(MongoObjectId.Coerce(id)!, ct);
 
         // A non-UUID id is either a legacy/AAPS-supplied ObjectId (stored as LegacyId) or a 24-hex
         // ObjectId we derived from the record's UUID; resolve the latter via its uuid prefix range.
@@ -224,6 +227,10 @@ public class EntryReadService : IEntryStore
     /// <inheritdoc />
     public async Task<Entry?> CheckDuplicateAsync(string? device, string type, long mills,
         CancellationToken ct = default)
+        => (await FindDuplicateAsync(device, type, mills, ct))?.Entry;
+
+    private async Task<StoredEntryMatch?> FindDuplicateAsync(string? device, string type, long mills,
+        CancellationToken ct)
     {
         var (from, to) = MillisecondOf(mills);
 
@@ -237,10 +244,10 @@ public class EntryReadService : IEntryStore
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<Entry?>> CheckDuplicatesAsync(
+    public async Task<IReadOnlyList<StoredEntryMatch?>> CheckDuplicatesAsync(
         IReadOnlyList<EntryDuplicateProbe> probes, CancellationToken ct = default)
     {
-        var results = new Entry?[probes.Count];
+        var results = new StoredEntryMatch?[probes.Count];
         var sgvProbes = new List<(EntryDuplicateProbe probe, int index)>();
 
         for (var i = 0; i < probes.Count; i++)
@@ -254,7 +261,7 @@ public class EntryReadService : IEntryStore
 
             // Only sgv arrives in the thousands-per-cycle uploads this batching exists for, so mbg
             // and cal keep the per-entry probe. Unknown types return null without a query.
-            results[i] = await CheckDuplicateAsync(probe.Device, probe.Type, probe.Mills, ct);
+            results[i] = await FindDuplicateAsync(probe.Device, probe.Type, probe.Mills, ct);
         }
 
         foreach (var chunk in ChunkByTimeSpan(sgvProbes))
@@ -386,7 +393,7 @@ public class EntryReadService : IEntryStore
             if (page.Count == 0)
                 return new ModifiedSincePage<Entry>([], pageCursor);
 
-            pageCursor = HistoryPage.ToMilliseconds(page[^1].Record.ModifiedAt);
+            pageCursor = page[^1].Record.ModifiedAt.ToMills();
 
             var delivered = await VisibleHistoryEntriesAsync(page, source, excludeDemo, ct);
             if (delivered.Count > 0 || page.Count < limit)
@@ -413,9 +420,9 @@ public class EntryReadService : IEntryStore
         if (ordered.Count <= limit)
             return ordered;
 
-        var lastMills = HistoryPage.ToMilliseconds(ordered[limit - 1].Record.ModifiedAt);
+        var lastMills = ordered[limit - 1].Record.ModifiedAt.ToMills();
         return ordered
-            .TakeWhile((r, i) => i < limit || HistoryPage.ToMilliseconds(r.Record.ModifiedAt) == lastMills)
+            .TakeWhile((r, i) => i < limit || r.Record.ModifiedAt.ToMills() == lastMills)
             .ToList();
     }
 
@@ -499,12 +506,12 @@ public class EntryReadService : IEntryStore
         var size = CanonicalGlucoseStream.BucketSize.Ticks;
         var stamps = deleted
             .GroupBy(r => r.Timestamp.Ticks / size)
-            .ToDictionary(g => g.Key, g => g.Max(r => HistoryPage.ToMilliseconds(r.ModifiedAt)));
+            .ToDictionary(g => g.Key, g => g.Max(r => r.ModifiedAt.ToMills()));
 
         var window = new Dictionary<Guid, SensorGlucose>();
         foreach (var (from, to) in CanonicalBucketRuns(deleted))
         {
-            var stored = await _sgRepo.GetForEntriesAsync(from, to, device: null, source, MaxFilterFetch, 0, false, false, null, null, ct);
+            var stored = await _sgRepo.GetForEntriesAsync(from, to, device: null, source, MaxFilterFetch, 0, false, null, null, ct);
             foreach (var reading in ExcludeDemoIfNeeded(stored, excludeDemo))
                 window.TryAdd(reading.Id, reading);
         }
@@ -533,7 +540,7 @@ public class EntryReadService : IEntryStore
         var window = new Dictionary<Guid, SensorGlucose>();
         foreach (var (from, to) in CanonicalBucketRuns(readings))
         {
-            var stored = await _sgRepo.GetForEntriesAsync(from, to, device: null, source, MaxFilterFetch, 0, false, false, null, null, ct);
+            var stored = await _sgRepo.GetForEntriesAsync(from, to, device: null, source, MaxFilterFetch, 0, false, null, null, ct);
             foreach (var reading in ExcludeDemoIfNeeded(stored, excludeDemo))
                 window.TryAdd(reading.Id, reading);
         }
@@ -605,7 +612,7 @@ public class EntryReadService : IEntryStore
         {
             var results = (sort == ReadSortField.Sgv
                 ? await _sgRepo.GetForEntriesByValueAsync(from, to, source, fetchCount, 0, descending, ct)
-                : await _sgRepo.GetForEntriesAsync(from, to, device: null, source, fetchCount, 0, descending, false, null, null, ct)).ToList();
+                : await _sgRepo.GetForEntriesAsync(from, to, device: null, source, fetchCount, 0, descending, null, null, ct)).ToList();
             var visible = ExcludeDemoIfNeeded(results, excludeDemo).ToList();
             var canonical = await _canonicalGlucose.SelectAsync(visible, ct);
 
@@ -686,28 +693,28 @@ public class EntryReadService : IEntryStore
 
     #region Private — Duplicate check helpers
 
-    private async Task<Entry?> CheckSgvDuplicateAsync(
+    private async Task<StoredEntryMatch?> CheckSgvDuplicateAsync(
         string? device, DateTime from, DateTime to, CancellationToken ct)
     {
         // Probe raw storage rather than the visibility-filtered GetAsync: copies linked as
         // non-primary cross-connector duplicates are hidden from reads, but they still mean the
         // reading is already stored — a filtered check re-inserts them on every upload.
         var match = await _sgRepo.FindStoredDuplicateAsync(device, from, to, ct);
-        return match is null ? null : EntryProjection.FromSensorGlucose(match);
+        return match is null ? null : MatchOf(match);
     }
 
-    private async Task<Entry?> CheckMbgDuplicateAsync(
+    private async Task<StoredEntryMatch?> CheckMbgDuplicateAsync(
         string? device, DateTime from, DateTime to, CancellationToken ct)
     {
         var match = await _mgRepo.FindStoredDuplicateAsync(device, from, to, ct);
-        return match is null ? null : EntryProjection.FromMeterGlucose(match);
+        return match is null ? null : new StoredEntryMatch(EntryProjection.FromMeterGlucose(match), match.LegacyId);
     }
 
-    private async Task<Entry?> CheckCalDuplicateAsync(
+    private async Task<StoredEntryMatch?> CheckCalDuplicateAsync(
         string? device, DateTime from, DateTime to, CancellationToken ct)
     {
         var match = await _calRepo.FindStoredDuplicateAsync(device, from, to, ct);
-        return match is null ? null : EntryProjection.FromCalibration(match);
+        return match is null ? null : new StoredEntryMatch(EntryProjection.FromCalibration(match), match.LegacyId);
     }
 
     /// <summary>
@@ -716,7 +723,7 @@ public class EntryReadService : IEntryStore
     /// </summary>
     private async Task ClassifySgvChunkAsync(
         List<(EntryDuplicateProbe probe, int index)> chunk,
-        Entry?[] results,
+        StoredEntryMatch?[] results,
         CancellationToken ct)
     {
         var (from, _) = MillisecondOf(chunk[0].probe.Mills);
@@ -735,7 +742,7 @@ public class EntryReadService : IEntryStore
             foreach (var (probe, index) in chunk)
             {
                 ct.ThrowIfCancellationRequested();
-                results[index] = await CheckDuplicateAsync(probe.Device, probe.Type, probe.Mills, ct);
+                results[index] = await FindDuplicateAsync(probe.Device, probe.Type, probe.Mills, ct);
             }
 
             return;
@@ -745,9 +752,12 @@ public class EntryReadService : IEntryStore
         {
             ct.ThrowIfCancellationRequested();
             var match = MatchAtMillisecond(candidates, probe);
-            results[index] = match is null ? null : EntryProjection.FromSensorGlucose(match);
+            results[index] = match is null ? null : MatchOf(match);
         }
     }
+
+    private static StoredEntryMatch MatchOf(SensorGlucose stored) =>
+        new(EntryProjection.FromSensorGlucose(stored), stored.LegacyId);
 
     /// <summary>
     /// The single-entry probe's match rule, applied in memory: the newest candidate at the probe's

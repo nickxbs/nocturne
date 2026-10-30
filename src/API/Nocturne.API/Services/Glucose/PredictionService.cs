@@ -2,6 +2,7 @@ using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Oref;
 using OrefModels = Nocturne.Core.Oref.Models;
 
@@ -23,6 +24,7 @@ public class PredictionService : IPredictionService
     private readonly ITargetRangeResolver _targetRange;
     private readonly ITherapySettingsResolver _therapySettings;
     private readonly IPatientInsulinRepository _insulins;
+    private readonly TimeProvider _time;
     private readonly ILogger<PredictionService> _logger;
 
     public PredictionService(
@@ -34,6 +36,7 @@ public class PredictionService : IPredictionService
         ITargetRangeResolver targetRange,
         ITherapySettingsResolver therapySettings,
         IPatientInsulinRepository insulins,
+        TimeProvider timeProvider,
         ILogger<PredictionService> logger)
     {
         _store = store;
@@ -44,6 +47,7 @@ public class PredictionService : IPredictionService
         _targetRange = targetRange;
         _therapySettings = therapySettings;
         _insulins = insulins;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -53,7 +57,7 @@ public class PredictionService : IPredictionService
         DateTimeOffset? asOf = null,
         CancellationToken cancellationToken = default)
     {
-        var now = asOf ?? DateTimeOffset.UtcNow;
+        var now = asOf ?? _time.GetUtcNow();
         var nowMills = now.ToUnixTimeMilliseconds();
 
         // Check if oref library is available
@@ -81,11 +85,11 @@ public class PredictionService : IPredictionService
 
         // Convert to oref glucose readings
         var orefGlucose = glucoseEntries
-            .Where(e => e.Sgv.HasValue && e.Sgv > 0)
+            .Where(e => e.GlucoseMgdl() > 0)
             .OrderByDescending(e => e.Mills)
             .Select(e => new OrefModels.GlucoseReading
             {
-                Sgv = e.Sgv ?? 0,
+                Sgv = e.GlucoseMgdl(),
                 Date = e.Mills,
                 Direction = e.Direction
             })
@@ -237,11 +241,9 @@ public class PredictionService : IPredictionService
             _logger.LogWarning(ex, "Failed to resolve profile from V4 resolvers, using defaults");
         }
 
-        // Return default profile (DIA falls back through resolver chain already, but we have no data)
-        var defaultDia = bolusInsulin?.Dia ?? 3.0;
         return new OrefModels.OrefProfile
         {
-            Dia = defaultDia,
+            Dia = await ResolveFallbackDiaAsync(profileId, nowMills, cancellationToken),
             CurrentBasal = 1.0,
             Sens = 50.0,
             CarbRatio = 10.0,
@@ -251,6 +253,19 @@ public class PredictionService : IPredictionService
             MaxBasal = 4.0,
             MaxDailyBasal = 2.0
         };
+    }
+
+    private async Task<double> ResolveFallbackDiaAsync(string? profileId, long nowMills, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _therapySettings.GetDIAAsync(nowMills, profileId, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Failed to resolve DIA, using the default");
+            return TherapySnapshot.DefaultDia;
+        }
     }
 
     private async Task<Core.Models.V4.PatientInsulin?> ResolveBolusInsulinAsync()
@@ -278,12 +293,12 @@ public class PredictionService : IPredictionService
         // Get current entry
         var currentEntry = await _store.GetCurrentAsync(cancellationToken);
 
-        if (currentEntry?.Sgv == null)
+        if (currentEntry is null || currentEntry.GlucoseMgdl() <= 0)
         {
             throw new InvalidOperationException("No glucose readings available");
         }
 
-        var currentBg = currentEntry.Sgv.Value;
+        var currentBg = currentEntry.GlucoseMgdl();
         var delta = currentEntry.Delta ?? 0;
 
         // Generate 48 points = 4 hours at 5-minute intervals

@@ -33,6 +33,8 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     private readonly IStateSpanService _stateSpanService;
     private readonly IDeviceService _deviceService;
     private readonly IAuditContext _auditContext;
+    private readonly ILoopClosedLoopStamper _closedLoop;
+    private readonly TimeProvider _time;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -48,6 +50,8 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         IStateSpanService stateSpanService,
         IDeviceService deviceService,
         IAuditContext auditContext,
+        ILoopClosedLoopStamper closedLoop,
+        TimeProvider timeProvider,
         ILogger<DeviceStatusDecomposer> logger)
         : base(logger)
     {
@@ -58,6 +62,8 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         _stateSpanService = stateSpanService;
         _deviceService = deviceService;
         _auditContext = auditContext;
+        _closedLoop = closedLoop;
+        _time = timeProvider;
     }
 
     /// <summary>
@@ -135,6 +141,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         {
             apsAttempted = true;
             await UpsertApsSnapshotAsync(legacyId, apsModel, pumpDeviceId, statusMills, group, result, origin, ct);
+            await StampLoopAsync(result, ct);
         }
 
         if (ds.Uploader != null || ds.UploaderBattery.HasValue)
@@ -193,6 +200,10 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
             },
             findStored: group is null ? null : () => Task.FromResult(group.Aps));
     }
+
+    private Task StampLoopAsync(V4Models.DecompositionResult result, CancellationToken ct) =>
+        _closedLoop.AfterSnapshotsWrittenAsync(
+            result.CreatedRecords.Concat(result.UpdatedRecords).OfType<V4Models.ApsSnapshot>(), ct);
 
     #endregion
 
@@ -545,7 +556,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
 
     private const int OverrideQueryLimit = 10;
 
-    private static StateSpan BuildOverrideSpan(DeviceStatus ds, string? legacyId)
+    private StateSpan BuildOverrideSpan(DeviceStatus ds, string? legacyId)
     {
         var timestamp = ResolveTimestamp(ds);
         DateTime? end = ds.Override!.Duration is > 0
@@ -701,7 +712,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     /// The sub-objects and unknown top-level keys with no typed snapshot of their own, or
     /// <see langword="null"/> when the device status carries none.
     /// </summary>
-    private static V4Models.DeviceStatusExtras? BuildExtras(DeviceStatus ds, Guid correlationId)
+    private V4Models.DeviceStatusExtras? BuildExtras(DeviceStatus ds, Guid correlationId)
     {
         var extras = new Dictionary<string, object?>();
 
@@ -978,6 +989,8 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
             await BulkCreateAsync(_extrasRepo, extrasList, result, origin, ct);
         }
 
+        await StampLoopAsync(result, ct);
+
         var writtenSnapshots = result.CreatedRecords.Concat(result.UpdatedRecords)
             .OfType<V4Models.IV4Record>()
             .ToLookup(r => r.CorrelationId);
@@ -1032,7 +1045,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     /// An OpenAPS/AAPS/Trio payload wins over a Loop one; <see langword="null"/> when the device
     /// status carries neither.
     /// </summary>
-    internal static V4Models.ApsSnapshot? MapToApsSnapshot(
+    internal V4Models.ApsSnapshot? MapToApsSnapshot(
         DeviceStatus ds, string? legacyId, string? source, Guid? correlationId)
     {
         if (ds.OpenAps != null)
@@ -1041,11 +1054,10 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         return ds.Loop != null ? MapToApsSnapshotFromLoop(ds, legacyId, source, correlationId) : null;
     }
 
-    private static V4Models.ApsSnapshot MapToApsSnapshotFromOpenAps(
+    private V4Models.ApsSnapshot MapToApsSnapshotFromOpenAps(
         DeviceStatus ds, string? legacyId, string? source, Guid? correlationId)
     {
-        var command = FreshestOpenApsCommand(ds.OpenAps!);
-        var predBGs = command?.PredBGs;
+        var command = ApsSnapshotCurves.FreshestOpenApsCommand(ds.OpenAps!);
         var apsSystem = DetectOpenApsVariant(ds);
 
         var snapshot = new V4Models.ApsSnapshot
@@ -1073,25 +1085,18 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
             EnactedBolusVolume = ds.OpenAps.Enacted?.Smb is > 0
                 ? ds.OpenAps.Enacted.Smb
                 : ds.OpenAps.Enacted?.Units,
-            PredictedDefaultJson = apsSystem == V4Models.AidAlgorithm.Trio
-                ? null
-                : SerializeOrNull(predBGs?.IOB),
-            PredictedIobJson = SerializeOrNull(predBGs?.IOB),
-            PredictedZtJson = SerializeOrNull(predBGs?.ZT),
-            PredictedCobJson = SerializeOrNull(predBGs?.COB),
-            PredictedUamJson = SerializeOrNull(predBGs?.UAM),
-            PredictedStartTimestamp = ParseTimestampToDateTime(command?.Timestamp),
             AidVersion = ds.OpenAps?.Version,
         };
+        ApsSnapshotCurves.FillColumns(snapshot, command);
         snapshot.SuggestedJson = ApsSnapshotCurves.SerializeCommand(ds.OpenAps.Suggested, snapshot, JsonOptions);
         snapshot.EnactedJson = ApsSnapshotCurves.SerializeCommand(ds.OpenAps.Enacted, snapshot, JsonOptions);
         return snapshot;
     }
 
-    private static V4Models.ApsSnapshot MapToApsSnapshotFromLoop(
+    private V4Models.ApsSnapshot MapToApsSnapshotFromLoop(
         DeviceStatus ds, string? legacyId, string? source, Guid? correlationId)
     {
-        return new V4Models.ApsSnapshot
+        var snapshot = new V4Models.ApsSnapshot
         {
             Timestamp = ResolveTimestamp(ds),
             UtcOffset = ds.UtcOffset,
@@ -1111,14 +1116,14 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
             EnactedRate = ds.Loop.Enacted?.Rate,
             EnactedDuration = ds.Loop.Enacted?.Duration,
             EnactedBolusVolume = ds.Loop.Enacted?.BolusVolume,
-            PredictedDefaultJson = SerializeOrNull(ds.Loop.Predicted?.Values),
-            PredictedStartTimestamp = ParseTimestampToDateTime(ds.Loop.Predicted?.StartDate),
-            LoopJson = ApsSnapshotCurves.SerializeLoop(ds.Loop, JsonOptions),
             AidVersion = null,
         };
+        ApsSnapshotCurves.FillColumns(snapshot, ds.Loop);
+        snapshot.LoopJson = ApsSnapshotCurves.SerializeLoop(ds.Loop, snapshot, JsonOptions);
+        return snapshot;
     }
 
-    private static V4Models.PumpSnapshot MapToPumpSnapshot(
+    private V4Models.PumpSnapshot MapToPumpSnapshot(
         DeviceStatus ds, string? legacyId, string? source, Guid? correlationId)
     {
         return new V4Models.PumpSnapshot
@@ -1148,7 +1153,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         };
     }
 
-    private static V4Models.UploaderSnapshot MapToUploaderSnapshot(
+    private V4Models.UploaderSnapshot MapToUploaderSnapshot(
         DeviceStatus ds, string? legacyId, string? source, Guid? correlationId)
     {
         return new V4Models.UploaderSnapshot
@@ -1190,28 +1195,13 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         return V4Models.AidAlgorithm.OpenAps;
     }
 
-    private static string? SerializeOrNull<T>(T? obj) where T : class
-    {
-        return obj is null ? null : JsonSerializer.Serialize(obj, JsonOptions);
-    }
-
-    private static string? SerializeOrNull(double[]? array)
-    {
-        return array is null ? null : JsonSerializer.Serialize(array, JsonOptions);
-    }
-
-    private static string? SerializeOrNull(List<double>? list)
-    {
-        return list is null ? null : JsonSerializer.Serialize(list, JsonOptions);
-    }
-
     /// <summary>
     /// Resolves the best available timestamp for a device status record.
     /// Priority: Mills (already normalized from date) > OpenAPS IOB time >
-    /// <see cref="FreshestOpenApsCommand"/> timestamp > Loop timestamp > Pump clock > CreatedAt >
+    /// <see cref="ApsSnapshotCurves.FreshestOpenApsCommand"/> timestamp > Loop timestamp > Pump clock > CreatedAt >
     /// Loop predicted start date > now.
     /// </summary>
-    internal static DateTime ResolveTimestamp(DeviceStatus ds)
+    internal DateTime ResolveTimestamp(DeviceStatus ds)
     {
         if (ds.Mills > 0)
             return DateTimeOffset.FromUnixTimeMilliseconds(ds.Mills).UtcDateTime;
@@ -1219,7 +1209,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         if (ParseTimestampToDateTime(ds.OpenAps?.Iob?.Time) is { } iobTime)
             return iobTime;
 
-        var command = ds.OpenAps is null ? null : FreshestOpenApsCommand(ds.OpenAps);
+        var command = ds.OpenAps is null ? null : ApsSnapshotCurves.FreshestOpenApsCommand(ds.OpenAps);
         if (ParseTimestampToDateTime(command?.Timestamp) is { } commandTime)
             return commandTime;
 
@@ -1236,27 +1226,11 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         if (ParseTimestampToDateTime(ds.Loop?.Predicted?.StartDate) is { } predictedTime)
             return predictedTime;
 
-        return DateTime.UtcNow;
+        return _time.GetUtcNow().UtcDateTime;
     }
 
-    /// <summary>
-    /// Uploaders re-send the last enacted command with every status while the loop holds a temp
-    /// basal, so the later of enacted and suggested is the current one. Enacted wins a tie, and
-    /// wins when neither timestamp parses.
-    /// </summary>
-    private static OpenApsSuggested? FreshestOpenApsCommand(OpenApsStatus openAps)
-    {
-        if (openAps.Enacted is null || openAps.Suggested is null)
-            return openAps.Enacted ?? openAps.Suggested;
-
-        var enactedTime = ParseTimestampToDateTime(openAps.Enacted.Timestamp);
-        var suggestedTime = ParseTimestampToDateTime(openAps.Suggested.Timestamp);
-        var suggestedIsLater = enactedTime is null ? suggestedTime is not null : suggestedTime > enactedTime;
-        return suggestedIsLater ? openAps.Suggested : openAps.Enacted;
-    }
-
-    private static long ResolveStatusMills(DeviceStatus ds) =>
-        new DateTimeOffset(ResolveTimestamp(ds)).ToUnixTimeMilliseconds();
+    private long ResolveStatusMills(DeviceStatus ds) =>
+        ResolveTimestamp(ds).ToMills();
 
     private static DateTime? ParseTimestampToDateTime(string? timestamp) =>
         UploaderTimestamp.ParseUtcDateTime(timestamp);

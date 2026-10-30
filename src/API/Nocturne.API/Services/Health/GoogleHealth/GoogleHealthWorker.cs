@@ -15,9 +15,10 @@ public sealed class GoogleHealthWorker(
     IServiceScopeFactory scopes,
     GoogleHealthCoordinator coordinator,
     IOptions<GoogleHealthPlatformOptions> platform,
+    TimeProvider time,
     ILogger<GoogleHealthWorker> logger) : BackgroundService
 {
-    private const string ConnectorId = "googlehealth";
+    private static readonly string ConnectorId = ConnectorNames.Canonical(GoogleHealthConnectorService.ConnectorName);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -109,12 +110,12 @@ public sealed class GoogleHealthWorker(
             await Task.Delay(TimeSpan.FromMilliseconds(100), ct);
         }
         var configurations = scope.ServiceProvider.GetRequiredService<IConnectorConfigurationService>();
-        var now = DateTime.UtcNow;
+        var now = time.GetUtcNow().UtcDateTime;
         if (result.Success)
         {
             logger.LogInformation("Google Health worker sync succeeded for tenant {TenantId} ({Slug})", id, slug);
             await configurations.UpdateHealthStateAsync(
-                "GoogleHealth",
+                GoogleHealthConnectorService.ConnectorName,
                 lastSyncAttempt: now,
                 lastSuccessfulSync: now,
                 lastErrorMessage: result.Message,
@@ -129,7 +130,7 @@ public sealed class GoogleHealthWorker(
             id, slug, result.Message, string.Join("; ", result.Errors));
 
         await configurations.UpdateHealthStateAsync(
-            "GoogleHealth",
+            GoogleHealthConnectorService.ConnectorName,
             lastSyncAttempt: now,
             lastErrorMessage: result.Message,
             lastErrorAt: now,

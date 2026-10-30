@@ -3,12 +3,12 @@ import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
-import type { DataSourceInfo } from "$api-clients";
+import type { DataSourceInfo } from "#lib/api/generated/nocturne-api-client.js";
 
 let deleteImpl: () => Promise<unknown>;
 let deleteArgs: unknown[];
 
-vi.mock("$api/generated/services.generated.remote", () => ({
+vi.mock("#lib/api/generated/services.generated.remote.js", () => ({
   deleteDataSourceData: (args: unknown) => {
     deleteArgs.push(args);
     return deleteImpl();
@@ -30,9 +30,9 @@ async function attemptDelete() {
     props: { open: true, selectedDataSource: dataSource },
   });
 
-  await page.getByRole("button", { name: "Delete Data..." }).click();
+  await page.getByRole("button", { name: "Delete data..." }).click();
   await page.getByRole("textbox").fill("DELETE");
-  await page.getByRole("button", { name: "Delete All Data" }).click();
+  await page.getByRole("button", { name: "Delete all data" }).click();
 }
 
 describe("DataSourceManageDialog", () => {
@@ -55,10 +55,10 @@ describe("DataSourceManageDialog", () => {
       props: { open: true, selectedDataSource: dataSource },
     });
 
-    await page.getByRole("button", { name: "Delete Data..." }).click();
+    await page.getByRole("button", { name: "Delete data..." }).click();
     await page.getByRole("checkbox", { name: /Allow re-import/ }).click();
     await page.getByRole("textbox").fill("DELETE");
-    await page.getByRole("button", { name: "Delete and Allow Re-import" }).click();
+    await page.getByRole("button", { name: "Delete and allow re-import" }).click();
 
     await expect.poll(() => deleteArgs).toEqual([
       { id: dataSource.id, allowReimport: true },
@@ -74,7 +74,7 @@ describe("DataSourceManageDialog", () => {
 
     await expect.element(page.getByText("Dexcom G7")).toBeVisible();
     expect(
-      page.getByRole("button", { name: "Delete Data..." }).elements()
+      page.getByRole("button", { name: "Delete data..." }).elements()
     ).toHaveLength(0);
   });
 
@@ -84,7 +84,7 @@ describe("DataSourceManageDialog", () => {
     });
 
     await expect
-      .element(page.getByRole("button", { name: "Delete Data..." }))
+      .element(page.getByRole("button", { name: "Delete data..." }))
       .toBeVisible();
   });
 
@@ -96,7 +96,7 @@ describe("DataSourceManageDialog", () => {
     });
 
     await expect
-      .element(page.getByRole("button", { name: "Delete Data..." }))
+      .element(page.getByRole("button", { name: "Delete data..." }))
       .toBeVisible();
   });
 

@@ -1,27 +1,27 @@
 <script lang="ts">
-  import type { DataSourceInfo } from "$lib/api/generated/nocturne-api-client";
-  import { deleteDataSourceData as deleteDataSourceDataRemote } from "$api/generated/services.generated.remote";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Separator } from "$lib/components/ui/separator";
+  import type { DataSourceInfo } from "#lib/api/generated/nocturne-api-client.js";
+  import { deleteDataSourceData as deleteDataSourceDataRemote } from "#lib/api/generated/services.generated.remote.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { describeSubmitError, errorStatus } from "$lib/forms";
-  import { canManageConnectors } from "$lib/authorization/connector-management";
+  import { describeSubmitError, errorStatus } from "#lib/forms/index.js";
+  import { canManageConnectors } from "#lib/authorization/connector-management.js";
   import { page } from "$app/state";
-  import { getCategoryIcon } from "$lib/utils/connector-display";
+  import { getCategoryIcon } from "#lib/utils/connector-display.js";
   import {
     formatNumber,
-    lastSeen,
-  } from "$lib/utils/formatting";
+    relativeAge,
+  } from "#lib/utils/formatting.js";
 
   interface Props {
     open: boolean;
@@ -147,9 +147,9 @@
             </div>
           </div>
           <div>
-            <span class="text-muted-foreground">Last Record Received</span>
+            <span class="text-muted-foreground">Last record received</span>
             <p class="mt-1 font-medium">
-              {lastSeen(selectedDataSource.lastSeen)}
+              {relativeAge(selectedDataSource.lastSeen, { fallback: "Never" })}
             </p>
           </div>
           <div>
@@ -180,7 +180,7 @@
               <AlertTriangle class="h-5 w-5 text-warning shrink-0 mt-0.5" />
               <div>
                 <p class="text-sm font-medium text-warning">
-                  Delete All Data from This Source
+                  Delete all data from this source
                 </p>
                 <p class="text-sm text-warning mt-1">
                   This will permanently delete all entries, treatments, and
@@ -204,7 +204,7 @@
             }}
           >
             <Pencil class="h-4 w-4" />
-            Delete Data...
+            Delete data...
           </Button>
         {/if}
       </Dialog.Footer>
@@ -222,7 +222,7 @@
           class="flex items-center gap-2"
         >
           <AlertTriangle class="h-5 w-5" />
-          Permanently Delete Data
+          Permanently delete data
         </AlertDialog.Title>
         <AlertDialog.Description class="grid gap-4">
           {#if selectedDataSource}
@@ -334,7 +334,7 @@
               Deleting...
             {:else}
               <Trash2 class="h-4 w-4" />
-              {allowReimport ? "Delete and Allow Re-import" : "Delete All Data"}
+              {allowReimport ? "Delete and allow re-import" : "Delete all data"}
             {/if}
           </Button>
         {/if}

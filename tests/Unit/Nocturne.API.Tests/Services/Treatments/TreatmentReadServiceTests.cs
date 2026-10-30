@@ -48,7 +48,7 @@ public class TreatmentReadServiceTests
     }
 
     [Fact]
-    public async Task QueryAsync_DelegatesToProjectionWithNativeOnlyFalse()
+    public async Task QueryAsync_DelegatesToProjection()
     {
         var treatments = new List<Treatment>
         {
@@ -57,14 +57,14 @@ public class TreatmentReadServiceTests
         };
 
         _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(null, null, 10, false, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.GetProjectedTreatmentsAsync(null, null, 10, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(treatments);
 
         var result = await _service.QueryAsync(new TreatmentQuery { Count = 10 });
 
         result.Should().HaveCount(2);
         _projection.Verify(
-            p => p.GetProjectedTreatmentsAsync(null, null, 10, false, It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            p => p.GetProjectedTreatmentsAsync(null, null, 10, It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -79,7 +79,7 @@ public class TreatmentReadServiceTests
         };
 
         _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(null, null, It.IsAny<int>(), false, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.GetProjectedTreatmentsAsync(null, null, It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(treatments);
 
         var result = await _service.QueryAsync(new TreatmentQuery { Count = 1, Skip = 1 });
@@ -93,8 +93,8 @@ public class TreatmentReadServiceTests
         var all = mills.Select(m => new Treatment { Id = m.ToString(), Mills = m }).ToList();
 
         _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(null, null, It.IsAny<int>(), false, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((long? _, long? _, int limit, bool _, bool descending, CancellationToken _) =>
+            .Setup(p => p.GetProjectedTreatmentsAsync(null, null, It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((long? _, long? _, int limit, bool descending, CancellationToken _) =>
                 (descending ? all.OrderByDescending(t => t.Mills) : all.OrderBy(t => t.Mills)).Take(limit).ToList());
     }
 
@@ -131,7 +131,7 @@ public class TreatmentReadServiceTests
         result.Select(t => t.SrvModified).Should().Equal(10_102L, 10_103L, 10_104L);
         cursors.Should().Equal(10_100L);
         _projection.Verify(
-            p => p.GetProjectedTreatmentsAsync(It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            p => p.GetProjectedTreatmentsAsync(It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -233,7 +233,7 @@ public class TreatmentReadServiceTests
 
         _bolusRepo.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(bolus);
         _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(1000, 1000, 100, false, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.GetProjectedTreatmentsAsync(1000, 1000, 100, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(projected);
 
         var result = await _service.GetByIdAsync(id.ToString());
@@ -252,7 +252,7 @@ public class TreatmentReadServiceTests
 
         _bolusRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, It.IsAny<CancellationToken>())).ReturnsAsync(bolus);
         _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(1000, 1000, 100, false, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.GetProjectedTreatmentsAsync(1000, 1000, 100, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(projected);
 
         var result = await _service.GetByIdAsync(legacyId);
@@ -523,6 +523,65 @@ public class TreatmentReadServiceTests
         created.Should().ContainSingle().Which.Id.Should().Be("override-1");
     }
 
+    private readonly List<string?> _decomposedIds = [];
+
+    private Treatment CarbsDecomposedUnder(string id)
+    {
+        var treatment = new Treatment { Id = id, Mills = 1000, EventType = "Carb Correction", Carbs = 20 };
+        var result = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+        result.CreatedRecords.Add(new CarbIntake { Id = Guid.CreateVersion7(), LegacyId = id });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(treatment, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((Treatment decomposed, WriteOrigin _, CancellationToken _) => _decomposedIds.Add(decomposed.Id))
+            .ReturnsAsync(result);
+        return treatment;
+    }
+
+    [Fact]
+    public async Task CreateAsync_FreshIdShapedLikeAServedOne_KeepsItWithoutScanningLegacyIdHashes()
+    {
+        var id = MongoObjectId.FromGuid(Guid.CreateVersion7());
+        var treatment = CarbsDecomposedUnder(id);
+
+        await _service.CreateAsync([treatment]);
+
+        _decomposedIds.Should().Equal(id);
+        _carbIntakeRepo.Verify(r => r.GetByGuidRangeAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
+        _bolusRepo.Verify(r => r.GetByLegacyIdHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _carbIntakeRepo.Verify(r => r.GetByLegacyIdHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _bgCheckRepo.Verify(r => r.GetByLegacyIdHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _noteRepo.Verify(r => r.GetByLegacyIdHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _deviceEventRepo.Verify(r => r.GetByLegacyIdHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _bolusCalcRepo.Verify(r => r.GetByLegacyIdHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _tempBasalRepo.Verify(r => r.GetByLegacyIdHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ObjectIdNoServedIdCouldBe_LooksNothingUp()
+    {
+        var treatment = CarbsDecomposedUnder(MongoObjectId.NewObjectId());
+
+        await _service.CreateAsync([treatment]);
+
+        _carbIntakeRepo.Verify(r => r.GetByLegacyIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _carbIntakeRepo.Verify(r => r.GetByGuidRangeAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_IdServedForAStoredRecord_DecomposesUnderItsLegacyId()
+    {
+        var carb = new CarbIntake { Id = Guid.CreateVersion7(), LegacyId = "loop-sync-id" };
+        var served = MongoObjectId.FromGuid(carb.Id);
+        _carbIntakeRepo
+            .Setup(r => r.GetByGuidRangeAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(carb);
+        var treatment = CarbsDecomposedUnder(served);
+
+        await _service.CreateAsync([treatment]);
+
+        _decomposedIds.Should().Equal("loop-sync-id");
+    }
+
     [Fact]
     public async Task GetByIdAsync_GuidStoredOnlyAsALegacyId_ResolvesIt()
     {
@@ -535,7 +594,7 @@ public class TreatmentReadServiceTests
         };
         _carbIntakeRepo.Setup(r => r.GetByLegacyIdAsync(clientId, It.IsAny<CancellationToken>())).ReturnsAsync(carb);
         _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(1000, 1000, 100, false, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.GetProjectedTreatmentsAsync(1000, 1000, 100, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new Treatment { Id = carb.Id.ToString(), Mills = 1000 }]);
 
         var result = await _service.GetByIdAsync(clientId);
@@ -560,7 +619,7 @@ public class TreatmentReadServiceTests
         _deviceEventRepo.Setup(r => r.GetByLegacyIdAsync("site-1", It.IsAny<CancellationToken>())).ReturnsAsync(deviceEvent);
         _noteRepo.Setup(r => r.GetByLegacyIdAsync("site-1", It.IsAny<CancellationToken>())).ReturnsAsync(note);
         _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(1000, 1000, 100, false, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.GetProjectedTreatmentsAsync(1000, 1000, 100, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([
                 new Treatment { Id = note.Id.ToString(), Mills = 1000 },
                 new Treatment { Id = deviceEvent.Id.ToString(), Mills = 1000 },
@@ -682,7 +741,7 @@ public class TreatmentReadServiceTests
 
     private void ProjectAs(Guid recordId) =>
         _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), false, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.GetProjectedTreatmentsAsync(It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new Treatment { Id = recordId.ToString() }]);
 
     private void VerifyOneHashScanPerTable()

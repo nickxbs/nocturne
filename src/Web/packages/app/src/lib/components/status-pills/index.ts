@@ -10,7 +10,6 @@ export { default as TrackerPill } from './TrackerPill.svelte';
 export { default as TrackerPillBar } from './TrackerPillBar.svelte';
 
 // Re-export types
-// Note: CAGEPillData and SAGEPillData are deprecated - use TrackerPill system instead
 export type {
 	AlertLevel,
 	PillInfoItem,
@@ -22,6 +21,6 @@ export type {
 	LoopStatusCode,
 	StatusPillsConfig,
 	PillType
-} from '$lib/types/status-pills';
+} from '#lib/types/status-pills.js';
 
-export { DEFAULT_PILLS_CONFIG } from '$lib/types/status-pills';
+export { DEFAULT_PILLS_CONFIG } from '#lib/types/status-pills.js';

@@ -27,6 +27,7 @@ using Nocturne.API.Multitenancy;
 using Nocturne.API.OpenApi;
 using Scalar.AspNetCore;
 using Nocturne.Aspire.Scalar;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
@@ -146,12 +147,13 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditContext, AuditContext>();
 builder.Services.AddHostedService<AuditRetentionService>();
 builder.Services.AddHostedService<SoftDeleteCleanupService>();
-builder.Services.AddSingleton<IGoogleHealthCoordinatorStore, PostgresGoogleHealthCoordinatorStore>();
 builder.Services.AddSingleton<GoogleHealthCoordinator>();
 builder.Services.AddSingleton<IGoogleHealthGrantHolders, PostgresGoogleHealthGrantHolders>();
 builder.Services.AddSingleton<IGoogleHealthSyncCoordinator>(provider =>
     provider.GetRequiredService<GoogleHealthCoordinator>());
-builder.Services.AddScoped<IGoogleHealthService, GoogleHealthService>();
+builder.Services.AddScoped<GoogleHealthService>();
+builder.Services.AddScoped<IGoogleHealthService>(provider => provider.GetRequiredService<GoogleHealthService>());
+builder.Services.AddScoped<IConnectorDataPurge>(provider => provider.GetRequiredService<GoogleHealthService>());
 builder.Services.AddGoogleHealthPlatform();
 builder.Services.AddScoped<IGoogleHealthReadingWriter, GoogleHealthReadingWriter>();
 builder.Services.AddHostedService<GoogleHealthWorker>();
@@ -434,6 +436,7 @@ app.MapScalarApiReference((options, httpContext) =>
 {
     options.WithTheme(ScalarTheme.Mars);
     options.WithOpenApiRoutePattern("/openapi/{documentName}.json");
+    options.WithOperationTitleSource(OperationTitleSource.Path);
     options.AddDocument("nocturne", "Nocturne API", isDefault: true);
     options.AddDocument("nightscout", "Nightscout API");
     options.AddHeadContent(MermaidLazyLoader.HeadContent);
@@ -458,6 +461,12 @@ app.MapScalarApiReference((options, httpContext) =>
             {
                 flow.ClientId = scalarAuth.ClientId;
                 flow.RedirectUri = scalarAuth.RedirectUri;
+
+                // The spec's endpoints are relative, and Scalar passes them to `new URL()`
+                // with no base, which throws ("Failed to authorize oauth2 flow").
+                var origin = new Uri(scalarAuth.RedirectUri).GetLeftPart(UriPartial.Authority);
+                flow.AuthorizationUrl = origin + SecuritySchemeDefinitions.AuthorizationUrl;
+                flow.TokenUrl = origin + SecuritySchemeDefinitions.TokenUrl;
             }
             flow.Pkce = Pkce.Sha256;
             flow.SelectedScopes = [Scope.FullAccess];
@@ -549,7 +558,7 @@ app.Services.GetRequiredService<CredentialPathRedactor>()
 var isNSwagGeneration = IsRunningInNSwagContext();
 
 if (!isNSwagGeneration)
-    app.Services.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineSelection>();
+    app.Services.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineNativeLibrary>();
 if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
 {
     // Validate that the migrator connection string is present and uses a different role.
@@ -625,7 +634,7 @@ if (app.Environment.IsDevelopment() && !isNSwagGeneration)
     await using var devSeedDb = await devSeedScope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
     var devSeedLogger = devSeedScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     await DevIdentityFixtureSeeder.SeedAsync(
-        devSeedDb, app.Configuration, devSeedLogger, CancellationToken.None);
+        devSeedDb, app.Configuration, app.Services.GetRequiredService<TimeProvider>(), devSeedLogger, CancellationToken.None);
 }
 
 await app.RunAsync();

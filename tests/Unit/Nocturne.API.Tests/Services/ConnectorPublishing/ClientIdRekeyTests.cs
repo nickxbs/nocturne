@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.API.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -218,7 +219,7 @@ public class ClientIdRekeyTests : IDisposable
         var decomposer = new TreatmentDecomposer(
             _context.AsFactory(), bolus, Mock.Of<ITempBasalRepository>(), carbs, bgChecks, notes, deviceEvents, calculations,
             Mock.Of<IStateSpanService>(), ProfileActivationTestDeps.Repository(_context), ProfileActivationTestDeps.Writer(_context), Mock.Of<ITreatmentFoodService>(), Mock.Of<IDeviceService>(),
-            Mock.Of<IPatientDeviceStamper>(), Mock.Of<IProfileDecomposer>(), Mock.Of<IActiveProfileResolver>(),
+            Mock.Of<IPatientDeviceStamper>(), Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(), TempBasalTestDeps.Unscheduled(), audit, NullLogger<TreatmentDecomposer>.Instance);
         var store = new TreatmentReadService(
             Mock.Of<IV4ToLegacyProjectionService>(), decomposer, Mock.Of<IDecompositionPipeline>(),
@@ -235,6 +236,6 @@ public class ClientIdRekeyTests : IDisposable
             bolus, carbs, bgChecks, calculations, Mock.Of<ITempBasalRepository>(),
             Mock.Of<IBasalInjectionRepository>(), notes, deviceEvents,
             Mock.Of<IPatientInsulinRepository>(), Mock.Of<IBasalRateResolver>(), Mock.Of<ITherapySettingsResolver>(),
-            Mock.Of<IPatientDeviceStamper>(), audit, new PublishSkipTally(), NullLogger<TreatmentPublisher>.Instance);
+            Mock.Of<IPatientDeviceStamper>(), audit, new PublishSkipTally(), Mock.Of<ITenantAccessor>(), NullLogger<TreatmentPublisher>.Instance);
     }
 }

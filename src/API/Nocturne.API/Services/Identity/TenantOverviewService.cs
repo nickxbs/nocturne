@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Glucose;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -27,17 +28,23 @@ public class TenantOverviewService : ITenantOverviewService
     private readonly INocturneDbContextFactory _factory;
     private readonly IServiceProvider _scope;
     private readonly IGlucoseStatusClassifier _classifier;
+    private readonly IAlertRepository _alertRepository;
+    private readonly TimeProvider _time;
     private readonly ILogger<TenantOverviewService> _logger;
 
     public TenantOverviewService(
         INocturneDbContextFactory factory,
         IServiceProvider scope,
         IGlucoseStatusClassifier classifier,
+        IAlertRepository alertRepository,
+        TimeProvider timeProvider,
         ILogger<TenantOverviewService> logger)
     {
         _factory = factory;
         _scope = scope;
         _classifier = classifier;
+        _alertRepository = alertRepository;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -140,7 +147,8 @@ public class TenantOverviewService : ITenantOverviewService
                 .Min();
         }
 
-        var thresholds = await _classifier.ResolveThresholdsAsync(db, ct);
+        var thresholds = _classifier.ResolveThresholds(
+            await _alertRepository.GetEnabledRulesAsync(tenant.Id, ct));
 
         var reading = latest is null
             ? null
@@ -151,7 +159,7 @@ public class TenantOverviewService : ITenantOverviewService
         var lastReadingAt = historyClamped ? null : tenant.LastReadingAt;
 
         var status = _classifier.Classify(
-            latest?.Mgdl, latest?.Timestamp, lastReadingAt, thresholds, DateTime.UtcNow);
+            latest?.Mgdl, latest?.Timestamp, lastReadingAt, thresholds, _time.GetUtcNow().UtcDateTime);
 
         return new TenantOverviewItem(
             tenant.Id, tenant.Slug, tenant.DisplayName,

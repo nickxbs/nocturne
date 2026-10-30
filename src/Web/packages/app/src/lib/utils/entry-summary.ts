@@ -8,9 +8,9 @@
  * 0.30000000000000004 and has to read as 0.30.
  */
 
-import type { EntryRecord } from "$lib/constants/entry-categories";
-import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
-import { formatCarbDisplay, formatInsulinDisplay } from "$lib/utils/formatting";
+import type { EntryRecord } from "#lib/constants/entry-categories.js";
+import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
+import { formatCarbDisplay, formatInsulinDisplay } from "#lib/utils/formatting.js";
 
 /**
  * The headline line for an entry row — the amount with its unit, or the
@@ -27,11 +27,11 @@ export function entryLabel(entry: EntryRecord): string {
         ? `${formatCarbDisplay(entry.data.carbs)}g carbs`
         : "Carbs";
     case "bgCheck":
-      return entry.data.mgdl ? `${entry.data.mgdl} mg/dL` : "BG Check";
+      return entry.data.mgdl ? `${entry.data.mgdl} mg/dL` : "BG check";
     case "note":
       return entry.data.text ?? "Note";
     case "deviceEvent":
-      return entry.data.eventType ?? "Device Event";
+      return entry.data.eventType ?? "Device event";
     case "basalInjection":
       return entry.data.units
         ? `${formatInsulinDisplay(entry.data.units)}u basal`

@@ -1,3 +1,5 @@
+using Nocturne.API.Services.ChartData;
+using Nocturne.Core.Clinical.Treatments;
 using FluentAssertions;
 using Moq;
 using Nocturne.API.Services.Analytics;
@@ -61,14 +63,14 @@ public class LoopAnalysisLoopHealthZoneTests
             .Setup(t => t.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TherapyTimeline([
                 new TherapySegment(0, long.MaxValue,
-                    new TherapySnapshot(1.0, TherapySnapshot.DefaultPeakMinutes, TherapySnapshot.DefaultCarbsPerHour,
+                    new TherapySnapshot(1.0, TherapySnapshot.DefaultCarbsPerHour,
                         null, null, 0, null, null, null)),
             ]));
 
         var series = new Mock<IBasalSeriesBuilder>();
         series
             .Setup(b => b.BuildAsync(
-                It.IsAny<List<TempBasal>>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<CancellationToken>()))
+                It.IsAny<List<TempBasal>>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<IReadOnlyList<ScaleFactorInterval>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
         var spans = new Mock<IStateSpanRepository>();
@@ -107,6 +109,7 @@ public class LoopAnalysisLoopHealthZoneTests
             carbIntakeRepository: Mock.Of<ICarbIntakeRepository>(),
             tempBasalRepository: Mock.Of<ITempBasalRepository>(),
             apsSnapshotRepository: snapshots.Object,
+            pumpSnapshotRepository: Mock.Of<IPumpSnapshotRepository>(),
             stateSpanRepository: spans.Object,
             patientDeviceRepository: devices.Object,
             targetRangeScheduleRepository: Mock.Of<ITargetRangeScheduleRepository>(),

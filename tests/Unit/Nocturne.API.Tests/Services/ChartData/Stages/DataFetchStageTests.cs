@@ -1,3 +1,4 @@
+using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -22,8 +23,7 @@ public class DataFetchStageTests
     // Common test timestamps: 24-hour window
     private const long StartTime = 1700000000000L;
     private const long EndTime = 1700086400000L;
-    private const long BufferMs = 8L * 60 * 60 * 1000;
-    private const long BufferStartTime = StartTime - BufferMs;
+    private const long BufferStartTime = StartTime - DailyProfileCalculator.ActingMs;
 
     private readonly Mock<ISensorGlucoseRepository> _mockSensorGlucoseRepo = new();
     private readonly Mock<IBolusRepository> _mockBolusRepo = new();
@@ -88,46 +88,41 @@ public class DataFetchStageTests
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
-        // IBolusRepository.GetAsync
         _mockBolusRepo
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<bool>(), It.IsAny<BolusKind?>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<BolusKind?>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<Bolus>());
 
-        // ICarbIntakeRepository.GetAsync
         _mockCarbIntakeRepo
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<CarbIntake>());
 
-        // IBGCheckRepository.GetAsync: (DateTime?, DateTime?, string?, string?, int, int, bool, bool, CancellationToken)
         _mockBgCheckRepo
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<BGCheck>());
 
-        // IDeviceEventRepository.GetAsync: (DateTime?, DateTime?, string?, string?, int, int, bool, bool, Guid?, CancellationToken)
         _mockDeviceEventRepo
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<bool>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DeviceEvent>());
 
-        // ITempBasalRepository.GetAsync: (DateTime?, DateTime?, string?, string?, int, int, bool, CancellationToken) — no nativeOnly
         _mockTempBasalRepo
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
@@ -187,7 +182,7 @@ public class DataFetchStageTests
             .ReturnsAsync(new List<TrackerDefinitionEntity>());
 
         _mockTrackerRepo
-            .Setup(r => r.GetActiveInstancesAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetActiveInstancesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<TrackerInstanceEntity>());
 
         _mockHeartRateService
@@ -256,6 +251,28 @@ public class DataFetchStageTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_ReadsPumpModeOverrideAndTheDrawnActivityCategories()
+    {
+        var inputContext = new ChartDataContext
+        {
+            StartTime = StartTime,
+            EndTime = EndTime,
+            IntervalMinutes = 5,
+            BufferStartTime = BufferStartTime,
+        };
+
+        await _stage.ExecuteAsync(inputContext, CancellationToken.None);
+
+        _mockStateSpanRepo.Verify(r => r.GetByCategories(
+            It.Is<IEnumerable<StateSpanCategory>>(c => c.OrderBy(x => x).SequenceEqual(
+                new[] { StateSpanCategory.PumpMode, StateSpanCategory.Override }
+                    .Concat(StateSpanCategories.DrawnActivities).OrderBy(x => x))),
+            It.IsAny<DateTime?>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_StartsFactoryBackedReadsConcurrently()
     {
         const int factoryBackedReads = 9;
@@ -278,35 +295,35 @@ public class DataFetchStageTests
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .Returns(() => Gated<IEnumerable<SensorGlucose>>(Array.Empty<SensorGlucose>()));
         _mockBolusRepo
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<bool>(), It.IsAny<BolusKind?>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<BolusKind?>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .Returns(() => Gated<IEnumerable<Bolus>>(new[] { bolus }));
         _mockCarbIntakeRepo
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .Returns(() => Gated<IEnumerable<CarbIntake>>(Array.Empty<CarbIntake>()));
         _mockBgCheckRepo
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>()))
             .Returns(() => Gated<IEnumerable<BGCheck>>(Array.Empty<BGCheck>()));
         _mockDeviceEventRepo
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<bool>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .Returns(() => Gated<IEnumerable<DeviceEvent>>(Array.Empty<DeviceEvent>()));
         _mockTempBasalRepo
             .Setup(r => r.GetAsync(
@@ -382,7 +399,7 @@ public class DataFetchStageTests
             .Setup(r => r.GetAllDefinitionsAsync(It.IsAny<CancellationToken>()))
             .Returns(() => Tracked(new List<TrackerDefinitionEntity>()));
         _mockTrackerRepo
-            .Setup(r => r.GetActiveInstancesAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetActiveInstancesAsync(It.IsAny<CancellationToken>()))
             .Returns(() => Tracked(Array.Empty<TrackerInstanceEntity>()));
         _mockHeartRateService
             .Setup(s => s.GetHeartRatesByDateRangeAsync(

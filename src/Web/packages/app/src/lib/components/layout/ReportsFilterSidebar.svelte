@@ -1,22 +1,23 @@
 <script lang="ts">
-  import * as Sheet from "$lib/components/ui/sheet";
-  import { Button } from "$lib/components/ui/button";
-  import { Label } from "$lib/components/ui/label";
-  import { Separator } from "$lib/components/ui/separator";
-  import { ScrollArea } from "$lib/components/ui/scroll-area";
+  import * as Sheet from "#lib/components/ui/sheet/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { ScrollArea } from "#lib/components/ui/scroll-area/index.js";
   import { untrack } from "svelte";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
   import type { DateRange } from "bits-ui";
-  import { requireDateParamsContext, withRange, type RangeWrite } from "$lib/hooks/date-params.svelte";
-  import { getReportSlots } from "$lib/hooks/report-slots.svelte";
-  import { RangeCalendar } from "$lib/components/ui/range-calendar";
-  import { dayCount } from "$lib/utils/date-range";
-  import { formatLocale, formatMediumDateRange } from "$lib/utils/formatting";
+  import { requireDateParamsContext, withRange, type RangeWrite } from "#lib/hooks/date-params.svelte.js";
+  import { getReportSlots } from "#lib/hooks/report-slots.svelte.js";
+  import { RangeCalendar } from "#lib/components/ui/range-calendar/index.js";
+  import { dayCount } from "#lib/utils/date-range.js";
+  import { formatLocale, formatMediumDateRange } from "#lib/utils/formatting.js";
   import Calendar from "@lucide/svelte/icons/calendar";
   import Filter from "@lucide/svelte/icons/funnel";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
+  import type { ReadonlyURLSearchParams } from "$app/state";
 
   interface Props {
     open?: boolean;
@@ -41,7 +42,7 @@
   ];
 
   // === DRAFT STATE ===
-  // The pending date range selection before clicking "Apply Filters".
+  // The pending date range selection before clicking "Apply filters".
   // This is the single source of truth; the highlighted preset is derived from it.
   let draftCalendarValue = $state<DateRange | undefined>(undefined);
 
@@ -92,10 +93,10 @@
   }
 
   /** Writes the range and the report's filters in one navigation, so one history entry. */
-  async function write(range: RangeWrite | null, report: (search: URLSearchParams) => URLSearchParams) {
+  async function write(range: RangeWrite | null, report: (search: ReadonlyURLSearchParams) => URLSearchParams) {
     const search = report(range ? withRange(page.url.searchParams, range) : page.url.searchParams);
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- a query on the page on screen
-    await goto(`?${search.toString()}`, { noScroll: true, keepFocus: true });
+    await goto(`?${search.toString()}`, { reset: false });
   }
 
   /**
@@ -152,7 +153,7 @@
       <div class="flex items-center justify-between">
         <Sheet.Title class="flex items-center gap-2">
           <Filter class="h-5 w-5" />
-          Report Filters
+          Report filters
         </Sheet.Title>
       </div>
       <Sheet.Description>
@@ -164,11 +165,11 @@
       </Sheet.Description>
     </Sheet.Header>
 
-    <ScrollArea class="h-[calc(100vh-180px)]">
+    <ScrollArea class="h-[calc(100dvh-180px)]">
       <div class="px-6 py-4 space-y-6">
         <!-- Quick Date Presets -->
         <div class="space-y-3">
-          <Label>Quick Selection</Label>
+          <Label>Quick selection</Label>
           <div class="grid grid-cols-3 gap-2">
             {#each dayPresets as preset (preset.days)}
               <Button
@@ -188,7 +189,7 @@
         <div class="space-y-3">
           <Label class="flex items-center">
             <Calendar class="h-4 w-4" />
-            Custom Date Range
+            Custom date range
           </Label>
           <div class="text-sm text-muted-foreground mb-2">
             {dateRangeText}
@@ -218,7 +219,7 @@
           <RotateCcw class="h-4 w-4 mr-2" />
           Reset
         </Button>
-        <Button class="flex-1" onclick={applyFilters}>Apply Filters</Button>
+        <Button class="flex-1" onclick={applyFilters}>Apply filters</Button>
       </div>
     </div>
   </Sheet.Content>

@@ -1,32 +1,25 @@
 <script lang="ts">
-  import * as Tabs from "$lib/components/ui/tabs";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
   import {
     Card,
     CardContent,
     CardFooter,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Alert from "$lib/components/ui/alert";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import Bot from "@lucide/svelte/icons/bot";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { toast } from "svelte-sonner";
-  import type { PlatformSettingsSummary } from "$api";
-  import { errorMessage } from "$lib/forms/submit-error";
-
-  const DISPLAY_NAMES: Record<string, string> = {
-    discord: "Discord",
-    slack: "Slack",
-    telegram: "Telegram",
-    whatsapp: "WhatsApp",
-    resend: "Resend (Email)",
-  };
+  import type { PlatformSettingsSummary } from "#lib/api/index.js";
+  import { errorMessage } from "#lib/forms/submit-error.js";
+  import { platformCategoryName } from "#lib/utils/platform-categories.js";
 
   const TELEGRAM_SET_WEBHOOK =
     'curl "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" -d "url=https://<your-instance>/api/v4/webhooks/telegram" -d "secret_token=<WEBHOOK_SECRET_TOKEN>"';
@@ -97,7 +90,7 @@
 
   async function handleDelete(platform: PlatformSettingsSummary) {
     const category = platform.category ?? "";
-    const displayName = DISPLAY_NAMES[category] ?? category;
+    const displayName = platformCategoryName(category);
     if (!confirm(`Remove all ${displayName} credentials? This cannot be undone.`)) return;
 
     const state = states[category];
@@ -124,7 +117,7 @@
     {#each platforms as platform (platform.category)}
       {@const category = platform.category ?? ""}
       {@const state = states[category]}
-      {@const displayName = DISPLAY_NAMES[category] ?? category}
+      {@const displayName = platformCategoryName(category)}
       {@const isConfigured = hasAnyConfiguredFields(platform)}
       <Card>
         <CardHeader class="flex flex-row items-center justify-between">
@@ -157,9 +150,7 @@
                 <Alert.Description>
                   <p>
                     Telegram webhook calls are refused until one is set. Choose a random value of
-                    letters, digits, <code>_</code> or <code>-</code> (for example from
-                    <code>openssl rand -hex 32</code>), save it here with the bot enabled, then
-                    register the webhook again with the same value:
+                    letters, digits, <code>_</code> or <code>-</code> (for example from <code>openssl rand -hex 32</code>). Save it here with the bot enabled. Then register the webhook again with the same value:
                   </p>
                   <code class="block whitespace-pre-wrap break-all">{TELEGRAM_SET_WEBHOOK}</code>
                 </Alert.Description>

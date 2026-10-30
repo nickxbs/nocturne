@@ -90,7 +90,6 @@ public class LegacyTreatmentRoundTripTests : IDisposable
             foods.Object,
             devices.Object,
             Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<IProfileDecomposer>(),
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
@@ -100,6 +99,7 @@ public class LegacyTreatmentRoundTripTests : IDisposable
         var projection = new V4ToLegacyProjectionService(
             bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo,
             tempBasalRepo, bolusCalcRepo,
+            Mock.Of<IProfileActivationRepository>(),
             foods.Object,
             _context.AsFactory(),
             NullLogger<V4ToLegacyProjectionService>.Instance);

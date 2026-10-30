@@ -9,6 +9,7 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Services;
@@ -19,6 +20,7 @@ using Xunit.Abstractions;
 
 namespace Nocturne.API.Tests;
 
+[Collection(ApiIntegrationShards.One)]
 public sealed class DemoCoverageIntegrationTests(
     ApiIntegrationTestFixture fixture,
     ITestOutputHelper output) : ApiIntegrationTestBase(fixture, output)
@@ -48,12 +50,13 @@ public sealed class DemoCoverageIntegrationTests(
                 .CreateForTenantAsync(Fixture.TenantId);
             var uiSettings = await scope.ServiceProvider.GetRequiredService<IUISettingsService>().GetSettingsAsync()
                 ?? new UISettingsConfiguration();
-            // The seeder lays its compression artifacts at server-local wall-clock times.
-            var demoTimezone = DemoTherapyProfile.LocalIanaTimezone();
-            uiSettings.DataQuality.SleepSchedule.Timezone = demoTimezone;
+            // The seeder lays its compression artifacts at wall-clock times in the zone it resolves.
+            var clock = SeedingClock.Resolve(
+                await dbContext.PatientRecords.Select(r => r.Timezone).FirstOrDefaultAsync(),
+                scope.ServiceProvider.GetRequiredService<TimeProvider>());
+            uiSettings.DataQuality.SleepSchedule.Timezone = clock.ZoneId;
             await scope.ServiceProvider.GetRequiredService<IUISettingsService>().SaveSettingsAsync(uiSettings);
-            var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow,
-                TimeZoneInfo.FindSystemTimeZoneById(demoTimezone)).DateTime);
+            var today = DateOnly.FromDateTime(clock.LocalToday);
             var realNight = Enumerable.Range(0, 14).Select(offset => today.AddDays(-offset))
                 .First(DemoCoverageSeeds.IsCompressionNight);
             var realSuggestion = new CompressionLowSuggestionEntity
@@ -75,7 +78,7 @@ public sealed class DemoCoverageIntegrationTests(
                 .SeedAsync(tenant, 14, Fixture.OwnerSubjectId, DataSources.DemoService);
 
             var devices = await dbContext.PatientDevices.AsNoTracking()
-                .Where(d => d.DeviceCategory == "cgm")
+                .Where(d => d.DeviceCategory == nameof(DeviceCategory.CGM))
                 .ToListAsync();
             devices.Should().HaveCountGreaterThanOrEqualTo(2);
             var deviceIds = devices.Select(d => d.Id).ToArray();
@@ -116,8 +119,8 @@ public sealed class DemoCoverageIntegrationTests(
                     || s.Status.Equals("Dismissed", StringComparison.OrdinalIgnoreCase))
                 .Should().OnlyContain(s => s.DropRate > 0
                     && s.LowestGlucose <= DemoCoverageSeeds.CompressionNadirMgdl
-                    && s.StartMills <= DemoCoverageSeeds.CompressionNadirMills(s.NightOf)
-                    && s.EndMills >= DemoCoverageSeeds.CompressionNadirMills(s.NightOf));
+                    && s.StartMills <= DemoCoverageSeeds.CompressionNadirMills(s.NightOf, clock.Demo)
+                    && s.EndMills >= DemoCoverageSeeds.CompressionNadirMills(s.NightOf, clock.Demo));
             var accepted = suggestions.Single(s => s.Status.Equals("Accepted", StringComparison.OrdinalIgnoreCase));
             accepted.StateSpanId.Should().NotBeNull();
             var acceptedSpan = await dbContext.StateSpans.IgnoreQueryFilters()
@@ -137,7 +140,7 @@ public sealed class DemoCoverageIntegrationTests(
             await dbContext.SaveChangesAsync();
 
             await Nocturne.API.Services.Demo.DemoDataPurge.PurgeEntriesAsync(dbContext, CancellationToken.None);
-            await Nocturne.API.Services.Demo.DemoDataPurge.PurgeTreatmentsAsync(dbContext, CancellationToken.None);
+            await Nocturne.API.Services.Demo.DemoDataPurge.PurgeTreatmentsAsync(dbContext, TimeProvider.System, CancellationToken.None);
             (await dbContext.SensorGlucose.IgnoreQueryFilters().AnyAsync(r => r.Id == realReading.Id)).Should().BeTrue();
             (await dbContext.CompressionLowSuggestions.IgnoreQueryFilters()
                 .AnyAsync(s => s.Id == realSuggestion.Id)).Should().BeTrue();

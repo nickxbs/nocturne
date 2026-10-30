@@ -1,6 +1,6 @@
 <script lang="ts">
   import BasalAnalysisContent from "./BasalAnalysisContent.svelte";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
 
   // Get shared date params from context (set by reports layout)
   // Default: 14 days for basal pattern analysis
@@ -25,14 +25,6 @@
 
   const rangeKey = $derived(JSON.stringify(reportsParams.dateRangeInput ?? {}));
 </script>
-
-<svelte:head>
-  <title>Basal Rate Analysis - Nocturne Reports</title>
-  <meta
-    name="description"
-    content="Analyze your basal insulin delivery patterns with percentile visualization"
-  />
-</svelte:head>
 
 {#key rangeKey}
   <BasalAnalysisContent {analysisDates} {dateInfo} />

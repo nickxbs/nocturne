@@ -63,7 +63,7 @@ public class DemoDataPurgeParityTests : IDisposable
     }
 
     private DemoAdminController CreateController() =>
-        new(Mock.Of<ITenantService>(), null!, (new ContextFactory(_db.Options)).AsNocturneFactory());
+        new(Mock.Of<ITenantService>(), null!, (new ContextFactory(_db.Options)).AsNocturneFactory(), TimeProvider.System);
 
     private DataSourceService CreateService(NocturneDbContext context) => new(
         context.AsFactory(),
@@ -72,8 +72,10 @@ public class DemoDataPurgeParityTests : IDisposable
         _calibrations.Object,
         Mock.Of<IAuditContext>(),
         _connectorConfig.Object,
-        Mock.Of<Nocturne.Core.Contracts.V4.ITreatmentDecomposer>(),
         Nocturne.API.Tests.Infrastructure.ProfileActivationTestDeps.Writer(context),
+        [],
+        [],
+        TimeProvider.System,
         NullLogger<DataSourceService>.Instance);
 
     /// <summary>One demo row in every table the demo seeder and the realtime tick write to.</summary>

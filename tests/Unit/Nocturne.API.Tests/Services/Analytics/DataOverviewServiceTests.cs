@@ -1,13 +1,17 @@
 using System.Linq.Expressions;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Analytics;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Services;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
@@ -27,8 +31,10 @@ public class DataOverviewServiceTests : IDisposable
 {
     private readonly NocturneDbContext _dbContext;
     private readonly DataOverviewService _service;
-    private readonly Mock<ITenantCache> _cacheService = new();
+    private readonly Mock<ICacheService> _distributed = new();
+    private int _contextsOpened;
     private readonly Mock<ITherapySettingsResolver> _therapySettings = new();
+    private readonly CategoryReadContext _readContext = new();
     private readonly Mock<INocturneDbContextFactory> _factory = new();
     private readonly ListLogger<DataOverviewService> _logger = new();
     private IInterceptor[] _interceptors = [];
@@ -60,19 +66,33 @@ public class DataOverviewServiceTests : IDisposable
         _factory.Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() =>
             {
+                Interlocked.Increment(ref _contextsOpened);
                 var ctx = TestDbContextFactory.CreateInMemoryContext(_dbName, _interceptors);
                 ctx.TenantId = TenantId;
                 return ctx;
             });
 
-        _therapySettings.Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
+        _therapySettings.Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync("UTC");
         var mockStatisticsService = new Mock<IStatisticsService>();
+        mockStatisticsService.SetupGet(s => s.HourlyBandThresholds).Returns(ServedThresholds);
+
+        var store = TestTenantCache.Distributed(new MemoryCache(new MemoryCacheOptions()));
+        _distributed
+            .Setup(c => c.GetAsync<EHbA1cTimelineResponse>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns((string key, CancellationToken ct) => store.GetAsync<EHbA1cTimelineResponse>(key, ct));
+        _distributed
+            .Setup(c => c.SetAsync(
+                It.IsAny<string>(), It.IsAny<EHbA1cTimelineResponse>(), It.IsAny<TimeSpan?>(), It.IsAny<CancellationToken>()))
+            .Returns((string key, EHbA1cTimelineResponse value, TimeSpan? ttl, CancellationToken ct) =>
+                store.SetAsync(key, value, ttl, ct));
+
+        mockStatisticsService.WithRealTimeInRange();
         _service = new DataOverviewService(
             _factory.Object,
-            _therapySettings.Object,
+            new TenantClockResolver(_therapySettings.Object, _readContext, NullLogger<TenantClockResolver>.Instance),
             mockStatisticsService.Object,
-            _cacheService.Object,
-            _logger
+            TestTenantCache.Create(distributed: _distributed.Object, tenantId: TenantId),
+            TimeProvider.System, _logger
         );
     }
 
@@ -210,7 +230,7 @@ public class DataOverviewServiceTests : IDisposable
             day.Counts["Boluses"].Should().Be(count * 2);
             day.TotalCount.Should().Be(count * 12);
             day.AverageGlucoseMgdl.Should().Be(150);
-            day.TimeInRangePercent.Should().Be(50);
+            day.TimeInRangePercent.Should().Be(0);
             day.TotalBolusUnits.Should().Be(bolus);
             day.TotalBasalUnits.Should().Be(basal);
             day.TotalDailyDose.Should().Be(tdd);
@@ -219,6 +239,25 @@ public class DataOverviewServiceTests : IDisposable
     }
 
     #region GetAvailableYearsAsync Tests
+
+    private static readonly GlycemicThresholds ServedThresholds = new()
+    {
+        VeryLow = 50,
+        Low = 63,
+        TargetBottom = 63,
+        TargetTop = 140,
+        High = 140,
+        VeryHigh = 260,
+    };
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetAvailableYearsAsync_ServesTheBandEdgesTheStatisticsServiceClassifiesOn()
+    {
+        var result = await _service.GetAvailableYearsAsync();
+
+        result.Thresholds.Should().BeSameAs(ServedThresholds);
+    }
 
     [Fact]
     [Trait("Category", "Unit")]
@@ -244,6 +283,42 @@ public class DataOverviewServiceTests : IDisposable
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.GetAvailableYearsAsync();
+
+        result.Years.Should().ContainSingle().Which.Should().Be(2024);
+        result.AvailableDataSources.Should().ContainSingle().Which.Should().Be("dexcom");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetAvailableYearsAsync_ServesTheCachedExtent_WithoutRereadingTheTables()
+    {
+        var service = new DataOverviewService(
+            _factory.Object,
+            new TenantClockResolver(_therapySettings.Object, _readContext, NullLogger<TenantClockResolver>.Instance),
+            Mock.Of<IStatisticsService>(),
+            TestTenantCache.Create(tenantId: TenantId),
+            TimeProvider.System, _logger
+        );
+
+        _dbContext.SensorGlucose.Add(new SensorGlucoseEntity
+        {
+            Id = Guid.NewGuid(),
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            Mgdl = 120.0,
+            DataSource = "dexcom"
+        });
+        await _dbContext.SaveChangesAsync();
+        await service.GetAvailableYearsAsync();
+
+        _dbContext.Boluses.Add(new BolusEntity
+        {
+            Id = Guid.NewGuid(),
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(Jan1_2025_01h).UtcDateTime,
+            Insulin = 5.0,
+            DataSource = "glooko"
+        });
+        await _dbContext.SaveChangesAsync();
+        var result = await service.GetAvailableYearsAsync();
 
         result.Years.Should().ContainSingle().Which.Should().Be(2024);
         result.AvailableDataSources.Should().ContainSingle().Which.Should().Be("dexcom");
@@ -1616,6 +1691,22 @@ public class DataOverviewServiceTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
+    public async Task GetDailySummaryAsync_WeighsADayMixingSensorCadencesByTime()
+    {
+        var baseTime = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime;
+        for (var i = 0; i < 60; i++)
+            _dbContext.SensorGlucose.Add(new SensorGlucoseEntity { Id = Guid.NewGuid(), Timestamp = baseTime.AddMinutes(i), Mgdl = 120.0, DataSource = "dexcom" });
+        for (var i = 0; i < 12; i++)
+            _dbContext.SensorGlucose.Add(new SensorGlucoseEntity { Id = Guid.NewGuid(), Timestamp = baseTime.AddMinutes(60 + i * 5), Mgdl = 250.0, DataSource = "dexcom" });
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetDailySummaryAsync(2024);
+
+        result.Days.Single(d => d.Date == "2024-06-15").TimeInRangePercent.Should().Be(50.0);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public async Task GetDailySummaryAsync_DayWithNoGlucose_TimeInRangeIsNull()
     {
         // Arrange: only a bolus, no glucose
@@ -1645,14 +1736,51 @@ public class DataOverviewServiceTests : IDisposable
     [Trait("Category", "Unit")]
     public async Task GetEHbA1cTimelineAsync_ServesTheTenantCache()
     {
-        var cached = new EHbA1cTimelineResponse { Year = 2024 };
-        _cacheService
-            .Setup(c => c.GetAsync<EHbA1cTimelineResponse>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(cached);
+        var first = await _service.GetEHbA1cTimelineAsync(2024);
+        var second = await _service.GetEHbA1cTimelineAsync(2024);
 
-        var result = await _service.GetEHbA1cTimelineAsync(2024);
+        second.Should().BeEquivalentTo(first);
+        _contextsOpened.Should().Be(1);
+    }
 
-        result.Should().BeSameAs(cached);
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetEHbA1cTimelineAsync_ConcurrentColdReads_BuildTheTimelineOnce()
+    {
+        var held = new TaskCompletionSource<NocturneDbContext>();
+        _factory.Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
+            .Returns(() =>
+            {
+                Interlocked.Increment(ref _contextsOpened);
+                return new ValueTask<NocturneDbContext>(held.Task);
+            });
+
+        var reads = Enumerable.Range(0, 8).Select(_ => _service.GetEHbA1cTimelineAsync(2024)).ToList();
+        var context = TestDbContextFactory.CreateInMemoryContext(_dbName);
+        context.TenantId = TenantId;
+        held.SetResult(context);
+        var results = await Task.WhenAll(reads).WaitAsync(TimeSpan.FromSeconds(5));
+
+        _contextsOpened.Should().Be(1);
+        results.Should().AllSatisfy(r => r.Should().BeSameAs(results[0]));
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(0, 1)]
+    [InlineData(-1, 24 * 14)]
+    public async Task GetEHbA1cTimelineAsync_CachesTheCurrentYearForAnHourAndEarlierYearsForAFortnight(
+        int yearOffset, int ttlHours)
+    {
+        await _service.GetEHbA1cTimelineAsync(DateTime.UtcNow.Year + yearOffset);
+
+        _distributed.Verify(
+            c => c.SetAsync(
+                It.IsAny<string>(),
+                It.IsAny<EHbA1cTimelineResponse>(),
+                TimeSpan.FromHours(ttlHours),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]
@@ -1667,6 +1795,8 @@ public class DataOverviewServiceTests : IDisposable
         result.Points.Should().NotBeEmpty()
             .And.OnlyContain(p => p.WeightedAverageGlucoseMgdl == 154.0 && p.ReadingCount == 30);
         VerifyTimelineNeverCached();
+        await _service.GetEHbA1cTimelineAsync(2025);
+        _contextsOpened.Should().Be(2);
     }
 
     [Fact]
@@ -1846,11 +1976,11 @@ public class DataOverviewServiceTests : IDisposable
     }
 
     private void VerifyTimelineNeverCached() =>
-        _cacheService.Verify(
+        _distributed.Verify(
             c => c.SetAsync(
                 It.IsAny<string>(),
                 It.IsAny<EHbA1cTimelineResponse>(),
-                It.IsAny<DateTimeOffset>(),
+                It.IsAny<TimeSpan?>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
 

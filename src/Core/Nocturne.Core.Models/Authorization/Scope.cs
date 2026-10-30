@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Nocturne.Core.Models.Authorization;
 
 /// <summary>
@@ -59,6 +61,11 @@ public static class Scope
     /// <summary>Read-only access to alert settings and history.</summary>
     public const string AlertsRead = "alerts.read";
     public const string AlertsReadWrite = "alerts.readwrite";
+    /// <summary>
+    /// Silences an alarm for everyone for a while (a snooze), and nothing else: the Nightscout
+    /// <c>notifications:*:ack</c> permission. <see cref="AlertsReadWrite"/> satisfies it.
+    /// </summary>
+    public const string AlertsAcknowledge = "alerts.acknowledge";
 
     // Account
 
@@ -142,6 +149,7 @@ public static class Scope
         TherapyReadWrite,
         AlertsRead,
         AlertsReadWrite,
+        AlertsAcknowledge,
         ReportsRead,
         IdentityRead,
         HeartRateRead,
@@ -182,7 +190,7 @@ public static class Scope
         FoodRead, FoodReadWrite,
         ReportsRead,
         TherapyRead, TherapyReadWrite,
-        AlertsRead, AlertsReadWrite,
+        AlertsRead, AlertsReadWrite, AlertsAcknowledge,
         IdentityRead,
         RolesManage,
         MembersInvite,
@@ -232,7 +240,18 @@ public static class Scope
         {
             GlucoseRead, TreatmentsRead, DevicesRead,
             HeartRateRead, StepCountRead, FoodRead, ReportsRead,
+            AlertsRead,
         };
+
+    /// <summary>
+    /// Whether a share link carries <paramref name="scope"/> given the Public membership's direct
+    /// permissions. <see cref="AlertsRead"/> counts only when granted directly, by the sharing toggle:
+    /// a Public membership that reaches it through a role or a broad grant (<c>*</c>, a legacy
+    /// read-everything permission) was set up before alerts could be shared, and must not start
+    /// showing them without its owner choosing to.
+    /// </summary>
+    public static bool SharesWithPublic(string scope, IEnumerable<string>? directPermissions) =>
+        scope != AlertsRead || directPermissions?.Contains(AlertsRead, StringComparer.Ordinal) == true;
 
     /// <summary>
     /// Scopes granted to the Public subject when a share link is first enabled. Defaults to glucose
@@ -305,9 +324,9 @@ public static class Scope
     // Implication
 
     /// <summary>
-    /// Maps each readwrite scope to the read scope it narrows to. Used to downgrade a readwrite
-    /// grant when a narrower credential bounds it, which is a different question from whether a
-    /// granted set satisfies a requirement — see <see cref="SatisfiedBy"/>.
+    /// Maps each readwrite scope to the read scope it narrows to. Part of <see cref="Narrowings"/>,
+    /// which downgrades a grant when a narrower credential bounds it, a different question from
+    /// whether a granted set satisfies a requirement: see <see cref="SatisfiedBy"/>.
     /// </summary>
     private static readonly Dictionary<string, string> ReadWriteImpliesRead = new(StringComparer.Ordinal)
     {
@@ -321,6 +340,15 @@ public static class Scope
         [SleepReadWrite] = SleepRead,
         [FoodReadWrite] = FoodRead,
     };
+
+    /// <summary>
+    /// Every atom a granted atom narrows to when a narrower credential bounds it: its read tier, and
+    /// <see cref="AlertsAcknowledge"/> for <see cref="AlertsReadWrite"/>, which silences alarms as
+    /// part of managing them.
+    /// </summary>
+    private static readonly ILookup<string, string> Narrowings = ReadWriteImpliesRead
+        .Append(new KeyValuePair<string, string>(AlertsReadWrite, AlertsAcknowledge))
+        .ToLookup(kvp => kvp.Key, kvp => kvp.Value, StringComparer.Ordinal);
 
     /// <summary>
     /// The read tier of the vocabulary: every atom that confers sight of a data category and no
@@ -340,11 +368,11 @@ public static class Scope
         };
 
     /// <summary>
-    /// For each atom, the other atoms that satisfy it without matching it. Every readwrite tier
-    /// satisfies its read tier, and <see cref="AuditManage"/> satisfies <see cref="AuditRead"/> —
-    /// a member who may change what is audited may read the log.
+    /// For each atom, the other atoms that satisfy it without matching it. Every atom satisfies
+    /// what it narrows to (<see cref="Narrowings"/>), and <see cref="AuditManage"/> satisfies
+    /// <see cref="AuditRead"/>: a member who may change what is audited may read the log.
     ///
-    /// Kept separate from <see cref="ReadWriteImpliesRead"/> because the two answer different
+    /// Kept separate from <see cref="Narrowings"/> because the two answer different
     /// questions: this one widens a check, that one narrows a grant. Narrowing
     /// <see cref="AuditManage"/> to <see cref="AuditRead"/> would silently strip a member's manage
     /// rights when an OAuth credential bounds their membership, so it is deliberately absent there.
@@ -354,7 +382,7 @@ public static class Scope
     private static Dictionary<string, string[]> BuildSatisfiedBy()
     {
         var implications = new List<KeyValuePair<string, string>>(
-            ReadWriteImpliesRead.Select(kvp => new KeyValuePair<string, string>(kvp.Key, kvp.Value)))
+            Narrowings.SelectMany(g => g.Select(narrower => new KeyValuePair<string, string>(g.Key, narrower))))
         {
             new(AuditManage, AuditRead),
         };
@@ -411,18 +439,11 @@ public static class Scope
     }
 
     /// <summary>
-    /// Look up the read scope a readwrite scope narrows to. Lets a caller reduce a readwrite grant
-    /// to its read counterpart, which <see cref="Satisfies(IEnumerable{string}, string)"/> cannot
-    /// express: that answers whether a granted set covers a requirement, not what the closest
-    /// covered scope is.
+    /// The atoms <paramref name="scope"/> narrows to (<see cref="Narrowings"/>), empty when it
+    /// narrows to nothing.
     /// </summary>
-    /// <param name="readWriteScope">The readwrite scope to narrow.</param>
-    /// <param name="readScope">The implied read scope, when one exists.</param>
-    /// <returns><c>true</c> when <paramref name="readWriteScope"/> has a read counterpart.</returns>
-    public static bool TryGetImpliedReadScope(string readWriteScope, out string readScope)
-    {
-        return ReadWriteImpliesRead.TryGetValue(readWriteScope, out readScope!);
-    }
+    /// <param name="scope">The granted atom to narrow.</param>
+    public static IEnumerable<string> NarrowerScopes(string scope) => Narrowings[scope];
 
     /// <summary>
     /// Whether <paramref name="scope"/> is in the read tier. Asks the vocabulary rather than the
@@ -444,6 +465,25 @@ public static class Scope
     public static bool IsViewOnlyForRecordsAndAccess(IReadOnlyCollection<string> permissions) =>
         permissions.Any(IsReadScope)
         && permissions.All(p => IsReadScope(p) || MemberPersonalScopes.Contains(p));
+
+    /// <summary>
+    /// What a consent screen must disclose about deleting data if <paramref name="scopes"/> are
+    /// granted. A readwrite scope deletes as well as writes (see the class remarks), so read-only
+    /// is the only tier that cannot delete. <see cref="SharingReadWrite"/> counts although no
+    /// endpoint reads it yet: a consent screen that understates what a grant may do is the failure
+    /// to avoid.
+    /// </summary>
+    /// <param name="scopes">The requested scopes, aliases included.</param>
+    public static ScopeDeletionAccess DeletionAccess(IEnumerable<string> scopes)
+    {
+        var normalized = Normalize(scopes);
+
+        if (normalized.Contains(FullAccess)) return ScopeDeletionAccess.Full;
+
+        return normalized.Any(s => ReadWriteImpliesRead.ContainsKey(s) || s == SharingReadWrite)
+            ? ScopeDeletionAccess.ReadWrite
+            : ScopeDeletionAccess.None;
+    }
 
     /// <summary>Whether a scope string is one an OAuth client may request.</summary>
     public static bool IsValid(string scope)
@@ -510,6 +550,19 @@ public static class Scope
         return normalized.Contains(FullAccess)
             ? [FullAccess]
             : [.. normalized.Order(StringComparer.Ordinal)];
+    }
+
+    /// <summary>
+    /// The scopes a listing shows for a grant: what the grant authorizes, not what is stored on it.
+    /// A stored row may still hold an alias or an atom it cannot exercise.
+    /// </summary>
+    /// <param name="scopes">The grant's stored scopes.</param>
+    /// <param name="grantType">The grant's type, from <see cref="OAuthGrantTypes"/>.</param>
+    public static List<string> ForDisplay(IEnumerable<string> scopes, string grantType)
+    {
+        return grantType == OAuthGrantTypes.Guest
+            ? [.. NormalizeGuest(scopes).Order(StringComparer.Ordinal)]
+            : NormalizeForStorage(scopes);
     }
 
     private static IReadOnlySet<string> Normalize(
@@ -672,6 +725,18 @@ public static class Scope
     /// <param name="approverScopes">The approving caller's resolved scopes.</param>
     public static HashSet<string> CapAt(IEnumerable<string> requested, IReadOnlySet<string> approverScopes) =>
         requested.Where(scope => Satisfies(approverScopes, scope)).ToHashSet(StringComparer.Ordinal);
+}
+
+/// <summary>The deletion a scope set allows, from <see cref="Scope.DeletionAccess"/>.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<ScopeDeletionAccess>))]
+public enum ScopeDeletionAccess
+{
+    /// <summary>Read-only or device capability scopes: nothing can be deleted.</summary>
+    None,
+    /// <summary>Readwrite scopes: records in the categories they cover can be changed and deleted.</summary>
+    ReadWrite,
+    /// <summary>Full access (<c>*</c>): every category, including bulk deletes.</summary>
+    Full,
 }
 
 /// <summary>

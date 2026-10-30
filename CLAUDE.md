@@ -21,8 +21,21 @@ aspire describe
 aspire logs nocturne-api
 aspire resource nocturne-api restart
 
+# The watercolour library is the ryceg/water-ui submodule (src/Web/vendor/water-ui); pnpm
+# install fails without it. Its wasm is not committed: build it for live paint, otherwise the
+# artwork falls back to baked stills.
+git submodule update --init
+cd src/Web && pnpm --filter water-ui build:wasm
+
 # Build solution
 dotnet build
+
+# Alerts evaluate only in the Rust cdylib (crates/nocturne-alerts-ffi); the API will not start
+# without it. A build packs a local cargo build no older than its sources, else (crates/ with no
+# local changes) downloads the one main published for that crates/ tree (alerts-native release),
+# else fails rather than pack a stale one. After changing crates/, rebuild it; `aspire start`
+# does when cargo is installed:
+cd crates && cargo build --release -p nocturne-alerts-ffi
 
 # Run unit tests (excludes integration/performance)
 dotnet test --filter "Category!=Integration&Category!=Performance"
@@ -44,19 +57,23 @@ cd src/Web/packages/app && pnpm run check
 # Lint the frontend before pushing (CI gate: no errors, warnings capped in each package's lint:ci)
 cd src/Web && pnpm --recursive --no-bail run lint:ci
 
-# Seed a loginable tenant with sample data (stack must be running; see README
-# "Multitenancy and Passkeys"). Response has url + loginLink (browser session).
+# A stack with no tenants (fresh clone, every worktree) seeds a `dev` tenant with
+# 30 days of sample data before the web app starts: https://dev.nocturne.localhost:1612
+# (worktree ports are dynamic; `aspire describe` lists it as "Dev tenant").
+# Seed another loginable tenant (`dev` is taken). Response has url + loginLink.
 curl -X POST http://localhost:1610/api/v4/dev-only/admin/seed-tenant \
   -H "Content-Type: application/json" \
-  -d '{"slug":"sleepy","displayName":"Sleepy","ownerUsername":"dev","sampleData":true}'
+  -d '{"slug":"test","displayName":"Test","ownerUsername":"dev","sampleData":true}'
 
 # End-to-end smoke of the local stack (seed -> data -> login link -> tenant UI)
 dotnet run scripts/dev-smoke.cs
 
 # Auto-login is on by default: the web login page signs in as the tenant's
 # first owner instead of showing the passkey UI. Turn it off when testing auth
-# itself. See the dev-tenant-api skill.
-NOCTURNE_DEV_AUTO_LOGIN=false aspire start
+# itself, and turn off the auto-seed too to reach the first-run wizard. Both
+# live under `Dev` in the AppHost appsettings. See the dev-tenant-api skill.
+Dev__AutoLogin=false aspire start
+Dev__AutoSeed__Enabled=false Dev__AutoLogin=false aspire start
 
 # Aspire dashboard (off by default; or set it in AppHost appsettings/user-secrets)
 Aspire__OptionalServices__AspireDashboard__Enabled=true aspire start
@@ -262,9 +279,10 @@ Every context comes from `INocturneDbContextFactory`:
 
 - `CreateAsync` — the scope's reader, including its resolved tenant.
 - `CreateForTenantAsync(tenantId)` — pins the tenant in place of the scope's.
-- `CreateForSubjectAsync(subjectId)` — no tenant; sets `app.current_subject_id`. No policy
-  reads that GUC today: its callers (tenant switcher, caregiver overview, membership
-  enumeration) work because the identity tables carry no RLS.
+- `CreateForSubjectAsync(subjectId)` — no tenant; sets `app.current_subject_id`, which the
+  `subject_pin` policy on `subjects`, `tenant_members` and `refresh_tokens` reads: a pinned
+  context sees only that subject's rows there, and a context with the GUC unset sees all of them.
+  Its callers are the tenant switcher, the caregiver overview and membership enumeration.
 - `CreatePlatformAsync` — no tenant, no subject, for platform tables.
 
 A pin replaces only the tenant or subject: share, clamp and audit state always come from the
@@ -347,8 +365,9 @@ overlap instead, `("end_timestamp" IS NULL OR "end_timestamp" >= now() - interva
 clamped member however long ago it started; clamping it by start would leave the
 therapy resolvers on the default profile. A hidden table whose rows are parts of a parent row,
 in `ShareDataCategories.HiddenParentRecency` (`treatment_foods`, `sleep_stages`,
-`sleep_biometric_samples`), is shown exactly while the clamp shows its parent, by an `EXISTS`
-on the parent. `ShareDataCategoriesGuardTests` fails on a tenant-scoped table that is neither
+`sleep_biometric_samples`, `alert_excursion_mutes`, `alert_deliveries`), is shown exactly
+while the clamp shows its parent, by an `EXISTS` on the parent.
+`ShareDataCategoriesGuardTests` fails on a tenant-scoped table that is neither
 shareable, clamped, nor listed as deliberately unclamped.
 `IS [NOT] DISTINCT FROM` keeps the clamp test non-null when a GUC is unset.)
 
@@ -451,6 +470,9 @@ Design notes:
 - **No frontend-only models.** All TypeScript interfaces derive from the NSwag-generated client.
 - **Always use remote functions**, never raw fetch/requests on the frontend. Use the remote functions attribute to automatically generate type-safe API calls with Zod validation.
 - **Strings/messages live on the frontend** (translation layer).
+- **UI copy is Simplified Technical English (ASD-STE100), in American English.** Follow the
+  `simple-english` skill. `cd src/Web && pnpm run lint:copy` runs the Vale rules in
+  `.vale/styles/Nocturne` over every extracted string. CI fails on errors.
 - **No emoji.** Use Lucide icons for UI elements.
 - **Comments carry only what the code cannot.** No narration, no benefit tails, no change history,
   no step-by-step banners. Rationale lives at one site and is referenced elsewhere with

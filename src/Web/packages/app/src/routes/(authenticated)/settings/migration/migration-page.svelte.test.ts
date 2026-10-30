@@ -1,10 +1,12 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MigrationJobState, MigrationMode } from "$api";
-import type { MigrationJobInfo } from "$api";
+import { MigrationJobState, MigrationMode } from "#lib/api/index.js";
+import type { MigrationJobInfo } from "#lib/api/index.js";
 
 let history: MigrationJobInfo[] = [];
+/** What a status poll answers; the history it leaves behind stands in for the server's. */
+let polled: { status: object; history: MigrationJobInfo[] } | null = null;
 
 const remote = vi.hoisted(() => ({
   historyCalls: 0,
@@ -18,26 +20,29 @@ const remote = vi.hoisted(() => ({
 
 // The factory is hoisted above every declaration in this file, so anything it evaluates eagerly
 // has to be built inside it; only the lazy `history` read may reach out.
-vi.mock("$api/generated/migrations.generated.remote", () => {
-  const inertForm = { enhance: () => ({}), pending: 0, result: undefined };
+vi.mock("#lib/api/generated/migrations.generated.remote.js", async () => {
+  const { remoteFormFields } = await import("#lib/test-stubs/remote-resource.js");
+  const inertForm = { enhance: () => ({}), pending: 0, result: undefined, fields: remoteFormFields() };
 
   return {
-    getPendingConfig: () => ({ run: () => Promise.resolve({ hasPendingConfig: false }) }),
-    getSources: () => ({ run: () => Promise.resolve([]) }),
-    getHistory: () => ({
-      run: () => {
+    getPendingConfig: () => createQueryResource(() => Promise.resolve({ hasPendingConfig: false })),
+    getSources: () => createQueryResource(() => Promise.resolve([])),
+    getHistory: () =>
+      createQueryResource(() => {
         remote.historyCalls += 1;
         return remote.historyGate ? remote.historyGate.then(() => history) : Promise.resolve(history);
-      },
-    }),
-    getStatus: () => ({
-      run: () => {
+      }),
+    getStatus: () =>
+      createQueryResource(() => {
         remote.statusCalls += 1;
-        return remote.statusError ? Promise.reject(remote.statusError) : Promise.resolve(remote.status);
-      },
-    }),
+        if (remote.statusError) return Promise.reject(remote.statusError);
+        if (!polled) return Promise.resolve(remote.status);
+        history = polled.history;
+        return Promise.resolve(polled.status);
+      }),
     testConnection: inertForm,
     startMigration: {
+      fields: remoteFormFields(),
       pending: 0,
       get result() {
         return remote.startResult;
@@ -51,7 +56,22 @@ vi.mock("$api/generated/migrations.generated.remote", () => {
   };
 });
 
+const transition = vi.hoisted(() => ({
+  status: undefined as object | undefined,
+}));
+
+vi.mock("#lib/api/generated/nightscoutTransitions.generated.remote.js", () => ({
+  getTransitionStatus: () => ({
+    get current() {
+      return transition.status;
+    },
+    loading: false,
+    error: undefined,
+  }),
+}));
+
 import MigrationPage from "./+page.svelte";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 const entry = (overrides: Partial<MigrationJobInfo>): MigrationJobInfo =>
   ({
@@ -109,8 +129,63 @@ describe("settings/migration history", () => {
   });
 });
 
+describe("settings/migration completion moment", () => {
+  const moment = () => page.getByTestId("migration-complete");
+
+  const finishRunning = (finished: Partial<MigrationJobInfo>) => {
+    history = [entry({ state: MigrationJobState.Running, completedAt: undefined })];
+    polled = {
+      status: { jobId: entry({}).id, state: finished.state ?? MigrationJobState.Completed },
+      history: [entry(finished)],
+    };
+  };
+
+  it("paints when a watched run completes cleanly", async () => {
+    finishRunning({ hasFailures: false });
+
+    render(MigrationPage, {});
+
+    await expect.element(moment()).toBeVisible();
+    await expect.element(moment()).toHaveTextContent("Migration complete");
+  });
+
+  it("stays quiet when a watched run completes with a failed collection", async () => {
+    finishRunning({ hasFailures: true, errorMessage: "1 of 2 collections imported, 1 failed." });
+
+    render(MigrationPage, {});
+    await openHistory();
+
+    await expect.element(page.getByText(/1 of 2 collections imported/)).toBeVisible();
+    await expect.element(moment()).not.toBeInTheDocument();
+  });
+
+  it.each([MigrationJobState.Failed, MigrationJobState.Cancelled, MigrationJobState.Interrupted])(
+    "stays quiet when a watched run ends %s",
+    async (state) => {
+      finishRunning({ state });
+
+      render(MigrationPage, {});
+      await openHistory();
+
+      await expect.element(page.getByRole("tabpanel")).toBeVisible();
+      await expect.element(moment()).not.toBeInTheDocument();
+    },
+  );
+
+  it("stays quiet for a run that had already completed before the page opened", async () => {
+    history = [entry({ hasFailures: false })];
+
+    render(MigrationPage, {});
+    await openHistory();
+
+    await expect.element(page.getByText("https://mynightscout.example")).toBeVisible();
+    await expect.element(moment()).not.toBeInTheDocument();
+  });
+});
+
 describe("settings/migration running job", () => {
   beforeEach(() => {
+    polled = null;
     remote.historyCalls = 0;
     remote.statusCalls = 0;
     remote.statusError = undefined;
@@ -154,6 +229,19 @@ describe("settings/migration running job", () => {
       .element(page.getByRole("tab", { name: /Progress/ }))
       .toHaveAttribute("data-state", "active");
     await expect.element(page.getByText("Copying entries")).toBeVisible();
+  });
+
+  it("shows why the server refused to start the import", async () => {
+    history = [];
+
+    render(MigrationPage, {});
+    await expect.element(page.getByRole("tab", { name: /History/ })).toBeVisible();
+
+    await remote.enhanceCallback!({
+      submit: () => Promise.reject({ status: 400, body: { message: "The Nightscout address is not reachable" } }),
+    });
+
+    await expect.element(page.getByText("The Nightscout address is not reachable")).toBeVisible();
   });
 
   it("stops polling when the page is unmounted", async () => {
@@ -206,5 +294,28 @@ describe("settings/migration running job", () => {
     render(MigrationPage, {});
 
     await expect.element(page.getByText("Failed to read migration status")).toBeVisible();
+  });
+});
+
+describe("settings/migration status", () => {
+  beforeEach(() => {
+    history = [];
+    polled = null;
+    transition.status = {
+      migration: { isComplete: true, recordCounts: { entries: 1200 } },
+      writeBack: { circuitBreakerOpen: false, requestsLast24h: 3 },
+      recommendation: { status: "almost-ready", stabilityDaysRemaining: 2, blockers: [] },
+    };
+  });
+
+  it("shows disconnect readiness on the Status tab", async () => {
+    render(MigrationPage, {});
+
+    const tab = page.getByRole("tab", { name: /Status/ });
+    await expect.element(tab).toBeVisible();
+    await tab.click();
+
+    await expect.element(page.getByText("Almost ready")).toBeVisible();
+    await expect.element(page.getByText("entries", { exact: true })).toBeVisible();
   });
 });

@@ -23,14 +23,17 @@ namespace Nocturne.API.Services.Alerts;
 /// already know the rule should reach the user. Snooze is enforced here instead, because it
 /// belongs to the instance rather than the rule: <see cref="DispatchAsync"/> sends nothing, on
 /// any channel, for an instance under <see cref="AlertSnooze"/>. Real-time
-/// <see cref="ISignalRBroadcastService"/> notifications are sent alongside channel deliveries.
+/// <see cref="ISignalRBroadcastService"/> notifications and the <see cref="IEngineAlarmRelay"/> alarm
+/// are sent alongside channel deliveries, whatever the channels.
 /// </remarks>
 internal sealed class AlertDeliveryService(
     INocturneDbContextFactory contextFactory,
     ITenantAccessor tenantAccessor,
     ISignalRBroadcastService broadcastService,
+    IEngineAlarmRelay alarmRelay,
     IServiceProvider serviceProvider,
-    ILogger<AlertDeliveryService> logger)
+    ILogger<AlertDeliveryService> logger,
+    TimeProvider timeProvider)
     : IAlertDeliveryService
 {
     /// <summary>
@@ -54,7 +57,7 @@ internal sealed class AlertDeliveryService(
             .Where(i => i.Id == alertInstanceId)
             .Select(i => i.SnoozedUntil)
             .FirstOrDefaultAsync(ct);
-        if (AlertSnooze.IsSnoozed(snoozedUntil, DateTime.UtcNow))
+        if (AlertSnooze.IsSnoozed(snoozedUntil, timeProvider.GetUtcNow().UtcDateTime))
         {
             logger.LogInformation(
                 "Alert instance {InstanceId} is snoozed until {SnoozedUntil}; dispatch skipped",
@@ -74,11 +77,13 @@ internal sealed class AlertDeliveryService(
             logger.LogWarning(ex, "Failed to broadcast alert_dispatch for instance {InstanceId}", alertInstanceId);
         }
 
+        await alarmRelay.RaiseAsync(payload, ct);
+
         var payloadJson = JsonSerializer.Serialize(payload);
 
         if (channels.Count == 0)
         {
-            db.AlertDeliveries.Add(NoChannelAnchor(tenantId, alertInstanceId, payloadJson, DateTime.UtcNow, isTest: false));
+            db.AlertDeliveries.Add(NoChannelAnchor(tenantId, alertInstanceId, payloadJson, timeProvider.GetUtcNow().UtcDateTime, isTest: false));
             await db.SaveChangesAsync(ct);
             return;
         }
@@ -101,7 +106,7 @@ internal sealed class AlertDeliveryService(
                 Destination = channel.Destination,
                 Payload = payloadJson,
                 Status = "pending",
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = timeProvider.GetUtcNow().UtcDateTime,
             };
             db.AlertDeliveries.Add(delivery);
             deliveries.Add((delivery, channel));
@@ -173,7 +178,7 @@ internal sealed class AlertDeliveryService(
         }
     }
 
-    public async Task TestFireAsync(
+    public async Task<Guid> TestFireAsync(
         Guid alertRuleId,
         IReadOnlyList<AlertRuleChannelSnapshot> channels,
         AlertPayload payload,
@@ -194,7 +199,7 @@ internal sealed class AlertDeliveryService(
         // the fire as live during the window (the snapshot, AlertAcknowledgementService) filter
         // on EndedAt == null || EndedAt > now; alert history filters on EndedAt <= now so the
         // future end stays out of it until the window lapses.
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         var endedAt = channels.Any(c => c.ChannelType == ChannelType.DeviceAction)
             ? now + DeviceActionTestFireWindow
             : now;
@@ -237,7 +242,7 @@ internal sealed class AlertDeliveryService(
         {
             db.AlertDeliveries.Add(NoChannelAnchor(tenantId, instance.Id, JsonSerializer.Serialize(payload), now, isTest: true));
             await db.SaveChangesAsync(ct);
-            return;
+            return instance.Id;
         }
 
         var payloadJson = JsonSerializer.Serialize(payload);
@@ -276,6 +281,8 @@ internal sealed class AlertDeliveryService(
                 await MarkFailedAsync(delivery.Id, ex.Message, ct);
             }
         }
+
+        return instance.Id;
     }
 
     public async Task TestFireDryRunAsync(
@@ -342,7 +349,7 @@ internal sealed class AlertDeliveryService(
         if (delivery is null) return;
 
         delivery.Status = "delivered";
-        delivery.DeliveredAt = DateTime.UtcNow;
+        delivery.DeliveredAt = timeProvider.GetUtcNow().UtcDateTime;
         delivery.PlatformMessageId = platformMessageId;
         delivery.PlatformThreadId = platformThreadId;
         await db.SaveChangesAsync(ct);

@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.API.Services.ConnectorPublishing;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.V4;
@@ -129,7 +130,7 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
         var uploader = new Mock<IUploaderSnapshotRepository>();
         var decomposer = new DeviceStatusDecomposer(
             aps.Object, pump.Object, uploader.Object, extras.Object, Mock.Of<IStateSpanService>(),
-            Mock.Of<IDeviceService>(), Mock.Of<IAuditContext>(), NullLogger<DeviceStatusDecomposer>.Instance);
+            Mock.Of<IDeviceService>(), Mock.Of<IAuditContext>(), Mock.Of<ILoopClosedLoopStamper>(), TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
         var publisher = DevicePublisher(decomposer, aps.Object, pump.Object, uploader.Object);
 
         var written = await publisher.PublishRecentDeviceStatusAsync(
@@ -153,7 +154,7 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
         IUploaderSnapshotRepository uploader) =>
         new(decomposer, Mock.Of<IDeviceEventRepository>(), Mock.Of<IPatientDeviceStamper>(), Mock.Of<IAuditContext>(),
             aps, Mock.Of<IPatientDeviceRepository>(), pump, uploader, new PublishSkipTally(),
-            NullLogger<DevicePublisher>.Instance);
+            Mock.Of<ITenantAccessor>(), NullLogger<DevicePublisher>.Instance);
 
     private GlucosePublisher RealGlucosePublisher()
     {
@@ -179,6 +180,6 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
 
         return new GlucosePublisher(
             entryService, sensorGlucose, meterGlucose, calibration, Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<ICanonicalAlertEvaluator>(), audit, new PublishSkipTally(), NullLogger<GlucosePublisher>.Instance);
+            Mock.Of<ICanonicalAlertEvaluator>(), audit, new PublishSkipTally(), Mock.Of<ITenantAccessor>(), NullLogger<GlucosePublisher>.Instance);
     }
 }

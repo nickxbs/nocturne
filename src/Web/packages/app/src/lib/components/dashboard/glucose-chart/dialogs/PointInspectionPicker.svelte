@@ -1,7 +1,7 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Item } from "$lib/components/ui/item";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Item } from "#lib/components/ui/item/index.js";
   import Activity from "@lucide/svelte/icons/activity";
   import Syringe from "@lucide/svelte/icons/syringe";
   import Utensils from "@lucide/svelte/icons/utensils";
@@ -39,7 +39,7 @@
 <Dialog.Root bind:open>
   <Dialog.Content class="max-w-md print:hidden">
     <Dialog.Header>
-      <Dialog.Title>Inspect Point</Dialog.Title>
+      <Dialog.Title>Inspect point</Dialog.Title>
       <Dialog.Description>
         Multiple data types available at this time. Choose what to inspect.
       </Dialog.Description>

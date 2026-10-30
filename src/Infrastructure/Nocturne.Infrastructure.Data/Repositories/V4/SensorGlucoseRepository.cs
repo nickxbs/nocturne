@@ -27,6 +27,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, SensorGlucoseEntity>, ISensorGlucoseRepository
 {
     private readonly IDeduplicationService _deduplicationService;
+    private readonly IGlucoseReadingBroadcaster? _readingBroadcaster;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SensorGlucoseRepository"/> class.
@@ -37,38 +38,86 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         IAuditContext auditContext,
         ILogger<SensorGlucoseRepository> logger,
         IV4RecordBroadcaster<SensorGlucose>? broadcaster = null,
-        IDataEventSink<Entry>? entrySink = null
+        IDataEventSink<Entry>? entrySink = null,
+        IGlucoseReadingBroadcaster? readingBroadcaster = null
     )
         : base(contextFactory, auditContext, logger, broadcaster, entrySink)
     {
         _deduplicationService = deduplicationService;
+        _readingBroadcaster = readingBroadcaster;
+    }
+
+    /// <summary>
+    /// Relays the created readings newer than the tenant's last reading, so a restore, a gap-fill
+    /// or a late upload of older history never reaches a client as the current reading.
+    /// </summary>
+    /// <remarks>
+    /// Runs inside the write, before <see cref="AdvanceTenantLastReadingAsync"/> moves the tenant's
+    /// <c>LastReadingAt</c> past this batch, so the column still holds the newest reading before it.
+    /// </remarks>
+    protected override async Task OnLiveVisibleCreatedAsync(
+        IReadOnlyList<SensorGlucose> visibleCreated, CancellationToken ct)
+    {
+        if (_readingBroadcaster is null)
+            return;
+
+        DateTime? lastReadingAt;
+        try
+        {
+            await using var ctx = await ContextFactory.CreateAsync(ct);
+            lastReadingAt = await ctx.Tenants
+                .Where(t => t.Id == ctx.TenantId)
+                .Select(t => t.LastReadingAt)
+                .FirstOrDefaultAsync(ct);
+        }
+        catch (DbUpdateException ex)
+        {
+            Logger.LogWarning(ex, "Could not read the tenant's last reading; glucose_reading not relayed");
+            return;
+        }
+        catch (InvalidOperationException ex)
+        {
+            Logger.LogWarning(ex, "Could not read the tenant's last reading; glucose_reading not relayed");
+            return;
+        }
+        catch (TimeoutException ex)
+        {
+            Logger.LogWarning(ex, "Could not read the tenant's last reading; glucose_reading not relayed");
+            return;
+        }
+
+        var newer = lastReadingAt is { } last
+            ? visibleCreated.Where(r => r.Timestamp > last).ToList()
+            : visibleCreated;
+        if (newer.Count > 0)
+            await _readingBroadcaster.BroadcastAsync(newer, ct);
     }
 
     /// <inheritdoc />
     public Task<IEnumerable<SensorGlucose>> GetForEntriesAsync(
         DateTime? from, DateTime? to, string? device, string? source,
-        int limit = 100, int offset = 0, bool descending = true, bool nativeOnly = false,
+        int limit = 100, int offset = 0, bool descending = true,
         DateTime? afterTimestamp = null, Guid? afterId = null,
         CancellationToken ct = default, Guid? patientDeviceId = null) =>
-        ReadForEntriesAsync(from, to, device, source, limit, offset, descending, nativeOnly,
+        ReadForEntriesAsync(from, to, device, source, limit, offset, descending,
             afterTimestamp, afterId, patientDeviceId, orderByValue: false, ct);
 
     /// <inheritdoc />
     public Task<IEnumerable<SensorGlucose>> GetForEntriesByValueAsync(
         DateTime? from, DateTime? to, string? source, int limit, int offset, bool descending,
         CancellationToken ct = default) =>
-        ReadForEntriesAsync(from, to, device: null, source, limit, offset, descending, nativeOnly: false,
+        ReadForEntriesAsync(from, to, device: null, source, limit, offset, descending,
             afterTimestamp: null, afterId: null, patientDeviceId: null, orderByValue: true, ct);
 
     private async Task<IEnumerable<SensorGlucose>> ReadForEntriesAsync(
         DateTime? from, DateTime? to, string? device, string? source,
-        int limit, int offset, bool descending, bool nativeOnly,
+        int limit, int offset, bool descending,
         DateTime? afterTimestamp, Guid? afterId, Guid? patientDeviceId,
         bool orderByValue, CancellationToken ct)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await BuildReadQuery(ctx, from, to, device, source, limit, offset,
-                descending, nativeOnly, afterTimestamp, afterId, patientDeviceId, orderByValue)
+                descending, afterTimestamp, afterId, patientDeviceId, orderByValue)
             .Select(e => new SensorGlucose
             {
                 Id = e.Id,
@@ -97,10 +146,11 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     protected override Entry? ProjectToLegacyEntry(SensorGlucose model) => EntryProjection.FromSensorGlucose(model);
 
     /// <summary>
-    /// Canonical-stream gate for the legacy entries projection: a live write only reaches v1/v3
-    /// realtime clients if it survives <see cref="CanonicalGlucoseStream"/> selection over the
-    /// recent window plus the just-written batch. Single-stream tenants pass through unchanged
-    /// (the selector's fast path). Failures fail open — a broadcast is better than a silent drop.
+    /// Canonical-stream gate for the single-stream surfaces: a live write only reaches v1/v3
+    /// realtime clients and the Home Assistant relay if it survives
+    /// <see cref="CanonicalGlucoseStream"/> selection over the recent window plus the just-written
+    /// batch. Single-stream tenants pass through unchanged (the selector's fast path). Failures
+    /// fail open — a broadcast is better than a silent drop.
     /// </summary>
     protected override async Task<IReadOnlyList<SensorGlucose>> FilterLegacyProjectionAsync(
         IReadOnlyList<SensorGlucose> models, CancellationToken ct)
@@ -140,17 +190,17 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         catch (OperationCanceledException) { throw; }
         catch (DbUpdateException ex)
         {
-            Logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
+            Logger.LogWarning(ex, "Canonical stream gate failed; broadcasting unfiltered");
             return models;
         }
         catch (InvalidOperationException ex)
         {
-            Logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
+            Logger.LogWarning(ex, "Canonical stream gate failed; broadcasting unfiltered");
             return models;
         }
         catch (TimeoutException ex)
         {
-            Logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
+            Logger.LogWarning(ex, "Canonical stream gate failed; broadcasting unfiltered");
             return models;
         }
     }
@@ -176,7 +226,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         int limit = 100, int offset = 0, bool descending = true,
         CancellationToken ct = default)
         => GetAsync(from, to, device, source, limit, offset, descending,
-            nativeOnly: false, afterTimestamp: null, afterId: null, ct);
+            afterTimestamp: null, afterId: null, ct);
 
     /// <summary>
     /// Gets sensor glucose records based on filter criteria.
@@ -189,7 +239,6 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     /// <param name="limit">The maximum number of records to return.</param>
     /// <param name="offset">The number of records to skip.</param>
     /// <param name="descending">Whether to sort by timestamp in descending order.</param>
-    /// <param name="nativeOnly">Whether to return only native records.</param>
     /// <param name="afterTimestamp">Keyset cursor timestamp. When paired with <paramref name="afterId"/>, replaces offset-based pagination.</param>
     /// <param name="afterId">Keyset cursor record ID (tiebreaker). When paired with <paramref name="afterTimestamp"/>, replaces offset-based pagination.</param>
     /// <param name="ct">The cancellation token.</param>
@@ -205,7 +254,6 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         int limit = 100,
         int offset = 0,
         bool descending = true,
-        bool nativeOnly = false,
         DateTime? afterTimestamp = null,
         Guid? afterId = null,
         CancellationToken ct = default,
@@ -214,19 +262,19 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await BuildReadQuery(ctx, from, to, device, source, limit, offset,
-            descending, nativeOnly, afterTimestamp, afterId, patientDeviceId).ToListAsync(ct);
+            descending, afterTimestamp, afterId, patientDeviceId).ToListAsync(ct);
         return entities.Select(SensorGlucoseMapper.ToDomainModel);
     }
 
     public async Task<IEnumerable<SensorGlucose>> GetForAnalyticsAsync(
         DateTime? from, DateTime? to, string? device, string? source,
-        int limit = 100, int offset = 0, bool descending = true, bool nativeOnly = false,
+        int limit = 100, int offset = 0, bool descending = true,
         DateTime? afterTimestamp = null, Guid? afterId = null,
         CancellationToken ct = default, Guid? patientDeviceId = null)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await BuildReadQuery(ctx, from, to, device, source, limit, offset,
-                descending, nativeOnly, afterTimestamp, afterId, patientDeviceId)
+                descending, afterTimestamp, afterId, patientDeviceId)
             .Select(e => new SensorGlucose
             {
                 Id = e.Id,
@@ -243,7 +291,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
 
     private IQueryable<SensorGlucoseEntity> BuildReadQuery(
         NocturneDbContext ctx, DateTime? from, DateTime? to, string? device, string? source,
-        int limit, int offset, bool descending, bool nativeOnly,
+        int limit, int offset, bool descending,
         DateTime? afterTimestamp, Guid? afterId, Guid? patientDeviceId,
         bool orderByValue = false)
     {
@@ -258,8 +306,6 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
             query = query.Where(e => e.DataSource == source);
         if (patientDeviceId.HasValue)
             query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
-        if (nativeOnly)
-            query = query.Where(e => e.LegacyId == null);
 
         query = ApplyReadVisibility(query, ctx);
 
@@ -438,7 +484,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         {
             var dedupInputs = inserted.Select(e => new DeduplicationInput(
                 RecordId: e.Id,
-                Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                Mills: e.Timestamp.ToMills(),
                 DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
                 Criteria: MatchCriteriaMapper.From(e)
             )).ToList();

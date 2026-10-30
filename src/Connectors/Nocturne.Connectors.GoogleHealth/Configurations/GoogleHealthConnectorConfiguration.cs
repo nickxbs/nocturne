@@ -1,12 +1,12 @@
-using System.Globalization;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Constants;
+using Nocturne.Connectors.GoogleHealth.Services;
 
 namespace Nocturne.Connectors.GoogleHealth.Configurations;
 
 [ConnectorRegistration(
-    "GoogleHealth", ServiceNames.GoogleHealthConnector, "GOOGLE_HEALTH",
+    GoogleHealthConnectorService.ConnectorName, ServiceNames.GoogleHealthConnector, "GOOGLE_HEALTH",
     nameof(ConnectSource.GoogleHealth), DataSources.GoogleHealthConnector, "google-health",
     ConnectorCategory.Sync, "Import health and fitness data from Google Health", "Google Health",
     SupportsHistoricalSync = true,
@@ -29,7 +29,7 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
     /// <summary>
     /// The client <see cref="RefreshToken"/> was issued to, under the <c>clientId</c> key a former
     /// per-tenant client was stored under, so such a session is checked against the instance client
-    /// like any other (<see cref="Services.GoogleHealthSessionStore.IssuedToAnotherClient"/>).
+    /// like any other (<see cref="IssuedToAnotherClient"/>).
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.ClientId, Secret = true, Hidden = true)]
     public string? SessionClientId { get; set; }
@@ -45,6 +45,16 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
 
     [ConnectorProperty(ConnectorPropertyKey.GrantedScopes, Hidden = true)]
     public string? GrantedScopes { get; set; }
+
+    /// <summary>
+    /// Whether the stored refresh token belongs to a client other than the instance's: a former
+    /// per-tenant client, or one the operator replaced. Google refuses it, so only a new sign-in
+    /// recovers.
+    /// </summary>
+    public bool IssuedToAnotherClient(GoogleHealthPlatformOptions platform) =>
+        platform.IsConfigured &&
+        !string.IsNullOrWhiteSpace(RefreshToken) &&
+        !string.Equals(SessionClientId, platform.ClientId, StringComparison.Ordinal);
 
     public string[] ParsedGrantedScopes() => (GrantedScopes ?? string.Empty)
         .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -62,20 +72,4 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
 
     [ConnectorProperty(ConnectorPropertyKey.SyncSleep, DefaultValue = "true")]
     public bool SyncSleep { get; set; } = true;
-
-    protected override void ValidateSourceSpecificConfiguration()
-    {
-        if (HistoryDays is < 1 or > 90)
-            throw new ArgumentException("Google Health LookbackDays must be between 1 and 90.");
-
-        if (!string.IsNullOrWhiteSpace(ImportFrom) &&
-            (!DateTimeOffset.TryParse(
-                 ImportFrom,
-                 CultureInfo.InvariantCulture,
-                 DateTimeStyles.RoundtripKind,
-                 out var importFrom) ||
-             importFrom < new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero) ||
-             importFrom > DateTimeOffset.UtcNow.AddDays(1)))
-            throw new ArgumentException("Google Health ImportFrom is invalid.");
-    }
 }
