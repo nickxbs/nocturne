@@ -2,8 +2,9 @@ name: Tests
 
 on:
   pull_request:
+    branches: [cgmsim]
   push:
-    branches: [main]
+    branches: [cgmsim]
   workflow_dispatch:
 
 permissions:
@@ -754,12 +755,12 @@ jobs:
             -targetdir:coverage-merged \
             -reporttypes:"Cobertura;HtmlSummary" \
             -sourcedirs:"$GITHUB_WORKSPACE"
-      - name: Main's baseline
+      - name: Baseline
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          run_id=$(gh run list --workflow tests.yml --branch main --event push --status success \
+          run_id=$(gh run list --workflow tests.yml --branch cgmsim --event push --status success \
             --limit 1 --json databaseId --jq '.[0].databaseId // empty')
           if [ -n "$run_id" ]; then
             gh run download "$run_id" --name coverage-baseline --dir baseline || echo "No baseline in run $run_id"
@@ -793,7 +794,7 @@ jobs:
           path: coverage-report/
           retention-days: 7
       - uses: actions/upload-artifact@v6
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/cgmsim'
         with:
           name: coverage-baseline
           path: coverage-summary.json

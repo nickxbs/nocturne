@@ -10,7 +10,7 @@ name: Build and Publish with Aspire
 # re-points :main-<sha7> at a rebuild of the same commit.
 on:
   push:
-    branches: [main, cgmsim]
+    branches: [cgmsim]
     tags: ["v*"]
   schedule:
     - cron: "0 3 * * 1"
@@ -32,7 +32,7 @@ concurrency:
 # the dotnet images need only the native library. `report` checks and announces what both pushed.
 jobs:
   dotnet-images:
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/cgmsim' || startsWith(github.ref, 'refs/tags/v')
+    if: github.ref == 'refs/heads/cgmsim' || startsWith(github.ref, 'refs/tags/v')
     # The native library is built on the runner and links against its glibc, which must be
     # no newer than the API base image's (mcr.microsoft.com/dotnet/aspnet:10.0, Ubuntu 24.04).
     runs-on: ubuntu-24.04
@@ -182,7 +182,7 @@ jobs:
           done
 
   web-image:
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/cgmsim' || startsWith(github.ref, 'refs/tags/v')
+    if: github.ref == 'refs/heads/cgmsim' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -324,7 +324,7 @@ jobs:
             .
 
   cgmsim-image:
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/cgmsim' || startsWith(github.ref, 'refs/tags/v')
+    if: github.ref == 'refs/heads/cgmsim' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -375,7 +375,7 @@ jobs:
 
   report:
     needs: [dotnet-images, web-image, cgmsim-image]
-    if: ${{ !cancelled() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/cgmsim' || startsWith(github.ref, 'refs/tags/v')) }}
+    if: ${{ !cancelled() && (github.ref == 'refs/heads/cgmsim' || startsWith(github.ref, 'refs/tags/v')) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

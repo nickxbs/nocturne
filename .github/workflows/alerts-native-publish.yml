@@ -10,7 +10,7 @@ name: Alerts native library (development builds)
 
 on:
   push:
-    branches: [main]
+    branches: [cgmsim]
     paths: ["crates/**"]
   workflow_dispatch:
 
@@ -32,7 +32,7 @@ jobs:
   tree:
     # A dispatch from another branch would publish a tree main never had, and prune against a
     # history that lacks main's latest trees.
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/cgmsim'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:

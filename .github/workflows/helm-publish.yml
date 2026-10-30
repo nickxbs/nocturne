@@ -16,7 +16,7 @@ name: Publish Helm chart
 # anonymous `helm pull` and ArgoCD reads.
 on:
   push:
-    branches: ['**']
+    branches: [cgmsim]
     tags: ['v*']
     paths:
       - 'deploy/helm/**'
@@ -51,7 +51,7 @@ jobs:
           CHART_VERSION=$(yq '.version' "$CHART_PATH/Chart.yaml")
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
-          elif [[ "${GITHUB_REF}" == refs/heads/main || "${GITHUB_REF}" == refs/heads/master ]]; then
+          elif [[ "${GITHUB_REF}" == refs/heads/cgmsim ]]; then
             VERSION="${CHART_VERSION}"
           else
             SHORT_SHA="${GITHUB_SHA:0:7}"
