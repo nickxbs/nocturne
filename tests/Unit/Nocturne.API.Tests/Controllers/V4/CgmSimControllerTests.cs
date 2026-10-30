@@ -1,9 +1,17 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using Nocturne.API.Controllers.V4.CgmSim;
+using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.CgmSim;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -178,13 +186,124 @@ public class CgmSimControllerTests
         stored.Dia.Should().Be(3.5);
     }
 
-    private static (CgmSimController Controller, DbContextOptions<NocturneDbContext> Options) NewController()
+    [Fact]
+    public async Task GetWizardPreview_CalculatesRecommendationsCorrectly()
+    {
+        var entryMock = new Mock<IEntryService>();
+        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        entryMock
+            .Setup(s => s.GetEntriesAsync("sgv", 1, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new Entry
+                {
+                    Mills = nowMills,
+                    Sgv = 150,
+                }
+            });
+
+        var iobCalcMock = new Mock<IIobCalculator>();
+        iobCalcMock
+            .Setup(c => c.CalculateTotalAsync(It.IsAny<List<Bolus>>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<long?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IobResult { Iob = 1.0 });
+
+        var cobCalcMock = new Mock<ICobCalculator>();
+        cobCalcMock
+            .Setup(c => c.CalculateTotalAsync(It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CobResult { Cob = 20.0 });
+
+        var (controller, options) = NewController(
+            entryService: entryMock.Object,
+            iobCalculator: iobCalcMock.Object,
+            cobCalculator: cobCalcMock.Object);
+
+        await using (var db = new NocturneDbContext(options) { TenantId = Tenant })
+        {
+            db.CgmSimSettings.Add(new CgmSimSettingsEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = Tenant,
+                Isf = 50.0,
+                Cr = 10.0,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await controller.GetWizardPreview(carbs: 30, adjustment: 0.5, CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var preview = ok.Value.Should().BeOfType<CgmSimWizardPreview>().Subject;
+        preview.Carbs.Should().Be(30);
+        preview.CurrentBg.Should().Be(150);
+        preview.TargetBg.Should().Be(100);
+        preview.BgUnits.Should().Be(1.0);
+        preview.ChoUnits.Should().Be(3.0);
+        preview.CobUnits.Should().Be(2.0);
+        preview.IobUnits.Should().Be(-1.0);
+        preview.AdjustmentUnits.Should().Be(0.5);
+        preview.RecommendedBolus.Should().Be(5.5);
+    }
+
+    private static (CgmSimController Controller, DbContextOptions<NocturneDbContext> Options) NewController(
+        IEntryService? entryService = null,
+        IIobCalculator? iobCalculator = null,
+        ICobCalculator? cobCalculator = null,
+        IBolusRepository? bolusRepository = null,
+        ITempBasalRepository? tempBasalRepository = null,
+        ICarbIntakeRepository? carbIntakeRepository = null,
+        ITargetRangeResolver? targetRangeResolver = null)
     {
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         var seed = new NocturneDbContext(options) { TenantId = Tenant };
         var factory = new TestNocturneDbContextFactory(seed);
-        return (new CgmSimController(factory), options);
+
+        var entryServiceMock = new Mock<IEntryService>();
+        entryServiceMock
+            .Setup(s => s.GetEntriesAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Entry>());
+
+        var bolusRepoMock = new Mock<IBolusRepository>();
+        bolusRepoMock
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Bolus>());
+
+        var tempBasalRepoMock = new Mock<ITempBasalRepository>();
+        tempBasalRepoMock
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<TempBasal>());
+
+        var carbIntakeRepoMock = new Mock<ICarbIntakeRepository>();
+        carbIntakeRepoMock
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<CarbIntake>());
+
+        var iobCalcMock = new Mock<IIobCalculator>();
+        iobCalcMock
+            .Setup(c => c.CalculateTotalAsync(It.IsAny<List<Bolus>>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<long?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IobResult { Iob = 0 });
+
+        var cobCalcMock = new Mock<ICobCalculator>();
+        cobCalcMock
+            .Setup(c => c.CalculateTotalAsync(It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CobResult { Cob = 0 });
+
+        var targetRangeMock = new Mock<ITargetRangeResolver>();
+        targetRangeMock
+            .Setup(r => r.GetBGTargetRangeAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Low: 70.0, High: 130.0));
+
+        var controller = new CgmSimController(
+            factory,
+            entryService ?? entryServiceMock.Object,
+            iobCalculator ?? iobCalcMock.Object,
+            cobCalculator ?? cobCalcMock.Object,
+            bolusRepository ?? bolusRepoMock.Object,
+            tempBasalRepository ?? tempBasalRepoMock.Object,
+            carbIntakeRepository ?? carbIntakeRepoMock.Object,
+            targetRangeResolver ?? targetRangeMock.Object);
+
+        return (controller, options);
     }
 }
