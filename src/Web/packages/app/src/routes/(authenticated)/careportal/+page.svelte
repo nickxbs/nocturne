@@ -3,14 +3,24 @@
   import Droplet from "@lucide/svelte/icons/droplet";
   import Plus from "@lucide/svelte/icons/plus";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { GlucoseValueIndicator } from "#lib/components/shared/index.js";
   import GlucoseChart from "#lib/components/dashboard/glucose-chart/GlucoseChart.svelte";
   import CareportalPumpDialog from "#lib/components/careportal/CareportalPumpDialog.svelte";
   import {
     glucoseChartLookback,
+    glucoseUnits,
     predictionEnabled,
   } from "#lib/stores/appearance-store.svelte.js";
+  import { displayedGlucose } from "#lib/stores/current-glucose-status.svelte.js";
   import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
-  import { bg, bgDelta, bgLabel } from "#lib/utils/formatting.js";
+  import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+  import {
+    formatGlucoseDelta,
+    formatGlucoseValue,
+    getUnitLabel,
+    relativeAge,
+  } from "#lib/utils/formatting.js";
+  import { getGlucoseTileVariant } from "#lib/utils/glucose-status.js";
   import { trendAngle } from "@nocturne/ui/glucose";
   import type { PageData } from "./$types";
 
@@ -19,101 +29,98 @@
   const realtimeStore = getRealtimeStore();
   let pumpDialogOpen = $state(false);
 
-  const currentReservoir = $derived(realtimeStore.currentReservoir);
-  const arrowDegrees = $derived(trendAngle(realtimeStore.bgDelta ?? 0));
-  const isDoubleTrend = $derived(Math.abs(realtimeStore.bgDelta ?? 0) >= 10);
+  const units = $derived(glucoseUnits.current);
+  const unitLabel = $derived(getUnitLabel(units));
+  const glucose = displayedGlucose(realtimeStore);
+  const tileVariant = $derived(getGlucoseTileVariant(glucose.status));
+  const lastUpdated = $derived(realtimeStore.lastUpdated);
+  const now = $derived(realtimeStore.now);
+  const isLoading = $derived(
+    glucose.currentBG === 0 && realtimeStore.entries.length === 0
+  );
+  const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
+  const isDisconnected = $derived(realtimeStore.connectionUnavailable);
 
-  const statusTone = $derived.by(() => {
-    const current = realtimeStore.currentBG;
-    const thresholds = realtimeStore.chartThresholds;
-    const veryLow = thresholds?.veryLow ?? 54;
-    const low = thresholds?.low ?? 70;
-    const high = thresholds?.high ?? 180;
-    const veryHigh = thresholds?.veryHigh ?? 250;
-    if (current <= veryLow || current >= veryHigh) {
-      return {
-        card: "border-red-500/50 bg-red-950/40",
-        value: "text-red-400",
-        arrowBox: "bg-red-500/20 border-red-500/50 text-red-300",
-      };
-    }
-    if (current <= low || current >= high) {
-      return {
-        card: "border-amber-500/50 bg-amber-950/40",
-        value: "text-amber-400",
-        arrowBox: "bg-amber-500/20 border-amber-500/50 text-amber-300",
-      };
-    }
-    return {
-      card: "border-emerald-500/40 bg-emerald-950/30",
-      value: "text-emerald-400",
-      arrowBox: "bg-emerald-500/20 border-emerald-500/40 text-emerald-300",
-    };
-  });
+  const currentReservoir = $derived(realtimeStore.currentReservoir);
+  const arrowDegrees = $derived(trendAngle(glucose.bgDelta ?? 0));
+  const isDoubleTrend = $derived(Math.abs(glucose.bgDelta ?? 0) >= 10);
+  const readingAge = $derived(
+    relativeAge(lastUpdated, { now, fallback: "Live CGM" })
+  );
 </script>
 
 <svelte:head>
   <title>Careportal - Nocturne</title>
 </svelte:head>
 
+{#snippet trend()}
+  <span class="ml-1 flex items-center gap-1.5">
+    {#if !isStale}
+      <span
+        class="inline-flex h-8 min-w-8 items-center justify-center rounded-md bg-black/15 px-1.5"
+        title="Glucose trend direction"
+      >
+        <span class="inline-flex items-center -space-x-1.5">
+          <ArrowRight
+            class="size-5 sm:size-6 stroke-[2.75] transition-transform duration-500"
+            style="transform: rotate({arrowDegrees}deg)"
+            aria-hidden="true"
+          />
+          {#if isDoubleTrend}
+            <ArrowRight
+              class="size-5 sm:size-6 stroke-[2.75] transition-transform duration-500"
+              style="transform: rotate({arrowDegrees}deg)"
+              aria-hidden="true"
+            />
+          {/if}
+        </span>
+      </span>
+    {/if}
+    <span class="hidden sm:inline text-xs font-semibold uppercase opacity-90">
+      {unitLabel}
+    </span>
+  </span>
+{/snippet}
+
 <div
   class="relative flex h-[calc(100dvh-var(--app-sticky-top,0px))] w-full flex-col gap-2 overflow-hidden p-2 @md:p-3 select-none"
 >
   <!-- Prominent Current Glucose & Trend Arrows Header Bar -->
   <div
-    class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-2.5 shadow-lg backdrop-blur-md {statusTone.card}"
+    class="flex items-center justify-between gap-2 sm:gap-4 rounded-xl border border-border bg-card text-card-foreground px-3 py-2 sm:px-4 sm:py-2.5 shadow-sm"
   >
-    <div class="flex items-center gap-3.5">
-      <!-- Hero Glucose Value -->
-      <div class="flex items-baseline gap-1.5">
+    <div class="flex min-w-0 items-center gap-2.5 sm:gap-3.5">
+      <GlucoseValueIndicator
+        displayValue={formatGlucoseValue(glucose.currentBG, units)}
+        variant={tileVariant}
+        {isLoading}
+        {isStale}
+        {isDisconnected}
+        size="lg"
+        trailing={isLoading ? undefined : trend}
+      />
+
+      <div class="flex min-w-0 flex-col justify-center">
         <span
-          class="font-mono text-4xl sm:text-5xl font-black tracking-tight leading-none {statusTone.value}"
+          class="font-mono text-sm sm:text-base font-bold leading-tight text-foreground tabular-nums truncate"
         >
-          {bg(realtimeStore.currentBG)}
+          {formatGlucoseDelta(glucose.bgDelta, units)} {unitLabel}
         </span>
-        <span class="text-xs sm:text-sm font-mono font-bold text-muted-foreground uppercase">
-          {bgLabel()}
-        </span>
-      </div>
-
-      <!-- High-Visibility Trend Arrow(s) & Delta -->
-      <div class="flex items-center gap-2.5">
-        <div
-          class="flex h-11 min-w-11 px-2 items-center justify-center rounded-xl border shadow-inner {statusTone.arrowBox}"
-          title="Glucose trend direction"
+        <span
+          class="text-xs font-mono text-muted-foreground tabular-nums truncate"
         >
-          <div class="flex items-center -space-x-1.5">
-            <ArrowRight
-              class="size-7 stroke-[3] transition-transform duration-500"
-              style="transform: rotate({arrowDegrees}deg)"
-            />
-            {#if isDoubleTrend}
-              <ArrowRight
-                class="size-7 stroke-[3] transition-transform duration-500"
-                style="transform: rotate({arrowDegrees}deg)"
-              />
-            {/if}
-          </div>
-        </div>
-
-        <div class="flex flex-col">
-          <span class="font-mono text-base sm:text-lg font-extrabold leading-tight {statusTone.value}">
-            {bgDelta(realtimeStore.bgDelta ?? 0)} {bgLabel()}
-          </span>
-          <span class="text-[11px] font-mono text-muted-foreground">
-            {realtimeStore.timeSinceReading || "Live CGM"}
-          </span>
-        </div>
+          {readingAge}
+        </span>
       </div>
     </div>
 
     <!-- Active Therapy Telemetry & Quick PDM Trigger -->
-    <div class="flex items-center gap-2 sm:gap-3 ml-auto">
+    <div class="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
       {#if currentReservoir != null}
         <div
-          class="hidden sm:flex items-center gap-1.5 rounded-xl border border-border/60 bg-background/60 px-3 py-1.5 font-mono text-xs"
+          class="hidden md:flex items-center gap-1.5 rounded-lg border border-border bg-muted/60 px-3 py-1.5 font-mono text-xs"
         >
-          <Droplet class="size-3.5 text-sky-400" />
+          <Droplet class="size-3.5 text-primary" />
           <span class="text-muted-foreground">RES:</span>
           <span class="font-bold text-foreground">{currentReservoir.toFixed(0)}U</span>
         </div>
@@ -121,14 +128,14 @@
 
       <Button
         variant="default"
-        size="lg"
+        size="default"
         onclick={() => (pumpDialogOpen = true)}
         aria-label="Open Careportal Pump Menu"
         data-testid="careportal-fab-button"
-        class="rounded-xl bg-gradient-to-b from-sky-400 to-sky-600 hover:from-sky-300 hover:to-sky-500 text-slate-950 font-black shadow-lg shadow-sky-500/25 border border-sky-300/40 px-4 gap-2"
+        class="shrink-0 rounded-lg font-mono text-xs font-bold uppercase tracking-wider shadow-sm gap-1.5 px-3 sm:px-4"
       >
         <Plus class="size-4 stroke-[2.5]" />
-        <span class="text-xs font-mono uppercase tracking-wider">PDM Touch</span>
+        <span>PDM Touch</span>
       </Button>
     </div>
   </div>
