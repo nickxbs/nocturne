@@ -1,15 +1,15 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import * as Select from "$lib/components/ui/select";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
   import User from "@lucide/svelte/icons/user";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Save from "@lucide/svelte/icons/save";
   import { toast } from "svelte-sonner";
-  import { describeSubmitError } from "$lib/forms";
-  import { getSubject, updateSubject } from "$lib/api/generated/cgmSims.generated.remote";
+  import { describeSubmitError } from "#lib/forms/index.js";
+  import { getSubject, updateSubject } from "#lib/api/generated/cgmSims.generated.remote.js";
 
   const subjectQuery = getSubject();
   const subjectData = $derived(subjectQuery.current);

@@ -13,7 +13,7 @@ import {
   CreateBasalInjectionRequestSchema,
   UpdateBasalInjectionRequestSchema,
   BasalScheduleSchema,
-} from "$lib/api/generated/schemas";
+} from "#lib/api/generated/schemas.js";
 
 const entriesSchema = z.object({
   dateRange: z.object({

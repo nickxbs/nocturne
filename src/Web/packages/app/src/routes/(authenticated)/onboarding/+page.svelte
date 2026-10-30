@@ -1,7 +1,7 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import Building2 from "@lucide/svelte/icons/building-2";
   import Globe from "@lucide/svelte/icons/globe";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -11,9 +11,9 @@
   import {
     onboarding as signupOnboarding,
     validateSlug as validateSignupSlug,
-  } from "$lib/api/generated/signups.generated.remote";
-  import { FormError, FormField, useAvailability } from "$lib/forms";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  } from "#lib/api/generated/signups.generated.remote.js";
+  import { FormError, FormField, useAvailability } from "#lib/forms/index.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
 
   let { data } = $props();
 

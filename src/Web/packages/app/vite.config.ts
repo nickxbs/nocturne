@@ -91,6 +91,10 @@ export default defineConfig(({ mode }) => {
         adapter: adapter({ out: "build", precompress: true }),
         experimental: { remoteFunctions: true },
         tracing: { server: true },
+        alias: {
+          $lib: "src/lib",
+          "$lib/*": "src/lib/*",
+        },
       }),
       commonjs(),
     lingo({

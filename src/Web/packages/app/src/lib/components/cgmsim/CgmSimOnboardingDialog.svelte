@@ -1,9 +1,9 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import * as Select from "$lib/components/ui/select";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
   import Sparkles from "@lucide/svelte/icons/sparkles";
   import User from "@lucide/svelte/icons/user";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
@@ -14,10 +14,10 @@
   import CircleAlert from "@lucide/svelte/icons/circle-alert";
   import LogOut from "@lucide/svelte/icons/log-out";
   import { toast } from "svelte-sonner";
-  import { describeSubmitError } from "$lib/forms";
-  import { initialize } from "$lib/api/generated/cgmSims.generated.remote";
+  import { describeSubmitError } from "#lib/forms/index.js";
+  import { initialize } from "#lib/api/generated/cgmSims.generated.remote.js";
   import { invalidate } from "$app/navigation";
-  import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
+  import { SHELL_DATA_KEY } from "#lib/constants/shell-data.js";
 
   interface Props {
     open: boolean;

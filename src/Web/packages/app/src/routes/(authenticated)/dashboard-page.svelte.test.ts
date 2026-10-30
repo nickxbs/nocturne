@@ -30,7 +30,7 @@ vi.mock("#lib/components/dashboard/index.js", async () => ({
   WidgetGrid: (await import("#lib/test-stubs/WidgetGrid.test-stub.svelte"))
     .default,
   CgmSimProfileCard: (
-    await import("$lib/test-stubs/CgmSimProfileCard.test-stub.svelte")
+    await import("#lib/test-stubs/CgmSimProfileCard.test-stub.svelte")
   ).default,
 }));
 

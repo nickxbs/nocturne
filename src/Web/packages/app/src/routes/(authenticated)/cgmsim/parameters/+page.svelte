@@ -1,14 +1,14 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Save from "@lucide/svelte/icons/save";
   import { toast } from "svelte-sonner";
-  import { describeSubmitError } from "$lib/forms";
-  import { getParameters, updateParameters } from "$lib/api/generated/cgmSims.generated.remote";
+  import { describeSubmitError } from "#lib/forms/index.js";
+  import { getParameters, updateParameters } from "#lib/api/generated/cgmSims.generated.remote.js";
 
   const paramsQuery = getParameters();
   const paramsData = $derived(paramsQuery.current);

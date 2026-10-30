@@ -1,7 +1,7 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import Check from "@lucide/svelte/icons/check";
   import Fingerprint from "@lucide/svelte/icons/fingerprint-pattern";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -25,12 +25,12 @@
     FormError,
     FormField,
     useAvailability,
-  } from "$lib/forms";
+  } from "#lib/forms/index.js";
   import {
     describePasskeyError,
     parseCeremonyOptions,
-  } from "$lib/components/auth/passkey-errors";
-  import RecoveryCodes from "$lib/components/auth/RecoveryCodes.svelte";
+  } from "#lib/components/auth/passkey-errors.js";
+  import RecoveryCodes from "#lib/components/auth/RecoveryCodes.svelte";
   import { resolve } from "$app/paths";
   import { goto } from "$app/navigation";
 

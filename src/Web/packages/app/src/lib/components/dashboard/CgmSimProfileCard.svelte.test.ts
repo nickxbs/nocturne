@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import CgmSimProfileCard from "./CgmSimProfileCard.svelte";
 
 const mockSettings = vi.hoisted(() => ({
@@ -22,7 +22,7 @@ const mockSettings = vi.hoisted(() => ({
   updatedAt: new Date().toISOString(),
 }));
 
-vi.mock("$lib/api/generated/cgmSims.generated.remote", () => ({
+vi.mock("#lib/api/generated/cgmSims.generated.remote.js", () => ({
   getSettings: () => remoteQuery(() => mockSettings),
 }));
 

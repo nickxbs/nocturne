@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { toCreateEntryInput, toUpdateEntryInput } from "./entry-request";
-import type { EntryRecord } from "$lib/constants/entry-categories";
-import { BolusType, GlucoseType, GlucoseUnit, DeviceEventType } from "$lib/api";
+import type { EntryRecord } from "#lib/constants/entry-categories.js";
+import { BolusType, GlucoseType, GlucoseUnit, DeviceEventType } from "#lib/api/index.js";
 
 describe("entry-request mapping", () => {
   const testMills = 1792904577976;

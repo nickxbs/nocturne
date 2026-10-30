@@ -1,13 +1,13 @@
 <script lang="ts">
   import Plus from "@lucide/svelte/icons/plus";
-  import { Button } from "$lib/components/ui/button";
-  import GlucoseChart from "$lib/components/dashboard/glucose-chart/GlucoseChart.svelte";
-  import CareportalPumpDialog from "$lib/components/careportal/CareportalPumpDialog.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import GlucoseChart from "#lib/components/dashboard/glucose-chart/GlucoseChart.svelte";
+  import CareportalPumpDialog from "#lib/components/careportal/CareportalPumpDialog.svelte";
   import {
     glucoseChartLookback,
     predictionEnabled,
-  } from "$lib/stores/appearance-store.svelte";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  } from "#lib/stores/appearance-store.svelte.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();

@@ -1,10 +1,10 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import {
     BolusType,
     DeviceEventType,
@@ -12,19 +12,19 @@
     GlucoseUnit,
     ReservoirReportKind,
     TempBasalOrigin,
-  } from "$lib/api";
-  import { createEntry } from "$lib/api/entries.remote";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { getWizardPreview } from "$lib/api/generated/cgmSims.generated.remote";
-  import { getProfileSummary } from "$lib/api/generated/profiles.generated.remote";
-  import { create as createReservoirReport } from "$lib/api/generated/reservoirReports.generated.remote";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+  } from "#lib/api/index.js";
+  import { createEntry } from "#lib/api/entries.remote.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import { getWizardPreview } from "#lib/api/generated/cgmSims.generated.remote.js";
+  import { getProfileSummary } from "#lib/api/generated/profiles.generated.remote.js";
+  import { create as createReservoirReport } from "#lib/api/generated/reservoirReports.generated.remote.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import {
     bgLabel,
     convertFromDisplayUnits,
     timeStringToSeconds,
-  } from "$lib/utils/formatting";
+  } from "#lib/utils/formatting.js";
   import { toast } from "svelte-sonner";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Calendar from "@lucide/svelte/icons/calendar";

@@ -1,9 +1,9 @@
 import type { PageServerLoad } from "./$types";
-import { classifyRequestHost } from "$lib/server/tenantless-host";
+import { classifyRequestHost } from "#lib/server/tenantless-host.js";
 import {
   transformChartData,
   type TransformedChartData,
-} from "$lib/utils/chart-data-transform";
+} from "#lib/utils/chart-data-transform.js";
 
 const INITIAL_HOURS = 6;
 const TOTAL_HOURS = 48;

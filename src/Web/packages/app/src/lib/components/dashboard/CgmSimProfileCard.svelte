@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { Card } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
+  import { Card } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import User from "@lucide/svelte/icons/user";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import { resolve } from "$app/paths";
-  import { getSettings } from "$lib/api/generated/cgmSims.generated.remote";
+  import { getSettings } from "#lib/api/generated/cgmSims.generated.remote.js";
 
   const settingsQuery = getSettings();
   const settings = $derived(settingsQuery.current);
