@@ -306,6 +306,7 @@ msgstr "Failed to load historical data"
 #~ msgid "Syncing"
 #~ msgstr "Syncing"
 
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/lib/components/treatments/edit-dialog/NoteFormFields.svelte
 msgid "Announcement"
@@ -1684,6 +1685,7 @@ msgstr "Bolus:"
 
 #. 0: stats.totalBolus.toFixed(1)
 #. 0: stats.totalBasal.toFixed(1)
+#. 0: preset
 #. 0: cap
 #. 0: units.toFixed(1)
 #. 0: insulin.toFixed(1)
@@ -1695,9 +1697,11 @@ msgstr "Bolus:"
 #. 0: snapshot.recommendedBolus.toFixed(2)
 #. 0: formatInsulinDisplay(treatmentSummary?.totals?.insulin?.bolus)
 #. 0: d.value.toFixed(2)
+#. 0: currentReservoir.toFixed(0)
 #. 0: (row.insulin ?? 0).toFixed(2)
 #: src/lib/components/calendar/CalendarDayCell.svelte
 #: src/lib/components/calendar/CalendarDayCell.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/BasalInjectionMarker.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/BolusMarker.svelte
@@ -1709,6 +1713,7 @@ msgstr "Bolus:"
 #: src/lib/components/reports/ApsStateCard.svelte
 #: src/lib/components/reports/DailyInsulinSummary.svelte
 #: src/lib/components/reports/InsulinDonutChart.svelte
+#: src/routes/(authenticated)/careportal/+page.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 msgid "{0}U"
 msgstr "{0}U"
@@ -13382,6 +13387,7 @@ msgstr "{0} U/hr <0/>"
 msgid "Eventual BG"
 msgstr "Eventual BG"
 
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 msgid "Target BG"
 msgstr "Target BG"
@@ -20801,6 +20807,7 @@ msgstr "CHART SHOWN <0/>"
 msgid "Lunch"
 msgstr "Lunch"
 
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/MarkRegistrationHarness.test.svelte
 msgid "Lantus"
 msgstr "Lantus"
@@ -39383,10 +39390,8 @@ msgstr "Pump Linked (Encrypted BLE)"
 msgid "IPX8 • 3.0 mL"
 msgstr "IPX8 • 3.0 mL"
 
-#. 0: activeBasalRate
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "BASAL: {0} U/h"
-msgstr "BASAL: {0} U/h"
+#~ msgid "BASAL: {0} U/h"
+#~ msgstr "BASAL: {0} U/h"
 
 #: src/lib/components/careportal/CareportalPumpDialog.svelte
 msgid "Insulin reservoir"
@@ -39647,3 +39652,133 @@ msgstr "SN: NC-8849-01"
 #: src/lib/components/careportal/CareportalPumpDialog.svelte
 msgid "MED-DEVICE CE 0459"
 msgstr "MED-DEVICE CE 0459"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Glargine"
+msgstr "Glargine"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Detemir"
+msgstr "Detemir"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Levemir"
+msgstr "Levemir"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Toujeo"
+msgstr "Toujeo"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Glargine U300"
+msgstr "Glargine U300"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Degludec"
+msgstr "Degludec"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Tresiba"
+msgstr "Tresiba"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Insulin pump enabled"
+msgstr "Insulin pump enabled"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Insulin pump disabled (MDI basal mode)"
+msgstr "Insulin pump disabled (MDI basal mode)"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Could not update pump mode"
+msgstr "Could not update pump mode"
+
+#. 0: selectedBasalDrug; 1: basalMdiUnits
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Basal ({0} {1}U) recorded"
+msgstr "Basal ({0} {1}U) recorded"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Select to disable the insulin pump and switch to MDI basal"
+msgstr "Select to disable the insulin pump and switch to MDI basal"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Select to enable the insulin pump"
+msgstr "Select to enable the insulin pump"
+
+#. 0: activeBasalRate
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "PUMP ON • {0} U/h"
+msgstr "PUMP ON • {0} U/h"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "PUMP OFF • MDI"
+msgstr "PUMP OFF • MDI"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/routes/(authenticated)/careportal/+page.svelte
+msgid "Glucose trend direction"
+msgstr "Glucose trend direction"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/routes/(authenticated)/careportal/+page.svelte
+msgid "Live CGM"
+msgstr "Live CGM"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Insulin Pump Active"
+msgstr "Insulin Pump Active"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Pump Disabled (MDI Basal)"
+msgstr "Pump Disabled (MDI Basal)"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "PUMP ON"
+msgstr "PUMP ON"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "PUMP OFF"
+msgstr "PUMP OFF"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Basal Menu"
+msgstr "Basal Menu"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "GLA • DET • TOU • DEG"
+msgstr "GLA • DET • TOU • DEG"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Pump Mode: ACTIVE"
+msgstr "Pump Mode: ACTIVE"
+
+#. 0: activeBasalRate
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Continuous basal infusion ({0} U/h)"
+msgstr "Continuous basal infusion ({0} U/h)"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Disable Pump (MDI)"
+msgstr "Disable Pump (MDI)"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Pump Disabled • Basal Menu (MDI)"
+msgstr "Pump Disabled • Basal Menu (MDI)"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Select one of the 4 long-acting basal insulins"
+msgstr "Select one of the 4 long-acting basal insulins"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Enable Pump"
+msgstr "Enable Pump"
+
+#. 0: selectedBasalDrug
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Basal Dose ({0})"
+msgstr "Basal Dose ({0})"
+
+#: src/routes/(authenticated)/careportal/+page.svelte
+msgid "RES:"
+msgstr "RES:"
