@@ -41,25 +41,25 @@
     e.preventDefault();
 
     if (!sex) {
-      toast.error("Please select a biological sex.");
+      toast.error("Select a biological sex.");
       return;
     }
 
     const weightNum = Number(weight);
     if (!weight || isNaN(weightNum) || weightNum <= 0) {
-      toast.error("Please enter a valid weight in kg.");
+      toast.error("Enter a valid weight in kg.");
       return;
     }
 
     const ageNum = Number(age);
     if (!age || isNaN(ageNum) || ageNum <= 0) {
-      toast.error("Please enter a valid age in years.");
+      toast.error("Enter a valid age in years.");
       return;
     }
 
     const heightNum = Number(height);
     if (!height || isNaN(heightNum) || heightNum <= 0) {
-      toast.error("Please enter a valid height in cm.");
+      toast.error("Enter a valid height in cm.");
       return;
     }
 

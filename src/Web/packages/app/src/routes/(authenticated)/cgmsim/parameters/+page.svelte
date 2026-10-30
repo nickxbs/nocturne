@@ -37,31 +37,31 @@
 
     const isfNum = Number(isf);
     if (!isf || isNaN(isfNum) || isfNum <= 0) {
-      toast.error("Please enter a valid ISF value.");
+      toast.error("Enter a valid ISF value.");
       return;
     }
 
     const diaNum = Number(dia);
     if (!dia || isNaN(diaNum) || diaNum <= 0) {
-      toast.error("Please enter a valid DIA value.");
+      toast.error("Enter a valid DIA value.");
       return;
     }
 
     const carbsNum = Number(carbsAbsTime);
     if (!carbsAbsTime || isNaN(carbsNum) || carbsNum <= 0) {
-      toast.error("Please enter a valid carbohydrate absorption time.");
+      toast.error("Enter a valid carb absorption time.");
       return;
     }
 
     const peakNum = Number(insulinPeak);
     if (!insulinPeak || isNaN(peakNum) || peakNum <= 0) {
-      toast.error("Please enter a valid insulin peak time.");
+      toast.error("Enter a valid insulin peak time.");
       return;
     }
 
     const crNum = Number(cr);
     if (!cr || isNaN(crNum) || crNum <= 0) {
-      toast.error("Please enter a valid carb ratio (CR).");
+      toast.error("Enter a valid carb ratio (CR).");
       return;
     }
 
@@ -96,7 +96,7 @@
       <Card.Title>Metabolic & Kinetic Parameters</Card.Title>
     </div>
     <Card.Description>
-      Tune insulin kinetics, carbohydrate absorption dynamics, and sensitivity ratios for simulation. All fields are required.
+      Tune insulin kinetics, carb absorption dynamics, and sensitivity ratios for simulation. All fields are required.
     </Card.Description>
   </Card.Header>
 
@@ -163,7 +163,7 @@
               min
             </span>
           </div>
-          <p class="text-xs text-muted-foreground">Total duration of meal carbohydrate absorption.</p>
+          <p class="text-xs text-muted-foreground">Total duration of meal carb absorption.</p>
         </div>
 
         <!-- Insulin Peak -->
@@ -205,7 +205,7 @@
               g/U
             </span>
           </div>
-          <p class="text-xs text-muted-foreground">Grams of carbohydrate covered by 1 unit of insulin.</p>
+          <p class="text-xs text-muted-foreground">Grams of carbs covered by 1 unit of insulin.</p>
         </div>
       </div>
     </Card.Content>

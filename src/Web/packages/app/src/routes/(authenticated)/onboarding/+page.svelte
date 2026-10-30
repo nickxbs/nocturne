@@ -92,7 +92,7 @@
     } catch (err) {
       submitError = describeSubmitError(
         err,
-        "Failed to create workspace. Please try again."
+        "Could not create the workspace. Try again."
       );
     } finally {
       isSubmitting = false;
@@ -126,8 +126,8 @@
           You are signed in as <span class="font-medium text-foreground">
             {data.userEmail || data.userName || "your account"}
           </span>
-          , but your account does not belong to any workspace. Please contact
-          your instance administrator for an invite link.
+          , but your account does not belong to any workspace. Contact your
+          instance administrator for an invite link.
         </p>
         <div class="flex justify-center pt-2">
           <Button variant="outline" href="/auth/logout">
@@ -149,14 +149,13 @@
           Workspace Pending Approval
         </Card.Title>
         <Card.Description>
-          Your workspace request has been submitted to the instance
-          administrator.
+          We submitted your workspace request to the instance administrator.
         </Card.Description>
       </Card.Header>
       <Card.Content class="space-y-4">
         <p class="text-sm text-muted-foreground text-center">
           An administrator needs to approve your workspace before you can access
-          it. You will be able to log in once your request is approved.
+          it. You can sign in once your request is approved.
         </p>
         <div class="flex justify-center pt-2">
           <Button variant="outline" href="/">Go to Overview</Button>
@@ -176,9 +175,9 @@
         </Card.Title>
         <Card.Description>
           {#if data.userName}
-            Welcome, {data.userName}!
+            Welcome, {data.userName}.
           {:else}
-            Welcome!
+            Welcome.
           {/if}
           Choose a name and address for your personal workspace.
         </Card.Description>

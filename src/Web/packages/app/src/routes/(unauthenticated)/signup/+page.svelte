@@ -125,7 +125,7 @@
       passkeyError = describePasskeyError(
         err,
         "register",
-        "We couldn't register your passkey. Please try again."
+        "Could not register your passkey. Try again."
       );
     } finally {
       isRegistering = false;

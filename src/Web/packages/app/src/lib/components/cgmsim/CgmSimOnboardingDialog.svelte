@@ -113,7 +113,7 @@
   function goToStep2(e: Event) {
     e.preventDefault();
     if (!isStep1Valid) {
-      toast.error("Please fill in all patient data with valid values before proceeding.");
+      toast.error("Enter valid patient data before you continue.");
       return;
     }
     currentStep = 2;
@@ -146,7 +146,7 @@
         },
       });
 
-      toast.success("Initialization completed successfully! Welcome to CGMSIM.");
+      toast.success("Initialization completed. Welcome to CGMSIM.");
       open = false;
       await invalidate(SHELL_DATA_KEY);
       onCompleted?.();
@@ -346,7 +346,7 @@
                 Step 2: Simulation Parameters
               </h4>
               <p class="text-xs text-muted-foreground">
-                Insulin kinetics, carbohydrate absorption, and sensitivity.
+                Insulin kinetics, carb absorption, and sensitivity.
               </p>
             </div>
             <Button

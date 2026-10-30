@@ -57,7 +57,7 @@
         </div>
         <h2 class="text-lg font-semibold">No workspaces yet</h2>
         <p class="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-          You don't have access to any workspaces yet. You can create your own personal workspace to start logging and monitoring glucose.
+          You do not have access to any workspaces yet. You can create your own personal workspace to start logging and monitoring glucose.
         </p>
         <div class="mt-4">
           <Button href="/onboarding">

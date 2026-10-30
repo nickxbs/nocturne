@@ -141,7 +141,7 @@
               data-testid="signup-link"
             >
               <UserPlus class="mr-1 h-4 w-4" />
-              Don't have an account? Create one
+              Do not have an account? Create one
             </Button>
           </div>
         {/if}
