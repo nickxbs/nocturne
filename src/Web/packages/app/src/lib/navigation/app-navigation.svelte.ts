@@ -33,6 +33,8 @@ import PlayCircle from "@lucide/svelte/icons/circle-play";
 import HistoryIcon from "@lucide/svelte/icons/history";
 import Activity from "@lucide/svelte/icons/activity";
 import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
+import Syringe from "@lucide/svelte/icons/syringe";
+import User from "@lucide/svelte/icons/user";
 import { satisfiesScope } from "#lib/authorization/scopes.js";
 import { getSidebarReportItems } from "#lib/navigation/report-navigation.svelte.js";
 import { filterTenantlessNav } from "#lib/navigation/tenantless-navigation.js";
