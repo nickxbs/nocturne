@@ -508,6 +508,8 @@ msgstr "Verification code"
 #: src/lib/components/admin/OidcProviderDialog.svelte
 #: src/lib/components/admin/RoleDialog.svelte
 #: src/lib/components/admin/SubjectEditDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/connectors/ConnectorSelectionGrid.svelte
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
@@ -1552,6 +1554,7 @@ msgstr "<0/> Continue with passkey"
 
 #: src/lib/coach-marks/copy.svelte.ts
 #: src/lib/components/auth/LoginForm.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 msgid "Back"
 msgstr "Back"
 
@@ -1630,7 +1633,6 @@ msgid "Carbs:"
 msgstr "Carbs:"
 
 #. 0: stats.totalCarbs.toFixed(0)
-#. 0: wizardCarbs
 #. 0: carbs
 #. 0: totalCarbs
 #. 0: carbIntake.carbs ?? 0
@@ -1652,7 +1654,6 @@ msgstr "Carbs:"
 #. 0: (summary?.totals?.food?.carbs ?? 0).toFixed(0)
 #. 0: row.carbs
 #: src/lib/components/calendar/CalendarDayCell.svelte
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/CarbMarker.svelte
 #: src/lib/components/dashboard/widgets/MealsWidget.svelte
 #: src/lib/components/dashboard/widgets/MealsWidget.svelte
@@ -1683,13 +1684,6 @@ msgstr "Bolus:"
 
 #. 0: stats.totalBolus.toFixed(1)
 #. 0: stats.totalBasal.toFixed(1)
-#. 0: recommendedBolus.toFixed(1)
-#. 0: recommendedBolus.toFixed(1)
-#. 0: (wizardPreview?.bgUnits ?? 0).toFixed(1)
-#. 0: (wizardPreview?.choUnits ?? 0).toFixed(1)
-#. 0: (wizardPreview?.cobUnits ?? 0).toFixed(1)
-#. 0: (wizardPreview?.iobUnits ?? 0).toFixed(1)
-#. 0: (wizardPreview?.adjustmentUnits ?? wizardAdj).toFixed(1)
 #. 0: cap
 #. 0: units.toFixed(1)
 #. 0: insulin.toFixed(1)
@@ -1704,13 +1698,6 @@ msgstr "Bolus:"
 #. 0: (row.insulin ?? 0).toFixed(2)
 #: src/lib/components/calendar/CalendarDayCell.svelte
 #: src/lib/components/calendar/CalendarDayCell.svelte
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/BasalInjectionMarker.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/BolusMarker.svelte
@@ -2326,7 +2313,6 @@ msgstr "Data deleted successfully"
 #~ msgid "Failed to trigger sync"
 #~ msgstr "Failed to trigger sync"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
@@ -3287,7 +3273,6 @@ msgstr "Lines"
 msgid "IOB only"
 msgstr "IOB only"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/dashboard/PredictionSettings.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
@@ -3360,7 +3345,6 @@ msgid "Last 24 hours"
 msgstr "Last 24 hours"
 
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
@@ -3376,6 +3360,7 @@ msgid "Bolus"
 msgstr "Bolus"
 
 #: src/lib/components/alerts/factText.svelte.ts
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/food/FoodFields.svelte
@@ -3458,6 +3443,10 @@ msgstr "Create a new food with nutritional information."
 #~ msgid "Key Nutritional Info"
 #~ msgstr "Key Nutritional Info"
 
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/reports/BasalBolusRatioChart.svelte
@@ -3594,6 +3583,8 @@ msgstr "Units"
 msgid "<0/> Bolus"
 msgstr "<0/> Bolus"
 
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/entries/BolusSection.svelte
 #: src/lib/components/reports/BasalBolusRatioChart.svelte
 msgid "Insulin (U)"
@@ -3602,6 +3593,7 @@ msgstr "Insulin (U)"
 #~ msgid "Bolus Type"
 #~ msgstr "Bolus Type"
 
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/entries/BolusSection.svelte
 #: src/lib/components/treatments/edit-dialog/BolusFormFields.svelte
@@ -3791,9 +3783,8 @@ msgstr "Entry updated"
 msgid "Entry created"
 msgstr "Entry created"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Failed to save entry"
-msgstr "Failed to save entry"
+#~ msgid "Failed to save entry"
+#~ msgstr "Failed to save entry"
 
 #: src/lib/components/entries/EntryEditDialog.svelte
 msgid "Entry deleted"
@@ -5420,6 +5411,7 @@ msgstr "Bolus insulin:"
 msgid "Total carbs:"
 msgstr "Total carbs:"
 
+#. 0: pendingCarbsGrams
 #. 0: snapshot.cob.toFixed(0)
 #. 0: cob.toFixed(0)
 #. 0: cob.toFixed(0)
@@ -5429,6 +5421,7 @@ msgstr "Total carbs:"
 #. 0: formatCarbDisplay(treatmentSummary?.totals?.food?.protein)
 #. 0: formatCarbDisplay(treatmentSummary?.totals?.food?.fat)
 #. 0: event.grams
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
@@ -5500,6 +5493,14 @@ msgstr "GRI"
 #~ msgid "GRI Score"
 #~ msgstr "GRI Score"
 
+#. 0: formatSignedUnits(wizardPreview?.bgUnits ?? 0)
+#. 0: formatSignedUnits(wizardPreview?.choUnits ?? 0)
+#. 0: formatSignedUnits(wizardPreview?.cobUnits ?? 0)
+#. 0: formatSignedUnits(wizardPreview?.iobUnits ?? 0)
+#. 0: formatSignedUnits(wizardPreview?.adjustmentUnits ?? wizardAdj)
+#. 0: recommendedBolus.toFixed(2)
+#. 0: formatSignedUnits(wizardPreview?.bgUnits ?? pendingBolusUnits, 2)
+#. 0: formatSignedUnits(wizardPreview?.iobUnits ?? 0, 2)
 #. 0: snapshot.enactedBolusVolume.toFixed(2)
 #. 0: iob.toFixed(2)
 #. 0: iob.toFixed(1)
@@ -5512,6 +5513,14 @@ msgstr "GRI"
 #. 0: basal.toFixed(1)
 #. 0: d.totalDailyDose.toFixed(1)
 #. 0: insulinStats?.avgBolus?.toFixed(1) ?? "--"
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
@@ -5697,6 +5706,9 @@ msgstr "Try again"
 msgid "<0/> Status at {0}"
 msgstr "<0/> Status at {0}"
 
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
@@ -5713,7 +5725,6 @@ msgstr "Bolus: {0}U"
 msgid "Basal: {0}U"
 msgstr "Basal: {0}U"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
@@ -5721,6 +5732,7 @@ msgstr "Basal: {0}U"
 msgid "COB"
 msgstr "COB"
 
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/food/FoodFields.svelte
 #: src/lib/components/food/FoodFields.svelte
 #: src/lib/components/food/FoodFields.svelte
@@ -16206,6 +16218,8 @@ msgstr "Configure audit retention and export"
 #~ msgstr "Avg ({0})"
 
 #. 0: bgLabel()
+#. 0: bgLabel()
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/reports/SiteChangeImpactChart.svelte
 msgid "Glucose ({0})"
 msgstr "Glucose ({0})"
@@ -17712,6 +17726,11 @@ msgstr "{0}U basal injection"
 msgid "{0}, {1} U/hr"
 msgstr "{0}, {1} U/hr"
 
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte
 #: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
 #: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
@@ -38649,20 +38668,14 @@ msgstr "Nocturne Careportal"
 msgid "{0} recorded"
 msgstr "{0} recorded"
 
-#. 0: label.toLowerCase()
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Failed to record {0}"
-msgstr "Failed to record {0}"
+#~ msgid "Failed to record {0}"
+#~ msgstr "Failed to record {0}"
 
-#. 0: bolus.toFixed(1); 1: wizardCarbs
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Wizard: {0}U / {1}g recorded"
-msgstr "Wizard: {0}U / {1}g recorded"
+#~ msgid "Wizard: {0}U / {1}g recorded"
+#~ msgstr "Wizard: {0}U / {1}g recorded"
 
-#. 0: foodCarbs; 1: foodProteins; 2: foodFats
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Food recorded ({0}g CHO, {1}g P, {2}g F)"
-msgstr "Food recorded ({0}g CHO, {1}g P, {2}g F)"
+#~ msgid "Food recorded ({0}g CHO, {1}g P, {2}g F)"
+#~ msgstr "Food recorded ({0}g CHO, {1}g P, {2}g F)"
 
 #. 0: fastCarbs
 #: src/lib/components/careportal/CareportalPumpDialog.svelte
@@ -38708,10 +38721,8 @@ msgstr "Medication"
 msgid "Medication recorded"
 msgstr "Medication recorded"
 
-#. 0: bgCheckValue; 1: bgLabel()
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "BG Check ({0} {1}) recorded"
-msgstr "BG Check ({0} {1}) recorded"
+#~ msgid "BG Check ({0} {1}) recorded"
+#~ msgstr "BG Check ({0} {1}) recorded"
 
 #. 0: label
 #: src/lib/components/careportal/CareportalPumpDialog.svelte
@@ -38744,69 +38755,50 @@ msgstr "Wizard"
 msgid "Carbs Correction"
 msgstr "Carbs Correction"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Extended bolus"
-msgstr "Extended bolus"
+#~ msgid "Extended bolus"
+#~ msgstr "Extended bolus"
 
 #: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/careportal/CareportalPumpDialog.svelte
 msgid "Drink"
 msgstr "Drink"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Result:"
-msgstr "Result:"
+#~ msgid "Result:"
+#~ msgstr "Result:"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Carbs (gr):"
-msgstr "Carbs (gr):"
+#~ msgid "Carbs (gr):"
+#~ msgstr "Carbs (gr):"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Insulin Adjustment (U):"
-msgstr "Insulin Adjustment (U):"
+#~ msgid "Insulin Adjustment (U):"
+#~ msgstr "Insulin Adjustment (U):"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "BG"
-msgstr "BG"
+#~ msgid "BG"
+#~ msgstr "BG"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "CHO"
-msgstr "CHO"
+#~ msgid "CHO"
+#~ msgstr "CHO"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Adj."
-msgstr "Adj."
+#~ msgid "Adj."
+#~ msgstr "Adj."
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Carbs / Insulin"
-msgstr "Carbs / Insulin"
+#~ msgid "Carbs / Insulin"
+#~ msgstr "Carbs / Insulin"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Proteins (gr):"
-msgstr "Proteins (gr):"
+#~ msgid "Proteins (gr):"
+#~ msgstr "Proteins (gr):"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Fats (gr):"
-msgstr "Fats (gr):"
+#~ msgid "Fats (gr):"
+#~ msgstr "Fats (gr):"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Fast Carbs (gr):"
-msgstr "Fast Carbs (gr):"
+#~ msgid "Fast Carbs (gr):"
+#~ msgstr "Fast Carbs (gr):"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Insulin (U):"
-msgstr "Insulin (U):"
+#~ msgid "Insulin (U):"
+#~ msgstr "Insulin (U):"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Duration (min):"
-msgstr "Duration (min):"
+#~ msgid "Duration (min):"
+#~ msgstr "Duration (min):"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/careportal/CareportalPumpDialog.svelte
 msgid "Basal Profile"
 msgstr "Basal Profile"
@@ -38816,41 +38808,32 @@ msgstr "Basal Profile"
 msgid "Refill Reservoir"
 msgstr "Refill Reservoir"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Morning 06-11 (U/h):"
-msgstr "Morning 06-11 (U/h):"
+#~ msgid "Morning 06-11 (U/h):"
+#~ msgstr "Morning 06-11 (U/h):"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Afternoon 11-18 (U/h):"
-msgstr "Afternoon 11-18 (U/h):"
+#~ msgid "Afternoon 11-18 (U/h):"
+#~ msgstr "Afternoon 11-18 (U/h):"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Evening 18-23 (U/h):"
-msgstr "Evening 18-23 (U/h):"
+#~ msgid "Evening 18-23 (U/h):"
+#~ msgstr "Evening 18-23 (U/h):"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Night 23-06 (U/h):"
-msgstr "Night 23-06 (U/h):"
+#~ msgid "Night 23-06 (U/h):"
+#~ msgstr "Night 23-06 (U/h):"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Current Reservoir Level:"
-msgstr "Current Reservoir Level:"
+#~ msgid "Current Reservoir Level:"
+#~ msgstr "Current Reservoir Level:"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Select new capacity :"
-msgstr "Select new capacity :"
+#~ msgid "Select new capacity :"
+#~ msgstr "Select new capacity :"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Press OK to refill"
-msgstr "Press OK to refill"
+#~ msgid "Press OK to refill"
+#~ msgstr "Press OK to refill"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Basal / Long-Acting Insulin (U):"
-msgstr "Basal / Long-Acting Insulin (U):"
+#~ msgid "Basal / Long-Acting Insulin (U):"
+#~ msgstr "Basal / Long-Acting Insulin (U):"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Medication / Note:"
-msgstr "Medication / Note:"
+#~ msgid "Medication / Note:"
+#~ msgstr "Medication / Note:"
 
 #: src/lib/components/careportal/CareportalPumpDialog.svelte
 msgid "BG Check / Calibration"
@@ -38868,10 +38851,8 @@ msgstr "Change Sensor"
 msgid "Stop Sensor"
 msgstr "Stop Sensor"
 
-#. 0: bgLabel()
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Glucose ({0}):"
-msgstr "Glucose ({0}):"
+#~ msgid "Glucose ({0}):"
+#~ msgstr "Glucose ({0}):"
 
 #: src/lib/components/careportal/CareportalPumpDialog.svelte
 msgid "Subject (CGMSIM)"
@@ -38889,17 +38870,14 @@ msgstr "Therapy Profile"
 msgid "Trackers & Consumables"
 msgstr "Trackers & Consumables"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "CANC"
-msgstr "CANC"
+#~ msgid "CANC"
+#~ msgstr "CANC"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "BACK"
-msgstr "BACK"
+#~ msgid "BACK"
+#~ msgstr "BACK"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "OK"
-msgstr "OK"
+#~ msgid "OK"
+#~ msgstr "OK"
 
 #: src/lib/components/careportal/CareportalPumpDialog.svelte
 msgid "Careportal Pump Menu"
@@ -39359,3 +39337,313 @@ msgstr "Enter a valid height in cm."
 #: src/routes/(unauthenticated)/auth/login/+page.svelte
 msgid "<0/> Do not have an account? Create one"
 msgstr "<0/> Do not have an account? Create one"
+
+#: src/routes/(authenticated)/careportal/+page.svelte
+msgid "PDM Touch"
+msgstr "PDM Touch"
+
+#. 0: label.toLowerCase()
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Could not record {0}"
+msgstr "Could not record {0}"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Bolus delivery stopped"
+msgstr "Bolus delivery stopped"
+
+#. 0: bolus.toFixed(1); 1: wizardCarbs
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Bolus wizard: {0}U / {1}g recorded"
+msgstr "Bolus wizard: {0}U / {1}g recorded"
+
+#. 0: foodCarbs; 1: foodProteins; 2: foodFats
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Food recorded ({0}g carbs, {1}g protein, {2}g fat)"
+msgstr "Food recorded ({0}g carbs, {1}g protein, {2}g fat)"
+
+#. 0: bgCheckValue; 1: bgLabel()
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "BG check ({0} {1}) recorded"
+msgstr "BG check ({0} {1}) recorded"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Could not save the entry"
+msgstr "Could not save the entry"
+
+#. 0: step; 1: unit
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Step {0}{1}"
+msgstr "Step {0}{1}"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Pump Linked (Encrypted BLE)"
+msgstr "Pump Linked (Encrypted BLE)"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "IPX8 • 3.0 mL"
+msgstr "IPX8 • 3.0 mL"
+
+#. 0: activeBasalRate
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "BASAL: {0} U/h"
+msgstr "BASAL: {0} U/h"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Insulin reservoir"
+msgstr "Insulin reservoir"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Bolus Calculator"
+msgstr "Bolus Calculator"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "INLINE INFUSION ACTIVE"
+msgstr "INLINE INFUSION ACTIVE"
+
+#. 0: pendingBolusUnits.toFixed(2)
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "/ {0} U"
+msgstr "/ {0} U"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Speed: 1.50 U/min"
+msgstr "Speed: 1.50 U/min"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Catheter: NORMAL"
+msgstr "Catheter: NORMAL"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "STOP DELIVERY"
+msgstr "STOP DELIVERY"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Select to stop the pump immediately and cancel the bolus."
+msgstr "Select to stop the pump immediately and cancel the bolus."
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Recommended Bolus"
+msgstr "Recommended Bolus"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Formula: (CHO / IC) + (BG - Target) / ISF - IOB"
+msgstr "Formula: (CHO / IC) + (BG - Target) / ISF - IOB"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Nutritional Breakdown:"
+msgstr "Nutritional Breakdown:"
+
+#. 0: wizardCarbs; 1: bg(liveBgMgdl); 2: bgLabel()
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "{0}g Carbs • {1} {2} Correction"
+msgstr "{0}g Carbs • {1} {2} Correction"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Step 5g"
+msgstr "Step 5g"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Decrease carbs"
+msgstr "Decrease carbs"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Increase carbs"
+msgstr "Increase carbs"
+
+#. 0: preset
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "+{0}g"
+msgstr "+{0}g"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Adjustment (U)"
+msgstr "Adjustment (U)"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Step 0.1U"
+msgstr "Step 0.1U"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Decrease insulin adjustment"
+msgstr "Decrease insulin adjustment"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Increase insulin adjustment"
+msgstr "Increase insulin adjustment"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "RESET"
+msgstr "RESET"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Clinical Parameter"
+msgstr "Clinical Parameter"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Calculated Units"
+msgstr "Calculated Units"
+
+#. 0: bg(liveBgMgdl); 1: bg(targetBgMgdl); 2: bgLabel()
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "BG Correction ({0} → {1} {2}):"
+msgstr "BG Correction ({0} → {1} {2}):"
+
+#. 0: wizardCarbs
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Meal Bolus ({0}g):"
+msgstr "Meal Bolus ({0}g):"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Active Carbs (COB):"
+msgstr "Active Carbs (COB):"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Active Insulin (IOB):"
+msgstr "Active Insulin (IOB):"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Manual Adjustment (Adj):"
+msgstr "Manual Adjustment (Adj):"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Total Bolus:"
+msgstr "Total Bolus:"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Carbs & Bolus"
+msgstr "Carbs & Bolus"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Fast Insulin"
+msgstr "Fast Insulin"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Basal & Reservoir"
+msgstr "Basal & Reservoir"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Basal & Notes"
+msgstr "Basal & Notes"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "BG & Calibration"
+msgstr "BG & Calibration"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Profile & Sim"
+msgstr "Profile & Sim"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Extended Bolus"
+msgstr "Extended Bolus"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Proteins (g)"
+msgstr "Proteins (g)"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Fats (g)"
+msgstr "Fats (g)"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Food Entry"
+msgstr "Food Entry"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Fast Carbs (g)"
+msgstr "Fast Carbs (g)"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Morning 06-11"
+msgstr "Morning 06-11"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Afternoon 11-18"
+msgstr "Afternoon 11-18"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Evening 18-23"
+msgstr "Evening 18-23"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Night 23-06"
+msgstr "Night 23-06"
+
+#. 0: activeProfileName
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Basal Profile ({0})"
+msgstr "Basal Profile ({0})"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Reservoir Level:"
+msgstr "Reservoir Level:"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Select new capacity:"
+msgstr "Select new capacity:"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Long-Acting Insulin (U)"
+msgstr "Long-Acting Insulin (U)"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Lantus, Metformin..."
+msgstr "Lantus, Metformin..."
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Medication Note"
+msgstr "Medication Note"
+
+#. 0: pendingBolusUnits.toFixed(2)
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Confirm and Deliver {0} U"
+msgstr "Confirm and Deliver {0} U"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Save Entry"
+msgstr "Save Entry"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "CAUTION • CLINICAL SAFETY"
+msgstr "CAUTION • CLINICAL SAFETY"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "STEP 2/2"
+msgstr "STEP 2/2"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Confirm Bolus Delivery"
+msgstr "Confirm Bolus Delivery"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Start rapid-acting insulin delivery?"
+msgstr "Start rapid-acting insulin delivery?"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Correction"
+msgstr "Correction"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Active IOB"
+msgstr "Active IOB"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "CAUTION: Check the target glucose before you confirm."
+msgstr "CAUTION: Check the target glucose before you confirm."
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Confirm and Deliver"
+msgstr "Confirm and Deliver"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "USB-C Charging and Data Interface"
+msgstr "USB-C Charging and Data Interface"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "SN: NC-8849-01"
+msgstr "SN: NC-8849-01"
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "MED-DEVICE CE 0459"
+msgstr "MED-DEVICE CE 0459"
