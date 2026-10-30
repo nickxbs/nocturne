@@ -38474,9 +38474,8 @@ msgstr ""
 msgid "My Workspace"
 msgstr ""
 
-#: src/routes/(authenticated)/onboarding/+page.svelte
-msgid "Failed to create workspace. Please try again."
-msgstr ""
+#~ msgid "Failed to create workspace. Please try again."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/onboarding/+page.svelte
 msgid "Set up your workspace - Nocturne"
@@ -38494,35 +38493,29 @@ msgstr ""
 msgid "<0/> Sign Out"
 msgstr ""
 
-#: src/routes/(authenticated)/onboarding/+page.svelte
-msgid "You are signed in as <0/> , but your account does not belong to any workspace. Please contact your instance administrator for an invite link."
-msgstr ""
+#~ msgid "You are signed in as <0/> , but your account does not belong to any workspace. Please contact your instance administrator for an invite link."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/onboarding/+page.svelte
 #: src/routes/(unauthenticated)/signup/+page.svelte
 msgid "Workspace Pending Approval"
 msgstr ""
 
-#: src/routes/(authenticated)/onboarding/+page.svelte
-msgid "Your workspace request has been submitted to the instance administrator."
-msgstr ""
+#~ msgid "Your workspace request has been submitted to the instance administrator."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/onboarding/+page.svelte
 msgid "Go to Overview"
 msgstr ""
 
-#: src/routes/(authenticated)/onboarding/+page.svelte
-msgid "An administrator needs to approve your workspace before you can access it. You will be able to log in once your request is approved."
-msgstr ""
+#~ msgid "An administrator needs to approve your workspace before you can access it. You will be able to log in once your request is approved."
+#~ msgstr ""
 
-#. 0: data.userName
-#: src/routes/(authenticated)/onboarding/+page.svelte
-msgid "Welcome, {0}!"
-msgstr ""
+#~ msgid "Welcome, {0}!"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/onboarding/+page.svelte
-msgid "Welcome!"
-msgstr ""
+#~ msgid "Welcome!"
+#~ msgstr ""
 
 #: src/lib/components/tenants/TenantsOverview.svelte
 #: src/routes/(authenticated)/onboarding/+page.svelte
@@ -38559,9 +38552,8 @@ msgstr ""
 msgid "Create Workspace"
 msgstr ""
 
-#: src/routes/(unauthenticated)/signup/+page.svelte
-msgid "We couldn't register your passkey. Please try again."
-msgstr ""
+#~ msgid "We couldn't register your passkey. Please try again."
+#~ msgstr ""
 
 #: src/routes/(unauthenticated)/signup/+page.svelte
 msgid "Sign Up - Nocturne"
@@ -38945,13 +38937,11 @@ msgstr ""
 msgid "Simulation parameters generated randomly."
 msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Please fill in all patient data with valid values before proceeding."
-msgstr ""
+#~ msgid "Please fill in all patient data with valid values before proceeding."
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Initialization completed successfully! Welcome to CGMSIM."
-msgstr ""
+#~ msgid "Initialization completed successfully! Welcome to CGMSIM."
+#~ msgstr ""
 
 #: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 msgid "Failed to complete initialization."
@@ -39039,9 +39029,8 @@ msgstr ""
 msgid "<0/> Step 2: Simulation Parameters"
 msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Insulin kinetics, carbohydrate absorption, and sensitivity."
-msgstr ""
+#~ msgid "Insulin kinetics, carbohydrate absorption, and sensitivity."
+#~ msgstr ""
 
 #: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
@@ -39135,25 +39124,20 @@ msgstr ""
 msgid "No workspaces yet"
 msgstr ""
 
-#: src/lib/components/tenants/TenantsOverview.svelte
-msgid "You don't have access to any workspaces yet. You can create your own personal workspace to start logging and monitoring glucose."
-msgstr ""
+#~ msgid "You don't have access to any workspaces yet. You can create your own personal workspace to start logging and monitoring glucose."
+#~ msgstr ""
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "Please select a biological sex."
-msgstr ""
+#~ msgid "Please select a biological sex."
+#~ msgstr ""
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "Please enter a valid weight in kg."
-msgstr ""
+#~ msgid "Please enter a valid weight in kg."
+#~ msgstr ""
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "Please enter a valid age in years."
-msgstr ""
+#~ msgid "Please enter a valid age in years."
+#~ msgstr ""
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "Please enter a valid height in cm."
-msgstr ""
+#~ msgid "Please enter a valid height in cm."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "Subject parameters saved successfully."
@@ -39203,25 +39187,20 @@ msgstr ""
 msgid "<0/> Save Subject"
 msgstr ""
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Please enter a valid ISF value."
-msgstr ""
+#~ msgid "Please enter a valid ISF value."
+#~ msgstr ""
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Please enter a valid DIA value."
-msgstr ""
+#~ msgid "Please enter a valid DIA value."
+#~ msgstr ""
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Please enter a valid carbohydrate absorption time."
-msgstr ""
+#~ msgid "Please enter a valid carbohydrate absorption time."
+#~ msgstr ""
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Please enter a valid insulin peak time."
-msgstr ""
+#~ msgid "Please enter a valid insulin peak time."
+#~ msgstr ""
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Please enter a valid carb ratio (CR)."
-msgstr ""
+#~ msgid "Please enter a valid carb ratio (CR)."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
 msgid "Simulation parameters saved successfully."
@@ -39239,9 +39218,8 @@ msgstr ""
 msgid "Metabolic & Kinetic Parameters"
 msgstr ""
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Tune insulin kinetics, carbohydrate absorption dynamics, and sensitivity ratios for simulation. All fields are required."
-msgstr ""
+#~ msgid "Tune insulin kinetics, carbohydrate absorption dynamics, and sensitivity ratios for simulation. All fields are required."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
 msgid "Insulin Sensitivity Factor (ISF) <0/>"
@@ -39259,9 +39237,8 @@ msgstr ""
 msgid "Effective duration of rapid-acting insulin activity."
 msgstr ""
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Total duration of meal carbohydrate absorption."
-msgstr ""
+#~ msgid "Total duration of meal carbohydrate absorption."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
 msgid "Insulin Peak Time <0/>"
@@ -39275,18 +39252,113 @@ msgstr ""
 msgid "Carb Ratio (CR) <0/>"
 msgstr ""
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Grams of carbohydrate covered by 1 unit of insulin."
-msgstr ""
+#~ msgid "Grams of carbohydrate covered by 1 unit of insulin."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
 msgid "<0/> Save Parameters"
 msgstr ""
 
-#: src/routes/(unauthenticated)/auth/login/+page.svelte
-msgid "<0/> Don't have an account? Create one"
-msgstr ""
+#~ msgid "<0/> Don't have an account? Create one"
+#~ msgstr ""
 
 #: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "CarePortal"
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "Could not create the workspace. Try again."
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "You are signed in as <0/> , but your account does not belong to any workspace. Contact your instance administrator for an invite link."
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "We submitted your workspace request to the instance administrator."
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "An administrator needs to approve your workspace before you can access it. You can sign in once your request is approved."
+msgstr ""
+
+#. 0: data.userName
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "Welcome, {0}."
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "Welcome."
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Could not register your passkey. Try again."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Enter valid patient data before you continue."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Initialization completed. Welcome to CGMSIM."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Insulin kinetics, carb absorption, and sensitivity."
+msgstr ""
+
+#: src/lib/components/tenants/TenantsOverview.svelte
+msgid "You do not have access to any workspaces yet. You can create your own personal workspace to start logging and monitoring glucose."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Enter a valid ISF value."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Enter a valid DIA value."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Enter a valid carb absorption time."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Enter a valid insulin peak time."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Enter a valid carb ratio (CR)."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Tune insulin kinetics, carb absorption dynamics, and sensitivity ratios for simulation. All fields are required."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Total duration of meal carb absorption."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Grams of carbs covered by 1 unit of insulin."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Select a biological sex."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Enter a valid weight in kg."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Enter a valid age in years."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Enter a valid height in cm."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/login/+page.svelte
+msgid "<0/> Do not have an account? Create one"
 msgstr ""
