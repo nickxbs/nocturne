@@ -45,9 +45,10 @@
     onclick={() => (pumpDialogOpen = true)}
     aria-label="Open Careportal Pump Menu"
     data-testid="careportal-fab-button"
-    class="absolute bottom-5 left-1/2 z-30 -translate-x-1/2"
+    class="absolute bottom-5 left-1/2 z-30 -translate-x-1/2 rounded-full bg-gradient-to-b from-sky-400 to-sky-600 hover:from-sky-300 hover:to-sky-500 text-slate-950 font-black shadow-lg shadow-sky-500/30 border border-sky-300/40 px-5 gap-2"
   >
-    <Plus class="size-6" />
+    <Plus class="size-5 stroke-[2.5]" />
+    <span class="text-xs font-mono uppercase tracking-wider">PDM Touch</span>
   </Button>
 </div>
 
