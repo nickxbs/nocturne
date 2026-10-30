@@ -1161,6 +1161,7 @@ msgstr ""
 msgid "{0} reading{1}"
 msgstr ""
 
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
@@ -1378,6 +1379,8 @@ msgstr ""
 
 #: src/lib/components/audit/AuditMutationsTable.svelte
 #: src/lib/components/audit/AuditReadsTable.svelte
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+#: src/lib/navigation/app-navigation.svelte.ts
 msgid "Subject"
 msgstr ""
 
@@ -1538,6 +1541,8 @@ msgstr ""
 #: src/lib/components/auth/PasskeyRegistrationForm.svelte
 #: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
 #: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
+#: src/routes/(unauthenticated)/signup/+page.svelte
+#: src/routes/(unauthenticated)/signup/+page.svelte
 msgid "Username"
 msgstr ""
 
@@ -1625,6 +1630,7 @@ msgid "Carbs:"
 msgstr ""
 
 #. 0: stats.totalCarbs.toFixed(0)
+#. 0: wizardCarbs
 #. 0: carbs
 #. 0: totalCarbs
 #. 0: carbIntake.carbs ?? 0
@@ -1646,6 +1652,7 @@ msgstr ""
 #. 0: (summary?.totals?.food?.carbs ?? 0).toFixed(0)
 #. 0: row.carbs
 #: src/lib/components/calendar/CalendarDayCell.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/CarbMarker.svelte
 #: src/lib/components/dashboard/widgets/MealsWidget.svelte
 #: src/lib/components/dashboard/widgets/MealsWidget.svelte
@@ -1676,6 +1683,14 @@ msgstr ""
 
 #. 0: stats.totalBolus.toFixed(1)
 #. 0: stats.totalBasal.toFixed(1)
+#. 0: recommendedBolus.toFixed(1)
+#. 0: recommendedBolus.toFixed(1)
+#. 0: (wizardPreview?.bgUnits ?? 0).toFixed(1)
+#. 0: (wizardPreview?.choUnits ?? 0).toFixed(1)
+#. 0: (wizardPreview?.cobUnits ?? 0).toFixed(1)
+#. 0: (wizardPreview?.iobUnits ?? 0).toFixed(1)
+#. 0: (wizardPreview?.adjustmentUnits ?? wizardAdj).toFixed(1)
+#. 0: cap
 #. 0: units.toFixed(1)
 #. 0: insulin.toFixed(1)
 #. 0: formatInsulinDisplay(bolus.insulin)
@@ -1689,6 +1704,14 @@ msgstr ""
 #. 0: (row.insulin ?? 0).toFixed(2)
 #: src/lib/components/calendar/CalendarDayCell.svelte
 #: src/lib/components/calendar/CalendarDayCell.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/BasalInjectionMarker.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/BolusMarker.svelte
 #: src/lib/components/meals/MealBolusDialog.svelte
@@ -1866,10 +1889,13 @@ msgstr ""
 #~ msgid "2d 4h"
 #~ msgstr ""
 
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
+#: src/routes/(unauthenticated)/signup/+page.svelte
+#: src/routes/(unauthenticated)/signup/+page.svelte
 msgid "<0/> Back"
 msgstr ""
 
@@ -1988,6 +2014,8 @@ msgid "{0}m"
 msgstr ""
 
 #. 0: m
+#. 0: params.carbsAbsTime
+#. 0: params.insulinPeak
 #. 0: bolusCalc.preBolus
 #. 0: minutes
 #. 0: minutesBefore ?? "–"
@@ -1995,6 +2023,8 @@ msgstr ""
 #. 0: min
 #. 0: therapy.delay ?? "-"
 #: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
@@ -2088,6 +2118,7 @@ msgid "System"
 msgstr ""
 
 #: src/lib/components/clock-builder/TextStyleControls.svelte
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Weight"
 msgstr ""
@@ -2295,6 +2326,8 @@ msgstr ""
 #~ msgid "Failed to trigger sync"
 #~ msgstr ""
 
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/status-pills/COBPill.svelte
@@ -3006,6 +3039,7 @@ msgid "Connect your CGM app or AID system to push data to Nocturne"
 msgstr ""
 
 #: src/lib/components/connectors/UploaderAppsCard.svelte
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/lib/components/entries/FoodBreakdown.svelte
 #: src/lib/components/meals/MealsTable.svelte
 #: src/lib/components/meals/MealsTable.svelte
@@ -3253,6 +3287,7 @@ msgstr ""
 msgid "IOB only"
 msgstr ""
 
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/dashboard/PredictionSettings.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
@@ -3325,6 +3360,7 @@ msgid "Last 24 hours"
 msgstr ""
 
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
@@ -3355,8 +3391,9 @@ msgstr ""
 msgid "Carbs"
 msgstr ""
 
-#~ msgid "BG Check"
-#~ msgstr ""
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "BG Check"
+msgstr ""
 
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
@@ -3565,6 +3602,7 @@ msgstr ""
 #~ msgid "Bolus Type"
 #~ msgstr ""
 
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/entries/BolusSection.svelte
 #: src/lib/components/treatments/edit-dialog/BolusFormFields.svelte
 msgid "Duration (min)"
@@ -3647,14 +3685,17 @@ msgstr ""
 msgid "Unspecified {0}g"
 msgstr ""
 
-#~ msgid "Sensor Start"
-#~ msgstr ""
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Sensor Start"
+msgstr ""
 
-#~ msgid "Sensor Change"
-#~ msgstr ""
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Sensor Change"
+msgstr ""
 
-#~ msgid "Sensor Stop"
-#~ msgstr ""
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Sensor Stop"
+msgstr ""
 
 #~ msgid "Site Change"
 #~ msgstr ""
@@ -3750,8 +3791,9 @@ msgstr ""
 msgid "Entry created"
 msgstr ""
 
-#~ msgid "Failed to save entry"
-#~ msgstr ""
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Failed to save entry"
+msgstr ""
 
 #: src/lib/components/entries/EntryEditDialog.svelte
 msgid "Entry deleted"
@@ -3814,6 +3856,8 @@ msgstr ""
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "<0/> Saving..."
 msgstr ""
 
@@ -3918,12 +3962,15 @@ msgstr ""
 #~ msgid "EaseOff"
 #~ msgstr ""
 
-#~ msgid "Correction Bolus"
-#~ msgstr ""
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Correction Bolus"
+msgstr ""
 
 #~ msgid "Carb Correction"
 #~ msgstr ""
 
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/meals/MealsTable.svelte
 #: src/lib/components/meals/MealsTable.svelte
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
@@ -4085,6 +4132,7 @@ msgstr ""
 msgid "Clock"
 msgstr ""
 
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
 #: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
@@ -4116,6 +4164,7 @@ msgstr ""
 #~ msgid "Test Endpoint Compatibility"
 #~ msgstr ""
 
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/layout/UserMenu.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/routes/(authenticated)/settings/+page.svelte
@@ -4133,6 +4182,7 @@ msgstr ""
 #: src/lib/navigation/settings-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/account/+page.svelte
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
+#: src/routes/(unauthenticated)/signup/+page.svelte
 msgid "Account"
 msgstr ""
 
@@ -4633,10 +4683,13 @@ msgstr ""
 #~ msgid "Duration of Insulin Action"
 #~ msgstr ""
 
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/lib/components/patient/InsulinFormFields.svelte
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
 msgid "hours"
 msgstr ""
 
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/lib/components/patient/InsulinFormFields.svelte
 msgid "Peak"
 msgstr ""
@@ -4653,7 +4706,11 @@ msgstr ""
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderRow.svelte
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/lib/components/patient/InsulinFormFields.svelte
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
 msgid "min"
 msgstr ""
 
@@ -4968,6 +5025,7 @@ msgstr ""
 #~ msgid "I:C Ratio"
 #~ msgstr ""
 
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 msgid "ISF"
 msgstr ""
@@ -5177,8 +5235,10 @@ msgstr ""
 msgid "Sensitivity"
 msgstr ""
 
-#~ msgid "Temp Basal"
-#~ msgstr ""
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Temp Basal"
+msgstr ""
 
 #. 0: snapshot.enactedDuration
 #: src/lib/components/reports/ApsStateCard.svelte
@@ -5653,6 +5713,7 @@ msgstr ""
 msgid "Basal: {0}U"
 msgstr ""
 
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
@@ -8144,10 +8205,12 @@ msgstr ""
 #~ msgid "Set up a new Nocturne instance"
 #~ msgstr ""
 
+#: src/routes/(authenticated)/onboarding/+page.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 #: src/routes/(authenticated)/settings/site/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/TenantIdentity.svelte
 #: src/routes/(unauthenticated)/setup/steps/TenantIdentity.svelte
+#: src/routes/(unauthenticated)/signup/+page.svelte
 msgid "Slug"
 msgstr ""
 
@@ -8985,6 +9048,7 @@ msgstr ""
 
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
 #: src/routes/(unauthenticated)/setup/account/+page.svelte
+#: src/routes/(unauthenticated)/signup/+page.svelte
 msgid "Create your account"
 msgstr ""
 
@@ -12672,6 +12736,7 @@ msgstr ""
 #~ msgid "Created {0} <0/>"
 #~ msgstr ""
 
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/routes/(authenticated)/settings/profile/+page.svelte
 #: src/routes/(authenticated)/settings/profile/+page.svelte
 msgid "DIA"
@@ -16230,6 +16295,7 @@ msgid "IP {0}"
 msgstr ""
 
 #: src/lib/components/account/UserProfileCard.svelte
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/lib/components/settings/ActiveSessions.svelte
 msgid "<0/> Sign out"
 msgstr ""
@@ -16589,9 +16655,11 @@ msgstr ""
 msgid "{0} pp"
 msgstr ""
 
+#. 0: params.dia
 #. 0: minutes / 60
 #. 0: minutesAfter == null ? "–" \\: minutesAfter / 60
 #. 0: e.event.timeToNadirHours.toFixed(1)
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 #: src/lib/components/reports/sensor-integrity/HypoAfterNoiseLog.svelte
@@ -17167,7 +17235,9 @@ msgstr ""
 #~ msgid "No entries yet."
 #~ msgstr ""
 
+#. 0: subject.weight
 #. 0: entry.weightKg
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/routes/(authenticated)/settings/weight/+page.svelte
 msgid "{0} kg"
 msgstr ""
@@ -19970,6 +20040,7 @@ msgstr ""
 msgid "You cannot change your own roles or permissions. Ask another member who can manage members to change them for you."
 msgstr ""
 
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/lib/components/patient/PatientClinicalForm.svelte
 msgid "Sex"
 msgstr ""
@@ -19979,6 +20050,7 @@ msgid "Biological sex, used with your age to show sex-specific typical ranges in
 msgstr ""
 
 #: src/lib/components/patient/PatientClinicalForm.svelte
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "Select sex"
 msgstr ""
 
@@ -20103,9 +20175,8 @@ msgstr ""
 msgid "Failed to load the tenants overview."
 msgstr ""
 
-#: src/lib/components/tenants/TenantsOverview.svelte
-msgid "No tenants with glucose access."
-msgstr ""
+#~ msgid "No tenants with glucose access."
+#~ msgstr ""
 
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 msgid "Failed to complete tracker"
@@ -24366,6 +24437,7 @@ msgstr "运动记录"
 msgid "Body fat"
 msgstr "体脂"
 
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Height"
 msgstr "身高"
@@ -28112,7 +28184,9 @@ msgstr ""
 msgid "Drop per unit above schedule"
 msgstr ""
 
+#. 0: params.cr
 #. 0: value.toFixed(1)
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 msgid "{0} g/U"
 msgstr ""
@@ -32823,6 +32897,7 @@ msgid "API - Device status"
 msgstr ""
 
 #: src/lib/components/admin/RoleDialog.svelte
+#: src/lib/navigation/app-navigation.svelte.ts
 msgid "Careportal"
 msgstr ""
 
@@ -37267,6 +37342,7 @@ msgid "Rising fast"
 msgstr ""
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
 msgid "Rate (U/h)"
 msgstr ""
 
@@ -38348,4 +38424,866 @@ msgstr ""
 
 #: src/routes/(authenticated)/StickyBarProbe.test.svelte
 msgid "bar"
+msgstr ""
+
+#: src/lib/navigation/app-navigation.svelte.ts
+msgid "Parameters"
+msgstr ""
+
+#: src/lib/test-stubs/CgmSimProfileCard.test-stub.svelte
+msgid "cgmsim profile card"
+msgstr ""
+
+#: src/routes/(authenticated)/careportal/+page.svelte
+msgid "Careportal - Nocturne"
+msgstr ""
+
+#: src/routes/(authenticated)/careportal/+page.svelte
+msgid "Open Careportal Pump Menu"
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/+layout.svelte
+msgid "CGM Simulator"
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/+layout.svelte
+msgid "Configure simulated subject characteristics and metabolic kinetics"
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/+layout.svelte
+msgid "CGMSIM navigation"
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/+layout.svelte
+msgid "<0/> Subject"
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/+layout.svelte
+msgid "<0/> Parameters"
+msgstr ""
+
+#. 0: data.userName
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "{0}'s Workspace"
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "My Workspace"
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "Failed to create workspace. Please try again."
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "Set up your workspace - Nocturne"
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "Workspace Creation Disabled"
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "Self-service workspace creation is currently not available on this instance."
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "<0/> Sign Out"
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "You are signed in as <0/> , but your account does not belong to any workspace. Please contact your instance administrator for an invite link."
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Workspace Pending Approval"
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "Your workspace request has been submitted to the instance administrator."
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "Go to Overview"
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "An administrator needs to approve your workspace before you can access it. You will be able to log in once your request is approved."
+msgstr ""
+
+#. 0: data.userName
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "Welcome, {0}!"
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "Welcome!"
+msgstr ""
+
+#: src/lib/components/tenants/TenantsOverview.svelte
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "Set up your workspace"
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "<0/> Choose a name and address for your personal workspace."
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Workspace Name"
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "Workspace URL"
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "Your workspace will be available at:"
+msgstr ""
+
+#. 0: subdomainPreview
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "https://{0}"
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "<0/> Creating workspace..."
+msgstr ""
+
+#: src/routes/(authenticated)/onboarding/+page.svelte
+msgid "Create Workspace"
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "We couldn't register your passkey. Please try again."
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Sign Up - Nocturne"
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Name your workspace"
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Register your passkey"
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Choose your display name and username."
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Choose an address for your personal Nocturne workspace."
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Register a secure passkey to protect your account and data."
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Workspace Created"
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Your account and workspace were registered. An administrator must approve your workspace before you can sign in."
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Your personal workspace is ready. Save your recovery codes to proceed."
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Full Name"
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "<0/> Sign in instead"
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Next: Workspace <0/>"
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Workspace Address (Slug)"
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "https://<0/>"
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Next: Passkey <0/>"
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Workspace"
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Subdomain"
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "<0/> Creating Passkey..."
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "<0/> Create Passkey"
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Passkeys use your device's biometric sensor (Face ID, Touch ID, Windows Hello) or a security key."
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Return to Sign In"
+msgstr ""
+
+#: src/routes/(unauthenticated)/signup/+page.svelte
+msgid "Proceed to Workspace"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Nocturne Careportal"
+msgstr ""
+
+#. 0: label
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "{0} recorded"
+msgstr ""
+
+#. 0: label.toLowerCase()
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Failed to record {0}"
+msgstr ""
+
+#. 0: bolus.toFixed(1); 1: wizardCarbs
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Wizard: {0}U / {1}g recorded"
+msgstr ""
+
+#. 0: foodCarbs; 1: foodProteins; 2: foodFats
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Food recorded ({0}g CHO, {1}g P, {2}g F)"
+msgstr ""
+
+#. 0: fastCarbs
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Fast carbs ({0}g) recorded"
+msgstr ""
+
+#. 0: extBolusUnits; 1: extBolusDuration
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Extended bolus ({0}U over {1}m) recorded"
+msgstr ""
+
+#. 0: drinkCarbs
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Drink ({0}g) recorded"
+msgstr ""
+
+#. 0: correctionBolusUnits
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Correction bolus ({0}U) recorded"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Basal profile updated"
+msgstr ""
+
+#. 0: tempBasalRate; 1: tempBasalDuration
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Temp basal ({0} U/h for {1} min) started"
+msgstr ""
+
+#. 0: reservoirCapacity
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Reservoir refilled ({0}U)"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Medication"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Medication recorded"
+msgstr ""
+
+#. 0: bgCheckValue; 1: bgLabel()
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "BG Check ({0} {1}) recorded"
+msgstr ""
+
+#. 0: label
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Decrease {0}"
+msgstr ""
+
+#. 0: label
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Increase {0}"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Insulin Pump"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "CGM Sensor"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Advanced Mode"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Wizard"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Carbs Correction"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Extended bolus"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Drink"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Result:"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Carbs (gr):"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Insulin Adjustment (U):"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "BG"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "CHO"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Adj."
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Carbs / Insulin"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Proteins (gr):"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Fats (gr):"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Fast Carbs (gr):"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Insulin (U):"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Duration (min):"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Basal Profile"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Refill Reservoir"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Morning 06-11 (U/h):"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Afternoon 11-18 (U/h):"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Evening 18-23 (U/h):"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Night 23-06 (U/h):"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Current Reservoir Level:"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Select new capacity :"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Press OK to refill"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Basal / Long-Acting Insulin (U):"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Medication / Note:"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "BG Check / Calibration"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Start Sensor"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Change Sensor"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Stop Sensor"
+msgstr ""
+
+#. 0: bgLabel()
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Glucose ({0}):"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Subject (CGMSIM)"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Parameters (CGMSIM)"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Therapy Profile"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Trackers & Consumables"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "CANC"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "BACK"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "OK"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Careportal Pump Menu"
+msgstr ""
+
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Touch-oriented insulin pump careportal interface"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Male"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Female"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Other / Unspecified"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Patient values generated randomly."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Simulation parameters generated randomly."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Please fill in all patient data with valid values before proceeding."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Initialization completed successfully! Welcome to CGMSIM."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Failed to complete initialization."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Workspace Initialization Required"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "This workspace has not been configured with CGMSIM model parameters yet. An administrator or member with write permissions must complete initial configuration."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Initial CGMSIM Configuration"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Set patient and simulation parameters to activate this workspace."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "<0/> 1. Patient"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "<0/> 2. Parameters"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "<0/> Step 1: Patient Data (Subject)"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Physiological traits of the virtual patient in the simulation model."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "<0/> Generate random values"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Select sex..."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Biological sex <0/>"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "kg"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Body weight (kg) <0/>"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "years"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Age (years) <0/>"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "cm"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Height (cm) <0/>"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Next: Simulation Parameters <0/>"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "<0/> Step 2: Simulation Parameters"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Insulin kinetics, carbohydrate absorption, and sensitivity."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "mg/dL/U"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "ISF (Insulin Sensitivity Factor) <0/>"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "DIA (Duration of Insulin Action) <0/>"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Carb Absorption Time <0/>"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Insulin Peak <0/>"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "g/U"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "CR (Carb Ratio) <0/>"
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "<0/> Initializing..."
+msgstr ""
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "<0/> Complete and Start"
+msgstr ""
+
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+msgid "CGMSIM Profile"
+msgstr ""
+
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+msgid "Virtual Patient"
+msgstr ""
+
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+msgid "Configure Subject"
+msgstr ""
+
+#. 0: subject.age
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+msgid "{0} yrs"
+msgstr ""
+
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+msgid "Age"
+msgstr ""
+
+#. 0: subject.height
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+msgid "{0} cm"
+msgstr ""
+
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+msgid "Kinetics"
+msgstr ""
+
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+msgid "Configure Parameters"
+msgstr ""
+
+#. 0: params.isf
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+msgid "{0} mg/dL/U"
+msgstr ""
+
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+msgid "CR"
+msgstr ""
+
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+msgid "Carb Abs"
+msgstr ""
+
+#: src/lib/components/tenants/TenantsOverview.svelte
+msgid "No workspaces yet"
+msgstr ""
+
+#: src/lib/components/tenants/TenantsOverview.svelte
+msgid "You don't have access to any workspaces yet. You can create your own personal workspace to start logging and monitoring glucose."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Please select a biological sex."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Please enter a valid weight in kg."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Please enter a valid age in years."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Please enter a valid height in cm."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Subject parameters saved successfully."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Failed to save subject parameters."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Subject - CGMSIM - Nocturne"
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Simulated Subject Profile"
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Define physiological traits of the virtual patient used in the simulation model. All fields are required."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Biological Sex <0/>"
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Used for metabolic baseline and distribution models."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Body Weight (kg) <0/>"
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Subject body weight in kilograms."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Subject age in years."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "Subject height in centimeters."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
+msgid "<0/> Save Subject"
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Please enter a valid ISF value."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Please enter a valid DIA value."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Please enter a valid carbohydrate absorption time."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Please enter a valid insulin peak time."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Please enter a valid carb ratio (CR)."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Simulation parameters saved successfully."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Failed to save simulation parameters."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Parameters - CGMSIM - Nocturne"
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Metabolic & Kinetic Parameters"
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Tune insulin kinetics, carbohydrate absorption dynamics, and sensitivity ratios for simulation. All fields are required."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Insulin Sensitivity Factor (ISF) <0/>"
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Blood glucose drop per 1 unit of insulin."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Duration of Insulin Action (DIA) <0/>"
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Effective duration of rapid-acting insulin activity."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Total duration of meal carbohydrate absorption."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Insulin Peak Time <0/>"
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Time in minutes when rapid-acting insulin reaches peak activity."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Carb Ratio (CR) <0/>"
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Grams of carbohydrate covered by 1 unit of insulin."
+msgstr ""
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "<0/> Save Parameters"
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/login/+page.svelte
+msgid "<0/> Don't have an account? Create one"
+msgstr ""
+
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+msgid "CarePortal"
 msgstr ""
