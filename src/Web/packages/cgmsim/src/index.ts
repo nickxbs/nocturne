@@ -63,10 +63,29 @@ async function main() {
           const settings = await apiClient.getCgmSimSettings(tenant.slug);
           const params = settings?.parameters;
 
-          // Fetch treatments within DIA window
-          const diaHours = params?.dia || 4.0;
+          // Fetch treatments within DIA / basal window (45h covers GLA/DET/TOU/DEG long-acting curves)
+          const diaHours = Math.max(params?.dia || 4.0, 45.0);
           const diaWindowStart = new Date(now.getTime() - diaHours * 60 * 60 * 1000).toISOString();
           const treatments = await apiClient.getRecentTreatments(tenant.slug, diaWindowStart);
+          const basalProfile = await apiClient.getBasalProfile(tenant.slug);
+
+          if (basalProfile.length > 0) {
+            const scheduleSummary = basalProfile
+              .map((b) => `${String(b.hour).padStart(2, "0")}:00=${b.rate}U/h`)
+              .join(", ");
+            console.log(
+              `  [${tenant.slug}] Pump: ENABLED (${basalProfile.length} basal segments: ${scheduleSummary})`
+            );
+          } else {
+            const basalNotes = treatments
+              .map((t) => t.notes?.trim())
+              .filter((n): n is string => Boolean(n));
+            const mdiDetail =
+              basalNotes.length > 0
+                ? `MDI active basal: [${basalNotes.join(", ")}]`
+                : "no basal schedule configured -> MDI mode";
+            console.log(`  [${tenant.slug}] Pump: DISABLED (${mdiDetail})`);
+          }
 
           // Fetch current blood glucose reading
           const currentEntry = await apiClient.getCurrentEntry(tenant.slug);
@@ -88,12 +107,13 @@ async function main() {
           }
 
           // Compute next simulated reading using @lsandini/cgmsim-lib
-          const { entry: nextEntry, result: simResult } = engine.computeNextReading(
+          const { entry: nextEntry, result: simResult, pumpEnabled } = engine.computeNextReading(
             now,
             settings?.subject,
             settings?.parameters,
             treatments,
-            currentEntry
+            currentEntry,
+            basalProfile
           );
 
           // Send reading to Nocturne Web API
@@ -103,7 +123,8 @@ async function main() {
             const prevSgv = currentEntry?.sgv ?? "init";
             console.log(
               `  [${tenant.slug}] SGV: ${prevSgv} -> ${nextEntry.sgv} mg/dL ` +
-                `(${nextEntry.direction}) | IOB: ${simResult.iob.toFixed(2)}U | ` +
+                `(${nextEntry.direction}) | Pump: ${pumpEnabled ? "ON" : "OFF"} | ` +
+                `IOB: ${simResult.iob.toFixed(2)}U | ` +
                 `COB: ${simResult.cob.toFixed(1)}g | Treatments: ${treatments.length}`
             );
           }

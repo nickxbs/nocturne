@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import type { SimulatorConfig } from "./config.js";
 import type {
+  BasalProfileEntry,
   CgmSimSettings,
   ConnectorSummary,
   CurrentEntry,
+  ProfileSummaryResponse,
   SimulatedEntry,
   TenantSummary,
   Treatment,
@@ -348,6 +350,56 @@ export class NocturneApiClient {
     } catch (err) {
       console.error(`[${tenantSlug}] Failed to fetch current entry:`, formatError(err));
       return null;
+    }
+  }
+
+  /**
+   * Fetches the tenant's active basal profile schedule to enable pump mode in CGMSIM.
+   */
+  async getBasalProfile(tenantSlug: string): Promise<BasalProfileEntry[]> {
+    try {
+      const res = await fetch(`${this.config.apiUrl}/api/v4/profile/summary`, {
+        headers: await this.getHeaders(tenantSlug),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+
+      if (!res.ok) {
+        return [];
+      }
+
+      const summary = await parseJson<ProfileSummaryResponse>(res);
+      const schedules = summary?.basalSchedules ?? [];
+      if (schedules.length === 0) {
+        return [];
+      }
+
+      const settings = summary?.therapySettings ?? [];
+      const defaultProfile =
+        settings.find((s) => s.isDefault)?.profileName ??
+        settings[0]?.profileName ??
+        schedules[0]?.profileName;
+
+      const activeSchedule =
+        schedules.find((s) => s.profileName === defaultProfile) ?? schedules[0];
+      const entries = activeSchedule?.entries ?? [];
+
+      const parsed: BasalProfileEntry[] = [];
+      for (const e of entries) {
+        if (typeof e.value !== "number" || e.value <= 0) continue;
+        let hour = 0;
+        if (typeof e.timeAsSeconds === "number") {
+          hour = Math.floor(e.timeAsSeconds / 3600);
+        } else if (typeof e.time === "string") {
+          const parts = e.time.split(":");
+          hour = parseInt(parts[0] || "0", 10) || 0;
+        }
+        parsed.push({ hour: Math.max(0, Math.min(23, hour)), rate: e.value });
+      }
+
+      return parsed;
+    } catch (err) {
+      console.warn(`[${tenantSlug}] Failed to fetch basal profile:`, formatError(err));
+      return [];
     }
   }
 

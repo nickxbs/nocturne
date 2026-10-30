@@ -80,6 +80,7 @@
     | "drink"
     | "correction-bolus"
     | "pump-menu"
+    | "basal-mdi"
     | "basal-profile"
     | "temp-basal"
     | "refill-reservoir"
@@ -88,10 +89,29 @@
     | "bg-check"
     | "settings-menu";
 
+  type BasalDrugCode = "GLA" | "DET" | "TOU" | "DEG";
+
+  const basalInsulinTypes: Array<{
+    code: BasalDrugCode;
+    label: string;
+    brand: string;
+    kinetics: string;
+  }> = [
+    { code: "GLA", label: "Glargine", brand: "Lantus", kinetics: "24h" },
+    { code: "DET", label: "Detemir", brand: "Levemir", kinetics: "16-24h" },
+    { code: "TOU", label: "Toujeo", brand: "Glargine U300", kinetics: "24-36h" },
+    { code: "DEG", label: "Degludec", brand: "Tresiba", kinetics: "42h" },
+  ];
+
   const realtimeStore = getRealtimeStore();
 
   let screen = $state<ScreenId>("wizard");
   let submitting = $state(false);
+  let togglingPump = $state(false);
+  let pumpEnabled = $state(true);
+  let pumpStateSynced = $state(false);
+  let selectedBasalDrug = $state<BasalDrugCode>("GLA");
+  let basalMdiUnits = $state(18);
   let confirmingBolus = $state(false);
   let deliveringBolus = $state(false);
   let deliveryProgress = $state(0);
@@ -146,15 +166,25 @@
     return def?.profileName ?? "Default";
   });
 
+  const activeBasalScheduleEntries = $derived.by(() => {
+    const schedule = (profileSummary?.basalSchedules ?? []).find(
+      (b) => b.profileName === activeProfileName,
+    );
+    return schedule?.entries ?? [];
+  });
+
+  const hasActivePumpSchedule = $derived(
+    activeBasalScheduleEntries.some((e) => typeof e.value === "number" && e.value > 0),
+  );
+
   const activeBasalRate = $derived.by(() => {
     const pillRate = realtimeStore.pillsData?.basal?.totalBasal;
     if (typeof pillRate === "number" && pillRate > 0) {
       return pillRate.toFixed(2);
     }
-    const schedule = (profileSummary?.basalSchedules ?? []).find(
-      (b) => b.profileName === activeProfileName,
-    );
-    const first = schedule?.entries?.[0]?.value;
+    const first = activeBasalScheduleEntries.find(
+      (e) => typeof e.value === "number" && e.value > 0,
+    )?.value;
     return typeof first === "number" ? first.toFixed(2) : "0.80";
   });
 
@@ -172,6 +202,7 @@
   );
   const targetBgMgdl = $derived(wizardPreview?.targetBg ?? 100);
   const arrowDegrees = $derived(trendAngle(realtimeStore.bgDelta ?? 0));
+  const isDoubleTrend = $derived(Math.abs(realtimeStore.bgDelta ?? 0) >= 10);
 
   const bgBadgeTone = $derived.by(() => {
     const current = realtimeStore.currentBG;
@@ -181,12 +212,12 @@
     const high = thresholds?.high ?? 180;
     const veryHigh = thresholds?.veryHigh ?? 250;
     if (current <= veryLow || current >= veryHigh) {
-      return "bg-red-950/80 border-red-500/50 text-red-200";
+      return "bg-red-950/90 border-red-500/60 text-red-200";
     }
     if (current <= low || current >= high) {
-      return "bg-amber-950/80 border-amber-500/50 text-amber-200";
+      return "bg-amber-950/90 border-amber-500/60 text-amber-200";
     }
-    return "bg-emerald-950/80 border-emerald-500/40 text-emerald-200";
+    return "bg-emerald-950/90 border-emerald-500/50 text-emerald-200";
   });
 
   function clearDeliveryTimer() {
@@ -205,15 +236,18 @@
       deliveringBolus = false;
       deliveryProgress = 0;
       basalInitialized = false;
+      pumpStateSynced = false;
       return;
     }
 
+    if (profileSummary && !pumpStateSynced) {
+      pumpEnabled = hasActivePumpSchedule;
+      pumpStateSynced = true;
+    }
+
     if (screen === "basal-profile" && !basalInitialized && profileSummary) {
-      const schedule = (profileSummary.basalSchedules ?? []).find(
-        (b) => b.profileName === activeProfileName,
-      );
-      const entries = schedule?.entries ?? [];
-      if (entries.length > 0) {
+      const entries = activeBasalScheduleEntries;
+      if (entries.some((e) => typeof e.value === "number" && e.value > 0)) {
         const rateAt = (hour: number) => {
           const targetSec = hour * 3600;
           let current = entries[0]?.value ?? 0.8;
@@ -236,6 +270,60 @@
     }
   });
 
+  async function setPumpActiveState(nextEnabled: boolean) {
+    if (togglingPump || submitting) return;
+    togglingPump = true;
+    pumpEnabled = nextEnabled;
+    try {
+      const meta = commonMeta();
+      if (nextEnabled) {
+        const morning = basalMorning > 0 ? basalMorning : 0.8;
+        const afternoon = basalAfternoon > 0 ? basalAfternoon : 0.8;
+        const evening = basalEvening > 0 ? basalEvening : 0.8;
+        const night = basalNight > 0 ? basalNight : 0.8;
+        await createEntry({
+          kind: "basalSchedule",
+          data: {
+            profileName: activeProfileName,
+            timestamp: meta.timestamp,
+            dataSource: "manual",
+            entries: [
+              { time: "00:00", timeAsSeconds: 0, value: night },
+              { time: "06:00", timeAsSeconds: 6 * 3600, value: morning },
+              { time: "11:00", timeAsSeconds: 11 * 3600, value: afternoon },
+              { time: "18:00", timeAsSeconds: 18 * 3600, value: evening },
+              { time: "23:00", timeAsSeconds: 23 * 3600, value: night },
+            ],
+          },
+        });
+        await profileQuery.refresh();
+        realtimeStore.noteTreatmentWrite();
+        toast.success("Insulin pump enabled");
+        if (screen === "basal-mdi") {
+          screen = "pump-menu";
+        }
+      } else {
+        await createEntry({
+          kind: "basalSchedule",
+          data: {
+            profileName: activeProfileName,
+            timestamp: meta.timestamp,
+            dataSource: "manual",
+            entries: [{ time: "00:00", timeAsSeconds: 0, value: 0 }],
+          },
+        });
+        await profileQuery.refresh();
+        realtimeStore.noteTreatmentWrite();
+        toast.success("Insulin pump disabled (MDI basal mode)");
+        screen = "basal-mdi";
+      }
+    } catch (err) {
+      toast.error(remoteErrorMessage(err, "Could not update pump mode"));
+    } finally {
+      togglingPump = false;
+    }
+  }
+
   const parentScreen: Record<ScreenId, ScreenId | null> = {
     root: null,
     "meal-menu": "root",
@@ -246,6 +334,7 @@
     drink: "meal-menu",
     "correction-bolus": "root",
     "pump-menu": "root",
+    "basal-mdi": "root",
     "basal-profile": "pump-menu",
     "temp-basal": "pump-menu",
     "refill-reservoir": "pump-menu",
@@ -270,6 +359,8 @@
         return drinkCarbs > 0;
       case "correction-bolus":
         return correctionBolusUnits > 0;
+      case "basal-mdi":
+        return basalMdiUnits > 0;
       case "basal-profile":
         return true;
       case "temp-basal":
@@ -539,7 +630,32 @@
           break;
         }
 
+        case "basal-mdi": {
+          const noteText = `${selectedBasalDrug} ${basalMdiUnits}`;
+          await createEntry({
+            kind: "basalInjection",
+            data: {
+              ...meta,
+              units: basalMdiUnits,
+              notes: noteText,
+            },
+          });
+          await createEntry({
+            kind: "note",
+            data: {
+              ...meta,
+              text: noteText,
+              eventType: "Announcement",
+              isAnnouncement: true,
+            },
+          });
+          realtimeStore.noteTreatmentWrite();
+          toast.success(`Basal (${selectedBasalDrug} ${basalMdiUnits}U) recorded`);
+          break;
+        }
+
         case "basal-profile": {
+          pumpEnabled = true;
           await createEntry({
             kind: "basalSchedule",
             data: {
@@ -782,28 +898,31 @@
               <span class="font-bold text-white tracking-wide text-xs">
                 {formattedClock}
               </span>
-              <span
-                class="bg-slate-800/90 text-sky-400 px-1.5 py-0.5 rounded text-[10px] font-semibold border border-sky-400/20 truncate"
+              <button
+                type="button"
+                disabled={togglingPump}
+                onclick={() => void setPumpActiveState(!pumpEnabled)}
+                title={pumpEnabled
+                  ? "Select to disable the insulin pump and switch to MDI basal"
+                  : "Select to enable the insulin pump"}
+                class="tactile-btn px-2 py-0.5 rounded text-[10px] font-semibold border truncate flex items-center gap-1 transition-colors {pumpEnabled
+                  ? 'bg-slate-800/90 hover:bg-slate-700 text-sky-400 border-sky-400/30'
+                  : 'bg-amber-950/80 hover:bg-amber-900/80 text-amber-300 border-amber-500/40'}"
               >
-                BASAL: {activeBasalRate} U/h
-              </span>
+                <span
+                  class="w-1.5 h-1.5 rounded-full {pumpEnabled
+                    ? 'bg-emerald-400'
+                    : 'bg-amber-400'}"
+                ></span>
+                {#if pumpEnabled}
+                  <span>PUMP ON • {activeBasalRate} U/h</span>
+                {:else}
+                  <span>PUMP OFF • MDI</span>
+                {/if}
+              </button>
             </div>
 
             <div class="flex items-center gap-2 shrink-0">
-              <!-- Live CGM Telemetry Badge -->
-              <div
-                class="flex items-center gap-1 border px-2 py-0.5 rounded-full font-sans font-bold {bgBadgeTone}"
-              >
-                <span class="text-xs">{bg(realtimeStore.currentBG)}</span>
-                <span class="text-[10px] opacity-90 font-mono flex items-center gap-0.5">
-                  <ArrowRight
-                    class="size-3"
-                    style="transform: rotate({arrowDegrees}deg)"
-                  />
-                  {bgDelta(realtimeStore.bgDelta ?? 0)}
-                </span>
-              </div>
-
               <!-- Insulin Cartridge Reservoir -->
               <div
                 class="flex items-center gap-1 text-slate-300"
@@ -822,6 +941,56 @@
               </div>
             </div>
           </header>
+
+          <!-- Prominent Live CGM Glucose & Trend Arrow Banner -->
+          <div
+            class="mt-2 flex items-center justify-between rounded-xl border px-3 py-2 shadow-inner {bgBadgeTone}"
+            data-purpose="prominent-cgm-banner"
+          >
+            <div class="flex items-center gap-3">
+              <div class="flex items-baseline gap-1">
+                <span class="font-mono text-2xl sm:text-3xl font-black tracking-tight leading-none">
+                  {bg(realtimeStore.currentBG)}
+                </span>
+                <span class="text-[10px] font-mono font-bold opacity-80 uppercase">
+                  {bgLabel()}
+                </span>
+              </div>
+
+              <!-- High-Visibility Trend Arrow(s) -->
+              <div
+                class="flex h-9 min-w-9 px-1.5 items-center justify-center rounded-lg bg-black/40 border border-white/15 shadow"
+                title="Glucose trend direction"
+              >
+                <div class="flex items-center -space-x-1">
+                  <ArrowRight
+                    class="size-5 sm:size-6 stroke-[3] transition-transform duration-500"
+                    style="transform: rotate({arrowDegrees}deg)"
+                  />
+                  {#if isDoubleTrend}
+                    <ArrowRight
+                      class="size-5 sm:size-6 stroke-[3] transition-transform duration-500"
+                      style="transform: rotate({arrowDegrees}deg)"
+                    />
+                  {/if}
+                </div>
+              </div>
+
+              <div class="flex flex-col">
+                <span class="font-mono text-xs sm:text-sm font-extrabold leading-tight">
+                  {bgDelta(realtimeStore.bgDelta ?? 0)} {bgLabel()}
+                </span>
+                <span class="text-[9px] font-mono opacity-75">
+                  {realtimeStore.timeSinceReading || "Live CGM"}
+                </span>
+              </div>
+            </div>
+
+            <div class="text-right font-mono text-[10px] opacity-85 hidden sm:block">
+              <div class="uppercase tracking-wider text-[9px] opacity-75">Target BG</div>
+              <div class="font-bold text-xs">{bg(targetBgMgdl)} {bgLabel()}</div>
+            </div>
+          </div>
 
           <!-- Mode Selector / Medical Wizard Header Tabs -->
           <div
@@ -1165,6 +1334,40 @@
               </div>
             </section>
           {:else if screen === "root"}
+            <!-- Pump / Basal Mode Switcher Bar -->
+            <div
+              class="bg-[#101726] border border-slate-800 rounded-xl p-1.5 mb-2 flex items-center justify-between gap-2"
+            >
+              <div class="flex items-center gap-2 pl-1.5">
+                <Syringe class="size-3.5 {pumpEnabled ? 'text-sky-400' : 'text-amber-400'}" />
+                <span class="text-[11px] font-bold text-slate-200">
+                  {pumpEnabled ? "Insulin Pump Active" : "Pump Disabled (MDI Basal)"}
+                </span>
+              </div>
+              <div class="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={togglingPump}
+                  onclick={() => void setPumpActiveState(true)}
+                  class="tactile-btn px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors {pumpEnabled
+                    ? 'bg-emerald-600 text-white shadow'
+                    : 'bg-slate-800/80 text-slate-400 hover:text-slate-200'}"
+                >
+                  PUMP ON
+                </button>
+                <button
+                  type="button"
+                  disabled={togglingPump}
+                  onclick={() => void setPumpActiveState(false)}
+                  class="tactile-btn px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors {!pumpEnabled
+                    ? 'bg-amber-600 text-white shadow'
+                    : 'bg-slate-800/80 text-slate-400 hover:text-slate-200'}"
+                >
+                  PUMP OFF
+                </button>
+              </div>
+            </div>
+
             <div class="grid grid-cols-2 gap-2 my-1">
               <button
                 type="button"
@@ -1200,22 +1403,41 @@
                 <ChevronRight class="size-4 text-slate-500" />
               </button>
 
-              <button
-                type="button"
-                onclick={() => (screen = "pump-menu")}
-                class="tactile-btn bg-[#101726] hover:bg-slate-800/90 border border-slate-800 hover:border-sky-500/40 rounded-xl p-3 flex items-center justify-between text-left transition-all"
-              >
-                <div class="flex items-center gap-2.5">
-                  <div class="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                    <Syringe class="size-4" />
+              {#if pumpEnabled}
+                <button
+                  type="button"
+                  onclick={() => (screen = "pump-menu")}
+                  class="tactile-btn bg-[#101726] hover:bg-slate-800/90 border border-slate-800 hover:border-sky-500/40 rounded-xl p-3 flex items-center justify-between text-left transition-all"
+                >
+                  <div class="flex items-center gap-2.5">
+                    <div class="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                      <Syringe class="size-4" />
+                    </div>
+                    <div>
+                      <div class="text-xs font-bold text-white">Insulin Pump</div>
+                      <div class="text-[10px] text-slate-400">Basal & Reservoir</div>
+                    </div>
                   </div>
-                  <div>
-                    <div class="text-xs font-bold text-white">Insulin Pump</div>
-                    <div class="text-[10px] text-slate-400">Basal & Reservoir</div>
+                  <ChevronRight class="size-4 text-slate-500" />
+                </button>
+              {:else}
+                <button
+                  type="button"
+                  onclick={() => (screen = "basal-mdi")}
+                  class="tactile-btn bg-[#101726] hover:bg-slate-800/90 border border-amber-500/40 hover:border-amber-400 rounded-xl p-3 flex items-center justify-between text-left transition-all"
+                >
+                  <div class="flex items-center gap-2.5">
+                    <div class="p-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                      <Syringe class="size-4" />
+                    </div>
+                    <div>
+                      <div class="text-xs font-bold text-amber-300">Basal Menu</div>
+                      <div class="text-[10px] text-slate-400">GLA • DET • TOU • DEG</div>
+                    </div>
                   </div>
-                </div>
-                <ChevronRight class="size-4 text-slate-500" />
-              </button>
+                  <ChevronRight class="size-4 text-amber-400" />
+                </button>
+              {/if}
 
               <button
                 type="button"
@@ -1472,6 +1694,25 @@
             </div>
           {:else if screen === "pump-menu"}
             <div class="flex flex-col gap-2 my-1">
+              <div
+                class="bg-[#101726] border border-slate-800 rounded-xl p-2 flex items-center justify-between"
+              >
+                <div>
+                  <div class="text-xs font-bold text-emerald-400">Pump Mode: ACTIVE</div>
+                  <div class="text-[10px] text-slate-400">
+                    Continuous basal infusion ({activeBasalRate} U/h)
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={togglingPump}
+                  onclick={() => void setPumpActiveState(false)}
+                  class="tactile-btn px-2.5 py-1.5 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/40 text-[10px] font-mono font-bold"
+                >
+                  Disable Pump (MDI)
+                </button>
+              </div>
+
               <button
                 type="button"
                 onclick={() => (screen = "basal-profile")}
@@ -1507,6 +1748,84 @@
                 </div>
                 <ChevronRight class="size-4 text-slate-500" />
               </button>
+            </div>
+          {:else if screen === "basal-mdi"}
+            <div class="flex flex-col gap-2 my-1">
+              <div
+                class="bg-[#101726] border border-amber-500/30 rounded-xl p-2 flex items-center justify-between"
+              >
+                <div>
+                  <div class="text-xs font-bold text-amber-400">
+                    Pump Disabled • Basal Menu (MDI)
+                  </div>
+                  <div class="text-[10px] text-slate-400">
+                    Select one of the 4 long-acting basal insulins
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={togglingPump}
+                  onclick={() => void setPumpActiveState(true)}
+                  class="tactile-btn px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-[10px] font-mono font-bold"
+                >
+                  Enable Pump
+                </button>
+              </div>
+
+              <!-- 4 Basal Insulin Types Selector -->
+              <div class="grid grid-cols-2 gap-1.5">
+                {#each basalInsulinTypes as item (item.code)}
+                  <button
+                    type="button"
+                    onclick={() => (selectedBasalDrug = item.code)}
+                    class="tactile-btn rounded-xl p-2.5 border text-left transition-all flex flex-col justify-between {selectedBasalDrug ===
+                    item.code
+                      ? 'bg-sky-600/25 border-sky-400 text-white shadow'
+                      : 'bg-[#101726] border-slate-800 text-slate-300 hover:bg-slate-800/70'}"
+                  >
+                    <div class="flex items-center justify-between w-full mb-0.5">
+                      <span
+                        class="text-xs font-mono font-black {selectedBasalDrug ===
+                        item.code
+                          ? 'text-sky-300'
+                          : 'text-slate-200'}"
+                      >
+                        {item.code}
+                      </span>
+                      <span
+                        class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-black/50 text-slate-400"
+                      >
+                        {item.kinetics}
+                      </span>
+                    </div>
+                    <div class="text-xs font-bold text-white">{item.label}</div>
+                    <div class="text-[10px] text-slate-400">{item.brand}</div>
+                  </button>
+                {/each}
+              </div>
+
+              {@render stepperRow(
+                `Basal Dose (${selectedBasalDrug})`,
+                basalMdiUnits,
+                "U",
+                () => (basalMdiUnits = stepValue(basalMdiUnits, -1, 1, 100, 0)),
+                () => (basalMdiUnits = stepValue(basalMdiUnits, 1, 1, 100, 0)),
+                (v) => (basalMdiUnits = Math.max(1, Math.round(v))),
+                "blue",
+                1,
+              )}
+
+              <div class="flex gap-1.5 justify-center">
+                {#each [10, 15, 20, 25] as preset (preset)}
+                  <button
+                    type="button"
+                    onclick={() => (basalMdiUnits = preset)}
+                    class="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[10px] font-mono text-slate-200 border border-slate-700/60"
+                  >
+                    {preset}U
+                  </button>
+                {/each}
+              </div>
             </div>
           {:else if screen === "basal-profile"}
             <div class="flex flex-col gap-1.5 my-1">

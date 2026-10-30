@@ -75,4 +75,22 @@ describe("CgmSimulatorEngine using @lsandini/cgmsim-lib", () => {
     expect(result.cob).toBeGreaterThan(0);
     expect(entry.sgv).toBeDefined();
   });
+
+  it("enables pump mode when a basalProfile is provided", () => {
+    const now = new Date();
+    const prev: CurrentEntry = { sgv: 110, date: now.getTime() - 300000 };
+
+    const withoutPump = engine.computeNextReading(now, mockSubject, mockParams, [], prev);
+    expect(withoutPump.pumpEnabled).toBe(false);
+
+    const withPump = engine.computeNextReading(
+      now,
+      mockSubject,
+      mockParams,
+      [],
+      prev,
+      [{ hour: 0, rate: 0.85 }]
+    );
+    expect(withPump.pumpEnabled).toBe(true);
+  });
 });

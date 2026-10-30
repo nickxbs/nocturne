@@ -43,6 +43,7 @@ export interface Treatment {
   eventType?: string;
   insulin?: number | null;
   carbs?: number | null;
+  notes?: string | null;
   created_at?: string;
   date?: number;
   mills?: number;
@@ -74,4 +75,24 @@ export interface CurrentEntry {
   dateString?: string;
   direction?: TrendDirection;
   device?: string;
+}
+
+export interface BasalProfileEntry {
+  hour: number;
+  rate: number;
+}
+
+export interface ProfileSummaryResponse {
+  therapySettings?: Array<{
+    profileName?: string;
+    isDefault?: boolean;
+  }>;
+  basalSchedules?: Array<{
+    profileName?: string;
+    entries?: Array<{
+      time?: string;
+      timeAsSeconds?: number;
+      value?: number;
+    }>;
+  }>;
 }

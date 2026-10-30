@@ -6,6 +6,7 @@ import {
   type CoreSimulationResult,
 } from "@lsandini/cgmsim-lib";
 import type {
+  BasalProfileEntry,
   CgmSimParameters,
   CgmSimSubject,
   CurrentEntry,
@@ -57,8 +58,9 @@ export class CgmSimulatorEngine {
     subject: CgmSimSubject | undefined,
     parameters: CgmSimParameters | undefined,
     treatments: Treatment[],
-    previousEntry: CurrentEntry | null
-  ): { entry: SimulatedEntry; result: CoreSimulationResult } {
+    previousEntry: CurrentEntry | null,
+    basalProfile?: BasalProfileEntry[]
+  ): { entry: SimulatedEntry; result: CoreSimulationResult; pumpEnabled: boolean } {
     const params = parameters || this.defaultParameters;
     const subj = subject || this.defaultSubject;
 
@@ -93,6 +95,14 @@ export class CgmSimulatorEngine {
           carbs: t.carbs,
         });
       }
+
+      if (t.notes && t.notes.trim().length > 0) {
+        coreTreatments.push({
+          timestamp: ts,
+          type: "basal",
+          notes: t.notes.trim(),
+        });
+      }
     }
 
     // Convert recent Nocturne entries to CoreGlucoseEntry[]
@@ -109,11 +119,16 @@ export class CgmSimulatorEngine {
       });
     }
 
+    const activeBasalProfile =
+      basalProfile && basalProfile.length > 0 ? basalProfile : undefined;
+    const pumpEnabled = Boolean(activeBasalProfile);
+
     // Run simulation through @lsandini/cgmsim-lib
     const simResult = simulateGlucose({
       patient,
       treatments: coreTreatments,
       recentEntries,
+      basalProfile: activeBasalProfile,
       targetTime: now,
     });
 
@@ -128,6 +143,6 @@ export class CgmSimulatorEngine {
       device: "cgmsim-node",
     };
 
-    return { entry, result: simResult };
+    return { entry, result: simResult, pumpEnabled };
   }
 }
