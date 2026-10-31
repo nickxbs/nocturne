@@ -137,7 +137,7 @@
           <div class="text-center">
             <Button
               variant="link"
-              href={resolve("/signup")}
+              href={resolve("/(unauthenticated)/signup")}
               data-testid="signup-link"
             >
               <UserPlus class="mr-1 h-4 w-4" />

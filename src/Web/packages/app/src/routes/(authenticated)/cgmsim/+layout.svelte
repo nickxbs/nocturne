@@ -31,14 +31,14 @@
 
   <nav class="flex border-b border-border gap-2" aria-label="CGMSIM navigation">
     <a
-      href={resolve("/cgmsim/subject")}
+      href={resolve("/(authenticated)/cgmsim/subject")}
       class="inline-flex items-center gap-2 px-4 py-2 border-b-2 font-medium text-sm transition-colors {isSubject ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30'}"
     >
       <User class="h-4 w-4" />
       Subject
     </a>
     <a
-      href={resolve("/cgmsim/parameters")}
+      href={resolve("/(authenticated)/cgmsim/parameters")}
       class="inline-flex items-center gap-2 px-4 py-2 border-b-2 font-medium text-sm transition-colors {isParameters ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30'}"
     >
       <SlidersHorizontal class="h-4 w-4" />

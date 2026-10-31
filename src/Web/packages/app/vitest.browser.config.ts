@@ -75,6 +75,10 @@ export default defineConfig({
         "./src/lib/test-stubs/sveltekit.ts",
         import.meta.url
       )),
+      "node:module": fileURLToPath(new URL(
+        "./src/lib/test-stubs/node-module.ts",
+        import.meta.url
+      )),
     },
   },
 });

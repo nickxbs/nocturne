@@ -37,7 +37,7 @@
           <Button
             variant="ghost"
             size="icon-xs"
-            href={resolve("/cgmsim/subject")}
+            href={resolve("/(authenticated)/cgmsim/subject")}
             title="Configure Subject"
             aria-label="Configure Subject"
             class="h-5 w-5 text-muted-foreground hover:text-foreground"
@@ -84,7 +84,7 @@
           <Button
             variant="ghost"
             size="icon-xs"
-            href={resolve("/cgmsim/parameters")}
+            href={resolve("/(authenticated)/cgmsim/parameters")}
             title="Configure Parameters"
             aria-label="Configure Parameters"
             class="h-5 w-5 text-muted-foreground hover:text-foreground"

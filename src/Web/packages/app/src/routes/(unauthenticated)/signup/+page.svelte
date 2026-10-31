@@ -134,7 +134,7 @@
 
   function handleFinish() {
     if (pendingApproval || !handoffUrl) {
-      goto(resolve("/auth/login"));
+      goto(resolve("/(unauthenticated)/auth/login"));
     } else {
       window.location.href = handoffUrl;
     }
@@ -270,7 +270,7 @@
             </FormField>
 
             <div class="flex justify-between pt-4">
-              <Button variant="ghost" href={resolve("/auth/login")}>
+              <Button variant="ghost" href={resolve("/(unauthenticated)/auth/login")}>
                 <ArrowLeft class="mr-1 h-4 w-4" />
                 Sign in instead
               </Button>
