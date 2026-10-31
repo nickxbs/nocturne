@@ -4,12 +4,59 @@ import { playwright } from "@vitest/browser-playwright";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vitest/config";
 
+const stubs = {
+  // Before `$app/env`, which would otherwise match them as a prefix.
+  "$app/env/private": fileURLToPath(new URL(
+    "./src/lib/test-stubs/app-env-vars.ts",
+    import.meta.url
+  )),
+  "$app/env/public": fileURLToPath(new URL(
+    "./src/lib/test-stubs/app-env-vars.ts",
+    import.meta.url
+  )),
+  "$app/env": fileURLToPath(new URL(
+    "./src/lib/test-stubs/app-environment.ts",
+    import.meta.url
+  )),
+  "$app/navigation": fileURLToPath(new URL(
+    "./src/lib/test-stubs/app-navigation.ts",
+    import.meta.url
+  )),
+  "$app/paths": fileURLToPath(new URL(
+    "./src/lib/test-stubs/app-paths.ts",
+    import.meta.url
+  )),
+  "$app/server": fileURLToPath(new URL(
+    "./src/lib/test-stubs/app-server.ts",
+    import.meta.url
+  )),
+  "$app/state": fileURLToPath(new URL(
+    "./src/lib/test-stubs/app-state.ts",
+    import.meta.url
+  )),
+  "@sveltejs/kit": fileURLToPath(new URL(
+    "./src/lib/test-stubs/sveltekit.ts",
+    import.meta.url
+  )),
+  "node:module": fileURLToPath(new URL(
+    "./src/lib/test-stubs/node-module.ts",
+    import.meta.url
+  )),
+  module: fileURLToPath(new URL(
+    "./src/lib/test-stubs/node-module.ts",
+    import.meta.url
+  )),
+};
+
 export default defineConfig({
   plugins: [
     svelte({ preprocess: vitePreprocess(), compilerOptions: { experimental: { async: true } } }),
     tailwindcss(),
   ],
-  resolve: { dedupe: ["svelte", "@internationalized/date", "bits-ui"] },
+  resolve: {
+    dedupe: ["svelte", "@internationalized/date", "bits-ui"],
+    alias: stubs,
+  },
   // pnpm 11's global links store lives outside the workspace root, so vite's strict fs
   // allow-list blocks serving vitest-browser-svelte to the browser runner.
   server: { fs: { strict: false } },
@@ -19,7 +66,10 @@ export default defineConfig({
   // as files load, it re-bundles mid-run and reloads the browser, and a test file whose import was
   // in flight then fails with "Failed to fetch dynamically imported module". Each
   // @lucide/svelte/icons/* path is its own dep, so it is excluded rather than pre-bundled.
-  optimizeDeps: { exclude: ["runed/kit", "sveltekit-search-params", "@lucide/svelte"], entries: ["src/**/*.svelte.test.ts"] },
+  optimizeDeps: {
+    exclude: ["runed/kit", "sveltekit-search-params", "@lucide/svelte", "node:module"],
+    entries: ["src/**/*.svelte.test.ts"],
+  },
   test: {
     include: ["src/**/*.svelte.test.ts"],
     setupFiles: ["vitest-browser-svelte", "./vitest.browser.setup.ts"],
@@ -41,44 +91,6 @@ export default defineConfig({
       headless: true,
       instances: [{ browser: "chromium" }],
     },
-    alias: {
-      // Before `$app/env`, which would otherwise match them as a prefix.
-      "$app/env/private": fileURLToPath(new URL(
-        "./src/lib/test-stubs/app-env-vars.ts",
-        import.meta.url
-      )),
-      "$app/env/public": fileURLToPath(new URL(
-        "./src/lib/test-stubs/app-env-vars.ts",
-        import.meta.url
-      )),
-      "$app/env": fileURLToPath(new URL(
-        "./src/lib/test-stubs/app-environment.ts",
-        import.meta.url
-      )),
-      "$app/navigation": fileURLToPath(new URL(
-        "./src/lib/test-stubs/app-navigation.ts",
-        import.meta.url
-      )),
-      "$app/paths": fileURLToPath(new URL(
-        "./src/lib/test-stubs/app-paths.ts",
-        import.meta.url
-      )),
-      "$app/server": fileURLToPath(new URL(
-        "./src/lib/test-stubs/app-server.ts",
-        import.meta.url
-      )),
-      "$app/state": fileURLToPath(new URL(
-        "./src/lib/test-stubs/app-state.ts",
-        import.meta.url
-      )),
-      "@sveltejs/kit": fileURLToPath(new URL(
-        "./src/lib/test-stubs/sveltekit.ts",
-        import.meta.url
-      )),
-      "node:module": fileURLToPath(new URL(
-        "./src/lib/test-stubs/node-module.ts",
-        import.meta.url
-      )),
-    },
+    alias: stubs,
   },
 });
