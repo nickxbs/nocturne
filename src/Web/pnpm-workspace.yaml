@@ -102,3 +102,4 @@ packageExtensions:
 # Drop an entry once its version ages past the cutoff.
 minimumReleaseAgeExclude:
   - openapi-remote-codegen@0.9.0
+  - "@lsandini/cgmsim-lib@0.13.0"
