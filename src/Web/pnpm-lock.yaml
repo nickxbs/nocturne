@@ -1921,7 +1921,7 @@ packages:
     resolution: {integrity: sha512-nYsum10eJMTo+ySBlYXvSrvgD1NDCVUeOlxLBbelq3XUmHu9L48VNR3P0BOmhLamYCTEgjatTj0PyPLfjL1W9g==}
 
   '@lsandini/cgmsim-lib@0.13.0':
-    resolution: {integrity: sha512-AN/QBgD7nfVR+mSAoTlLYr5ukFL1aUjxeXGMrv5xbGT4Sq7KPPeh3IEv6uADtYvwmBfoKFiwdYxtHDuBk7EYxQ==}
+    resolution: {integrity: sha512-hg9Oh5SGV731GJ5C35q/zTJS1uIPMmizZn89WoZe02ebVif/m5ylflfoeV+pbRzN9nDnKDp+9f68Dmvg8r1+4g==}
     engines: {node: '>=16.0.0'}
 
   '@lucide/svelte@0.555.0':
