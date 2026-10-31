@@ -1,6 +1,14 @@
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  resolve: {
+    conditions: ['svelte'],
+  },
+  ssr: {
+    resolve: {
+      conditions: ['svelte'],
+    },
+  },
   test: {
     include: ['src/**/*.test.ts'],
     // Off unless asked for (`--coverage`); CI collects it for the PR coverage report.

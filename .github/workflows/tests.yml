@@ -508,7 +508,7 @@ jobs:
   web-app-tests:
     needs: [changes, build]
     if: needs.changes.outputs.web == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     defaults:
       run:
@@ -522,16 +522,19 @@ jobs:
         with:
           name: api-client
           path: src/Web/packages/app/src/lib/api
-      - uses: ./.github/actions/setup-playwright
+      - id: playwright
+        uses: ./.github/actions/setup-playwright
         with:
           working-directory: src/Web/packages/app
-      - name: App unit tests
+      - name: Sync SvelteKit
+        id: sync
         run: |
           node tools/ensure-check-deps.mjs
           pnpm exec svelte-kit sync
-          pnpm exec vitest --config vitest.config.ts --run --coverage
+      - name: App unit tests
+        run: pnpm exec vitest --config vitest.config.ts --run --coverage
       - name: App browser component tests
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.playwright.outcome == 'success' && steps.sync.outcome == 'success' }}
         run: pnpm exec vitest --config vitest.browser.config.ts --run --coverage
       - uses: actions/upload-artifact@v6
         if: always()
@@ -626,7 +629,7 @@ jobs:
   e2e:
     needs: [changes, images]
     if: needs.changes.outputs.e2e == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5

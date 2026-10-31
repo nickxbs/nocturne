@@ -106,7 +106,8 @@ public class SignupIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task InactiveTenant_WhenActivatedByAdmin_BecomesAccessible()
     {
-        var tenantService = Fixture.Services.GetRequiredService<ITenantService>();
+        using var scope = Fixture.Services.CreateScope();
+        var tenantService = scope.ServiceProvider.GetRequiredService<ITenantService>();
         var slug = $"inactive-{Guid.NewGuid():N}"[..18];
         var creatorSubjectId = Guid.CreateVersion7();
         var created = await tenantService.CreateAsync(slug, "Inactive Clinic", creatorSubjectId, isActive: false);

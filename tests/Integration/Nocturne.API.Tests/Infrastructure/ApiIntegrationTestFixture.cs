@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -472,6 +473,14 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
             builder.UseSetting("DemoService:Enabled", "false");
             builder.UseSetting("Operator:AllowSelfServiceCreation", "true");
             builder.UseSetting("Operator:Signup:Enabled", "true");
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Operator:AllowSelfServiceCreation"] = "true",
+                    ["Operator:Signup:Enabled"] = "true",
+                });
+            });
             builder.ConfigureTestServices(services =>
             {
                 services.AddSingleton<IDemoModeService>(DemoModeService);
