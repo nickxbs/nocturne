@@ -4,6 +4,7 @@ import {
   type CoreTreatment,
   type CoreGlucoseEntry,
   type CoreSimulationResult,
+  type SimulationLogger,
 } from "@lsandini/cgmsim-lib";
 import type {
   BasalProfileEntry,
@@ -59,7 +60,8 @@ export class CgmSimulatorEngine {
     parameters: CgmSimParameters | undefined,
     treatments: Treatment[],
     previousEntry: CurrentEntry | null,
-    basalProfile?: BasalProfileEntry[]
+    basalProfile?: BasalProfileEntry[],
+    options?: { debug?: boolean; logger?: SimulationLogger }
   ): { entry: SimulatedEntry; result: CoreSimulationResult; pumpEnabled: boolean } {
     const params = parameters || this.defaultParameters;
     const subj = subject || this.defaultSubject;
@@ -124,13 +126,29 @@ export class CgmSimulatorEngine {
     const pumpEnabled = Boolean(activeBasalProfile);
 
     // Run simulation through @lsandini/cgmsim-lib
-    const simResult = simulateGlucose({
-      patient,
-      treatments: coreTreatments,
-      recentEntries,
-      basalProfile: activeBasalProfile,
-      targetTime: now,
-    });
+    let simResult: CoreSimulationResult;
+    try {
+      simResult = simulateGlucose({
+        patient,
+        treatments: coreTreatments,
+        recentEntries,
+        basalProfile: activeBasalProfile,
+        targetTime: now,
+        logger: options?.logger,
+      });
+    } catch (simErr) {
+      console.error("[CgmSimulatorEngine] Failed during simulateGlucose execution:", simErr);
+      console.error("[CgmSimulatorEngine] Input Payload Dump:", JSON.stringify({
+        targetTime: now.toISOString(),
+        patient,
+        treatmentsCount: coreTreatments.length,
+        treatments: coreTreatments,
+        recentEntries,
+        pumpEnabled,
+        basalProfile: activeBasalProfile,
+      }, null, 2));
+      throw simErr;
+    }
 
     const direction: TrendDirection = toTrendDirection(simResult.direction);
 
