@@ -110,7 +110,7 @@ public class SignupIntegrationTests : ApiIntegrationTestBase
         using var scope = Fixture.Services.CreateScope();
         var tenantService = scope.ServiceProvider.GetRequiredService<ITenantService>();
         var slug = $"inactive-{Guid.NewGuid():N}"[..18];
-        var creatorSubjectId = Guid.CreateVersion7();
+        var creatorSubjectId = Fixture.OwnerSubjectId;
         var created = await tenantService.CreateAsync(slug, "Inactive Clinic", creatorSubjectId, isActive: false);
 
         var baseDomain = Fixture.Services.GetRequiredService<IOptions<BaseDomainOptions>>().Value.BaseDomain;
