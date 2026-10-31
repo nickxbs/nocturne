@@ -392,8 +392,8 @@ importers:
   packages/cgmsim:
     dependencies:
       '@lsandini/cgmsim-lib':
-        specifier: ^0.12.0
-        version: 0.12.0(encoding@0.1.13)
+        specifier: ^0.13.0
+        version: 0.13.0(encoding@0.1.13)
     devDependencies:
       '@nocturne/eslint-config':
         specifier: workspace:*
@@ -1920,7 +1920,7 @@ packages:
   '@logtail/types@0.4.20':
     resolution: {integrity: sha512-nYsum10eJMTo+ySBlYXvSrvgD1NDCVUeOlxLBbelq3XUmHu9L48VNR3P0BOmhLamYCTEgjatTj0PyPLfjL1W9g==}
 
-  '@lsandini/cgmsim-lib@0.12.0':
+  '@lsandini/cgmsim-lib@0.13.0':
     resolution: {integrity: sha512-AN/QBgD7nfVR+mSAoTlLYr5ukFL1aUjxeXGMrv5xbGT4Sq7KPPeh3IEv6uADtYvwmBfoKFiwdYxtHDuBk7EYxQ==}
     engines: {node: '>=16.0.0'}
 
@@ -8237,7 +8237,7 @@ snapshots:
 
   '@logtail/types@0.4.20': {}
 
-  '@lsandini/cgmsim-lib@0.12.0(encoding@0.1.13)':
+  '@lsandini/cgmsim-lib@0.13.0(encoding@0.1.13)':
     dependencies:
       '@logtail/pino': 0.4.22(encoding@0.1.13)(pino@7.11.0)
       crypto: 1.0.1

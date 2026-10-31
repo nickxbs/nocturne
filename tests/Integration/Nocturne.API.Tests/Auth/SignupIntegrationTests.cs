@@ -8,6 +8,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
 using Xunit.Abstractions;
@@ -119,7 +120,11 @@ public class SignupIntegrationTests : ApiIntegrationTestBase
             inactiveRes.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         }
 
-        var activateRes = await AuthenticatedClient.PostAsync($"/api/v4/admin/tenants/{created.Id}/activate", null);
+        using var adminClient = Fixture.CreateApexClient();
+        adminClient.DefaultRequestHeaders.Add("X-Instance-Key", HashUtils.Sha256Hex(ApiIntegrationTestFixture.InstanceKey));
+        adminClient.DefaultRequestHeaders.Add("X-Instance-Service", "nocturne-web");
+
+        var activateRes = await adminClient.PostAsync($"/api/v4/admin/tenants/{created.Id}/activate", null);
         activateRes.StatusCode.Should().Be(HttpStatusCode.OK);
         var activatedDto = await activateRes.Content.ReadFromJsonAsync<TenantDto>();
         activatedDto.Should().NotBeNull();

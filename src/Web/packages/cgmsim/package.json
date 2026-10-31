@@ -37,6 +37,6 @@
     "node": ">=24"
   },
   "dependencies": {
-    "@lsandini/cgmsim-lib": "^0.12.0"
+    "@lsandini/cgmsim-lib": "^0.13.0"
   }
 }

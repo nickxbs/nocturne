@@ -381,14 +381,27 @@
 {#snippet chartBody()}
   <CardHeader class="pb-2 px-1 @2xl/chart-card:px-6">
     <div class="flex items-center justify-between flex-wrap gap-2">
-      <CardTitle class="flex items-center gap-2">
-        Blood glucose
-        {#if displayDemoMode}
-          <Badge variant="demo">
-            Demo
-          </Badge>
-        {/if}
-      </CardTitle>
+      <div class="flex items-center gap-2">
+        <CardTitle class="flex items-center gap-2">
+          Blood glucose
+          {#if displayDemoMode}
+            <Badge variant="demo">
+              Demo
+            </Badge>
+          {/if}
+        </CardTitle>
+
+        <Button
+          variant="default"
+          size="xs"
+          class="h-7 gap-1 text-xs font-medium"
+          onclick={openNewEntryDialog}
+          data-testid="insert-food-treatment-btn"
+        >
+          <Plus class="size-3" />
+          <span>CarePortal</span>
+        </Button>
+      </div>
 
       <!-- Until the prediction status says there is nothing to show, this slot holds the
            controls' space whether or not they render, so the plot does not move when the status
@@ -400,17 +413,6 @@
           ? 'min-h-8 basis-full @lg:basis-auto'
           : ''}"
       >
-        <Button
-          variant="default"
-          size="xs"
-          class="h-7 gap-1 text-xs font-medium"
-          onclick={openNewEntryDialog}
-          data-testid="insert-food-treatment-btn"
-        >
-          <Plus class="size-3" />
-          <span>CarePortal</span>
-        </Button>
-
         <PredictionSettings
           showPredictions={effectiveShowPredictions}
           predictionMode={predictionModeValue}
