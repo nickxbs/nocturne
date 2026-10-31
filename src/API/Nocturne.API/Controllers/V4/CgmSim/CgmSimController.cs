@@ -2,10 +2,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.CgmSim;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -17,8 +20,10 @@ namespace Nocturne.API.Controllers.V4.CgmSim;
 [Authorize]
 [Route("api/v4/cgmsim")]
 [Tags("CgmSim")]
-public class CgmSimController : ControllerBase
+public class CgmSimController : ControllerBase, IWriteScopedController
 {
+    public string WriteScope => Scope.TherapyReadWrite;
+
     private readonly INocturneDbContextFactory _contextFactory;
     private readonly IEntryService _entryService;
     private readonly IIobCalculator _iobCalculator;
@@ -49,6 +54,7 @@ public class CgmSimController : ControllerBase
     }
 
     [HttpGet("subject")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(CgmSimSubject), StatusCodes.Status200OK)]
     public async Task<ActionResult<CgmSimSubject>> GetSubject(CancellationToken ct)
@@ -66,6 +72,7 @@ public class CgmSimController : ControllerBase
     }
 
     [HttpPut("subject")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetSubject", "GetSettings"])]
     [ProducesResponseType(typeof(CgmSimSubject), StatusCodes.Status200OK)]
     public async Task<ActionResult<CgmSimSubject>> UpdateSubject(
@@ -92,6 +99,7 @@ public class CgmSimController : ControllerBase
     }
 
     [HttpGet("parameters")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(CgmSimParameters), StatusCodes.Status200OK)]
     public async Task<ActionResult<CgmSimParameters>> GetParameters(CancellationToken ct)
@@ -110,6 +118,7 @@ public class CgmSimController : ControllerBase
     }
 
     [HttpPut("parameters")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetParameters", "GetSettings"])]
     [ProducesResponseType(typeof(CgmSimParameters), StatusCodes.Status200OK)]
     public async Task<ActionResult<CgmSimParameters>> UpdateParameters(
@@ -138,6 +147,7 @@ public class CgmSimController : ControllerBase
     }
 
     [HttpGet("settings")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(CgmSimSettings), StatusCodes.Status200OK)]
     public async Task<ActionResult<CgmSimSettings>> GetSettings(CancellationToken ct)
@@ -168,6 +178,7 @@ public class CgmSimController : ControllerBase
     }
 
     [HttpPost("initialize")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetSettings", "GetSubject", "GetParameters"])]
     [ProducesResponseType(typeof(CgmSimSettings), StatusCodes.Status200OK)]
     public async Task<ActionResult<CgmSimSettings>> Initialize(
@@ -215,6 +226,7 @@ public class CgmSimController : ControllerBase
     }
 
     [HttpGet("wizard-preview")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(CgmSimWizardPreview), StatusCodes.Status200OK)]
     public async Task<ActionResult<CgmSimWizardPreview>> GetWizardPreview(

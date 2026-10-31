@@ -11,9 +11,8 @@ namespace Nocturne.API.Services.BackgroundServices;
 public class EnrolmentPruningService(
     IServiceScopeFactory scopeFactory,
     ILogger<EnrolmentPruningService> logger,
-    TimeProvider? timeProvider = null) : BackgroundService
+    TimeProvider timeProvider) : BackgroundService
 {
-    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private static readonly TimeSpan InitialDelay = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan Interval = TimeSpan.FromHours(1);
     private static readonly TimeSpan RetentionPeriod = TimeSpan.FromHours(24);
@@ -22,9 +21,9 @@ public class EnrolmentPruningService(
     {
         try
         {
-            await Task.Delay(InitialDelay, _timeProvider, stoppingToken);
+            await Task.Delay(InitialDelay, timeProvider, stoppingToken);
 
-            using var timer = new PeriodicTimer(Interval, _timeProvider);
+            using var timer = new PeriodicTimer(Interval, timeProvider);
             do
             {
                 try
@@ -53,7 +52,7 @@ public class EnrolmentPruningService(
         var dbFactory = scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>();
         var subjectService = scope.ServiceProvider.GetRequiredService<ISubjectService>();
 
-        var cutoff = _timeProvider.GetUtcNow().UtcDateTime - RetentionPeriod;
+        var cutoff = timeProvider.GetUtcNow().UtcDateTime - RetentionPeriod;
         List<Guid> candidateIds;
 
         await using (var context = await dbFactory.CreatePlatformAsync(ct))

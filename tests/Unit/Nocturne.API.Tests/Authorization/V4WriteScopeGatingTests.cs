@@ -178,6 +178,7 @@ public class V4WriteScopeGatingTests
             ["SetupController"] = NotDataCategory.Setup,
             ["PlatformController"] = NotDataCategory.Setup,
             ["MyTenantsController"] = NotDataCategory.Setup,
+            ["SignupController"] = NotDataCategory.Setup,
 
             ["AvatarController"] = NotDataCategory.IdentityAndDelegation,
             ["ChatIdentityController"] = NotDataCategory.IdentityAndDelegation,
@@ -328,6 +329,7 @@ public class V4WriteScopeGatingTests
             // writes require therapy.readwrite.
             ["ProfileController"] = Scope.TherapyReadWrite,
             ["SetupTherapyController"] = Scope.TherapyReadWrite,
+            ["CgmSimController"] = Scope.TherapyReadWrite,
 
             // therapy: an activation runs a stored profile, so recording, ending and deleting a
             // person's profile switch takes therapy.readwrite, as writing the profile does.

@@ -17,6 +17,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// <summary>
 /// Integration tests for self-service passkey registration and tenant provisioning endpoints.
 /// </summary>
+[Collection(ApiIntegrationShards.One)]
 [Trait("Category", "Integration")]
 public class SignupIntegrationTests : ApiIntegrationTestBase
 {
