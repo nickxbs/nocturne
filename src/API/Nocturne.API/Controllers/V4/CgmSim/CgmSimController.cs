@@ -5,6 +5,7 @@ using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -35,6 +36,8 @@ public class CgmSimController : ControllerBase, IWriteScopedController
     private readonly ISensitivityResolver _sensitivityResolver;
     private readonly ICarbRatioResolver _carbRatioResolver;
     private readonly ITherapySettingsResolver _therapySettingsResolver;
+    private readonly IPatientRecordRepository _patientRecordRepository;
+    private readonly IBodyWeightService _bodyWeightService;
 
     public CgmSimController(
         INocturneDbContextFactory contextFactory,
@@ -47,7 +50,9 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         ITargetRangeResolver targetRangeResolver,
         ISensitivityResolver sensitivityResolver,
         ICarbRatioResolver carbRatioResolver,
-        ITherapySettingsResolver therapySettingsResolver)
+        ITherapySettingsResolver therapySettingsResolver,
+        IPatientRecordRepository patientRecordRepository,
+        IBodyWeightService bodyWeightService)
     {
         _contextFactory = contextFactory;
         _entryService = entryService;
@@ -60,6 +65,8 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         _sensitivityResolver = sensitivityResolver;
         _carbRatioResolver = carbRatioResolver;
         _therapySettingsResolver = therapySettingsResolver;
+        _patientRecordRepository = patientRecordRepository;
+        _bodyWeightService = bodyWeightService;
     }
 
     [HttpGet("subject")]
@@ -70,14 +77,9 @@ public class CgmSimController : ControllerBase, IWriteScopedController
     {
         await using var db = await _contextFactory.CreateAsync(ct);
         var entity = await GetOrCreateSettingsAsync(db, ct);
+        var subject = await ResolveEffectiveSubjectAsync(entity, ct);
 
-        return Ok(new CgmSimSubject
-        {
-            Sex = entity.Sex,
-            Weight = entity.Weight,
-            Age = entity.Age,
-            Height = entity.Height,
-        });
+        return Ok(subject);
     }
 
     [HttpPut("subject")]
@@ -91,6 +93,41 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         await using var db = await _contextFactory.CreateAsync(ct);
         var entity = await GetOrCreateSettingsAsync(db, ct);
 
+        // Update PatientRecord if age or sex specified
+        var patient = await _patientRecordRepository.GetOrCreateAsync(ct);
+        if (model.Age > 0)
+        {
+            var birthYear = DateTime.UtcNow.Year - model.Age;
+            patient.DateOfBirth = new DateOnly(birthYear, 1, 1);
+        }
+
+        if (string.Equals(model.Sex, "female", StringComparison.OrdinalIgnoreCase))
+        {
+            patient.Sex = Nocturne.Core.Models.V4.BiologicalSex.Female;
+        }
+        else if (string.Equals(model.Sex, "male", StringComparison.OrdinalIgnoreCase))
+        {
+            patient.Sex = Nocturne.Core.Models.V4.BiologicalSex.Male;
+        }
+
+        await _patientRecordRepository.UpdateAsync(patient, Nocturne.Core.Contracts.V4.WriteOrigin.Live, ct);
+
+        // Update BodyWeight if weight specified
+        if (model.Weight > 0)
+        {
+            await _bodyWeightService.CreateBodyWeightsAsync(new[]
+            {
+                new Nocturne.Core.Models.BodyWeight
+                {
+                    WeightKg = (decimal)model.Weight,
+                    Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                    EnteredBy = "cgmsim",
+                }
+            }, ct);
+        }
+
+        // Entity fallback storage
         entity.Sex = model.Sex;
         entity.Weight = model.Weight;
         entity.Age = model.Age;
@@ -98,13 +135,8 @@ public class CgmSimController : ControllerBase, IWriteScopedController
 
         await db.SaveChangesAsync(ct);
 
-        return Ok(new CgmSimSubject
-        {
-            Sex = entity.Sex,
-            Weight = entity.Weight,
-            Age = entity.Age,
-            Height = entity.Height,
-        });
+        var subject = await ResolveEffectiveSubjectAsync(entity, ct);
+        return Ok(subject);
     }
 
     [HttpGet("parameters")]
@@ -182,15 +214,11 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         var effectiveCr = await _carbRatioResolver.GetCarbRatioAsync(nowMills, ct: ct);
         var effectiveDia = await _therapySettingsResolver.GetDIAAsync(nowMills, ct: ct);
 
+        var subject = await ResolveEffectiveSubjectAsync(entity, ct);
+
         return Ok(new CgmSimSettings
         {
-            Subject = new CgmSimSubject
-            {
-                Sex = entity.Sex,
-                Weight = entity.Weight,
-                Age = entity.Age,
-                Height = entity.Height,
-            },
+            Subject = subject,
             Parameters = new CgmSimParameters
             {
                 Isf = effectiveIsf > 0 ? effectiveIsf : (entity.Isf > 0 ? entity.Isf : 50.0),
@@ -215,6 +243,40 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         await using var db = await _contextFactory.CreateAsync(ct);
         var entity = await GetOrCreateSettingsAsync(db, ct);
 
+        // Update PatientRecord
+        var patient = await _patientRecordRepository.GetOrCreateAsync(ct);
+        if (request.Subject.Age > 0)
+        {
+            var birthYear = DateTime.UtcNow.Year - request.Subject.Age;
+            patient.DateOfBirth = new DateOnly(birthYear, 1, 1);
+        }
+
+        if (string.Equals(request.Subject.Sex, "female", StringComparison.OrdinalIgnoreCase))
+        {
+            patient.Sex = Nocturne.Core.Models.V4.BiologicalSex.Female;
+        }
+        else if (string.Equals(request.Subject.Sex, "male", StringComparison.OrdinalIgnoreCase))
+        {
+            patient.Sex = Nocturne.Core.Models.V4.BiologicalSex.Male;
+        }
+
+        await _patientRecordRepository.UpdateAsync(patient, Nocturne.Core.Contracts.V4.WriteOrigin.Live, ct);
+
+        // Update BodyWeight
+        if (request.Subject.Weight > 0)
+        {
+            await _bodyWeightService.CreateBodyWeightsAsync(new[]
+            {
+                new Nocturne.Core.Models.BodyWeight
+                {
+                    WeightKg = (decimal)request.Subject.Weight,
+                    Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                    EnteredBy = "cgmsim-init",
+                }
+            }, ct);
+        }
+
         entity.Sex = request.Subject.Sex;
         entity.Weight = request.Subject.Weight;
         entity.Age = request.Subject.Age;
@@ -230,22 +292,23 @@ public class CgmSimController : ControllerBase, IWriteScopedController
 
         await db.SaveChangesAsync(ct);
 
+        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var effectiveIsf = await _sensitivityResolver.GetSensitivityAsync(nowMills, ct: ct);
+        var effectiveCr = await _carbRatioResolver.GetCarbRatioAsync(nowMills, ct: ct);
+        var effectiveDia = await _therapySettingsResolver.GetDIAAsync(nowMills, ct: ct);
+
+        var subject = await ResolveEffectiveSubjectAsync(entity, ct);
+
         return Ok(new CgmSimSettings
         {
-            Subject = new CgmSimSubject
-            {
-                Sex = entity.Sex,
-                Weight = entity.Weight,
-                Age = entity.Age,
-                Height = entity.Height,
-            },
+            Subject = subject,
             Parameters = new CgmSimParameters
             {
-                Isf = entity.Isf,
-                Dia = entity.Dia,
+                Isf = effectiveIsf > 0 ? effectiveIsf : entity.Isf,
+                Dia = effectiveDia > 0 ? effectiveDia : entity.Dia,
                 CarbsAbsTime = entity.CarbsAbsTime,
                 InsulinPeak = entity.InsulinPeak,
-                Cr = entity.Cr,
+                Cr = effectiveCr > 0 ? effectiveCr : entity.Cr,
             },
             IsInitialized = entity.IsInitialized,
             UpdatedAt = entity.UpdatedAt,
@@ -325,6 +388,47 @@ public class CgmSimController : ControllerBase, IWriteScopedController
             Isf = isf,
             Cr = cr,
         });
+    }
+
+    private async Task<CgmSimSubject> ResolveEffectiveSubjectAsync(CgmSimSettingsEntity entity, CancellationToken ct)
+    {
+        var patient = await _patientRecordRepository.GetAsync(ct);
+        var weights = await _bodyWeightService.GetBodyWeightsAsync(count: 1, skip: 0, cancellationToken: ct);
+        var latestWeight = weights.FirstOrDefault();
+
+        var sex = patient?.Sex switch
+        {
+            Nocturne.Core.Models.V4.BiologicalSex.Female => "female",
+            Nocturne.Core.Models.V4.BiologicalSex.Male => "male",
+            _ => !string.IsNullOrEmpty(entity.Sex) ? entity.Sex : "male",
+        };
+
+        var age = 30;
+        if (patient?.DateOfBirth.HasValue == true)
+        {
+            var dob = patient.DateOfBirth.Value;
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            age = today.Year - dob.Year;
+            if (dob > today.AddYears(-age)) age--;
+        }
+        else if (entity.Age > 0)
+        {
+            age = entity.Age;
+        }
+
+        var weight = latestWeight is not null && latestWeight.WeightKg > 0
+            ? (double)latestWeight.WeightKg
+            : (entity.Weight > 0 ? entity.Weight : 70.0);
+
+        var height = entity.Height > 0 ? entity.Height : 170.0;
+
+        return new CgmSimSubject
+        {
+            Sex = sex,
+            Weight = weight,
+            Age = Math.Max(1, Math.Min(150, age)),
+            Height = height,
+        };
     }
 
     private static async Task<CgmSimSettingsEntity> GetOrCreateSettingsAsync(

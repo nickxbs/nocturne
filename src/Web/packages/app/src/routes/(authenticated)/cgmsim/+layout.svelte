@@ -1,8 +1,6 @@
 <script lang="ts">
-  import { page } from "$app/state";
   import { resolve } from "$app/paths";
   import Activity from "@lucide/svelte/icons/activity";
-  import User from "@lucide/svelte/icons/user";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import type { Snippet } from "svelte";
 
@@ -11,9 +9,6 @@
   }
 
   const { children }: Props = $props();
-
-  const isSubject = $derived(page.url.pathname.startsWith("/cgmsim/subject"));
-  const isParameters = $derived(page.url.pathname.startsWith("/cgmsim/parameters"));
 </script>
 
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
@@ -31,15 +26,8 @@
 
   <nav class="flex border-b border-border gap-2" aria-label="CGMSIM navigation">
     <a
-      href={resolve("/(authenticated)/cgmsim/subject")}
-      class="inline-flex items-center gap-2 px-4 py-2 border-b-2 font-medium text-sm transition-colors {isSubject ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30'}"
-    >
-      <User class="h-4 w-4" />
-      Subject
-    </a>
-    <a
       href={resolve("/(authenticated)/cgmsim/parameters")}
-      class="inline-flex items-center gap-2 px-4 py-2 border-b-2 font-medium text-sm transition-colors {isParameters ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30'}"
+      class="inline-flex items-center gap-2 px-4 py-2 border-b-2 font-medium text-sm transition-colors border-primary text-foreground"
     >
       <SlidersHorizontal class="h-4 w-4" />
       Parameters

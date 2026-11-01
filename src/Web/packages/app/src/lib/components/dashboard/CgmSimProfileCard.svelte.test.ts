@@ -50,9 +50,9 @@ describe("CgmSimProfileCard", () => {
   it("provides navigation links to subject and parameters settings", async () => {
     render(CgmSimProfileCard);
 
-    const subjectLink = page.getByRole("link", { name: "Configure Subject" });
+    const subjectLink = page.getByRole("link", { name: "Configure Patient" });
     await expect.element(subjectLink).toBeVisible();
-    await expect.element(subjectLink).toHaveAttribute("href", "/cgmsim/subject");
+    await expect.element(subjectLink).toHaveAttribute("href", "/settings/patient");
 
     const paramsLink = page.getByRole("link", { name: "Configure Parameters" });
     await expect.element(paramsLink).toBeVisible();

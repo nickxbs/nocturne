@@ -2065,13 +2065,13 @@
                 type="button"
                 onclick={() => {
                   open = false;
-                  goto(resolve("/(authenticated)/cgmsim/subject"));
+                  goto(resolve("/(authenticated)/settings/patient"));
                 }}
                 class="tactile-btn bg-[#101726] hover:bg-slate-800/90 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between text-left"
               >
                 <div class="flex items-center gap-2.5">
                   <Settings class="size-4 text-sky-400" />
-                  <span class="text-xs font-bold text-white">Subject (CGMSIM)</span>
+                  <span class="text-xs font-bold text-white">Patient Record</span>
                 </div>
                 <ChevronRight class="size-4 text-slate-500" />
               </button>

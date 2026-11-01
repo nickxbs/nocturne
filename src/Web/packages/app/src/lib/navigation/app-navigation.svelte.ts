@@ -32,9 +32,7 @@ import Users from "@lucide/svelte/icons/users";
 import PlayCircle from "@lucide/svelte/icons/circle-play";
 import HistoryIcon from "@lucide/svelte/icons/history";
 import Activity from "@lucide/svelte/icons/activity";
-import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
 import Syringe from "@lucide/svelte/icons/syringe";
-import User from "@lucide/svelte/icons/user";
 import { satisfiesScope } from "#lib/authorization/scopes.js";
 import { getSidebarReportItems } from "#lib/navigation/report-navigation.svelte.js";
 import { filterTenantlessNav } from "#lib/navigation/tenantless-navigation.js";
@@ -232,10 +230,7 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
       id: "cgmsim",
       title: "CGMSIM",
       icon: Activity,
-      children: [
-        { title: "Subject", href: "/cgmsim/subject", icon: User },
-        { title: "Parameters", href: "/cgmsim/parameters", icon: SlidersHorizontal },
-      ],
+      href: "/cgmsim/parameters",
     }
   );
 
