@@ -37,6 +37,7 @@ public class SignupControllerTests : IDisposable
     private readonly Mock<IInstanceSetupState> _setupState;
     private readonly Mock<IUsernameValidator> _usernameValidator;
     private readonly Mock<ITenantMemberService> _tenantMemberService;
+    private readonly Mock<ITenantAccessor> _tenantAccessor;
     private readonly BaseDomainOptions _baseDomainOptions;
 
     public SignupControllerTests()
@@ -53,6 +54,7 @@ public class SignupControllerTests : IDisposable
         _setupState = new Mock<IInstanceSetupState>();
         _usernameValidator = new Mock<IUsernameValidator>();
         _tenantMemberService = new Mock<ITenantMemberService>();
+        _tenantAccessor = new Mock<ITenantAccessor>();
 
         _baseDomainOptions = new BaseDomainOptions
         {
@@ -115,6 +117,7 @@ public class SignupControllerTests : IDisposable
             _setupState.Object,
             _usernameValidator.Object,
             _tenantMemberService.Object,
+            _tenantAccessor.Object,
             NullLogger<SignupController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },

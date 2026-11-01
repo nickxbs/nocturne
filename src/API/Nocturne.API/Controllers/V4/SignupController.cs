@@ -43,6 +43,7 @@ public class SignupController : ControllerBase
     private readonly IInstanceSetupState _setupState;
     private readonly IUsernameValidator _usernameValidator;
     private readonly ITenantMemberService _tenantMemberService;
+    private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<SignupController> _logger;
 
     public SignupController(
@@ -58,6 +59,7 @@ public class SignupController : ControllerBase
         IInstanceSetupState setupState,
         IUsernameValidator usernameValidator,
         ITenantMemberService tenantMemberService,
+        ITenantAccessor tenantAccessor,
         ILogger<SignupController> logger)
     {
         _tenantService = tenantService;
@@ -72,6 +74,7 @@ public class SignupController : ControllerBase
         _setupState = setupState;
         _usernameValidator = usernameValidator;
         _tenantMemberService = tenantMemberService;
+        _tenantAccessor = tenantAccessor;
         _logger = logger;
     }
 
@@ -483,6 +486,11 @@ public class SignupController : ControllerBase
 
     private async Task<IActionResult?> CheckSignupDisabledOrSetupIncompleteAsync(CancellationToken ct)
     {
+        if (_tenantAccessor.IsResolved)
+        {
+            return NotFound();
+        }
+
         if (!_operatorConfig.Signup.Enabled || !_operatorConfig.AllowSelfServiceCreation)
         {
             return NotFound(new { error = "signup_disabled" });
