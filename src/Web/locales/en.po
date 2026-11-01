@@ -1383,7 +1383,6 @@ msgstr "Time"
 #: src/lib/components/audit/AuditMutationsTable.svelte
 #: src/lib/components/audit/AuditReadsTable.svelte
 #: src/lib/components/dashboard/CgmSimProfileCard.svelte
-#: src/lib/navigation/app-navigation.svelte.ts
 msgid "Subject"
 msgstr "Subject"
 
@@ -3853,7 +3852,6 @@ msgstr "Source:"
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "<0/> Saving..."
 msgstr "<0/> Saving..."
 
@@ -4182,8 +4180,9 @@ msgstr "Setup"
 msgid "Account"
 msgstr "Account"
 
-#~ msgid "Patient Record"
-#~ msgstr "Patient Record"
+#: src/lib/components/careportal/CareportalPumpDialog.svelte
+msgid "Patient Record"
+msgstr "Patient Record"
 
 #: src/lib/navigation/settings-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -20075,7 +20074,6 @@ msgid "Biological sex, used with your age to show sex-specific typical ranges in
 msgstr "Biological sex, used with your age to show sex-specific typical ranges in sleep reports. Separate from pronouns."
 
 #: src/lib/components/patient/PatientClinicalForm.svelte
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "Select sex"
 msgstr "Select sex"
 
@@ -38452,9 +38450,8 @@ msgstr "Could not load profiles"
 msgid "bar"
 msgstr "bar"
 
-#: src/lib/navigation/app-navigation.svelte.ts
-msgid "Parameters"
-msgstr "Parameters"
+#~ msgid "Parameters"
+#~ msgstr "Parameters"
 
 #: src/lib/test-stubs/CgmSimProfileCard.test-stub.svelte
 msgid "cgmsim profile card"
@@ -38480,9 +38477,8 @@ msgstr "Configure simulated subject characteristics and metabolic kinetics"
 msgid "CGMSIM navigation"
 msgstr "CGMSIM navigation"
 
-#: src/routes/(authenticated)/cgmsim/+layout.svelte
-msgid "<0/> Subject"
-msgstr "<0/> Subject"
+#~ msgid "<0/> Subject"
+#~ msgstr "<0/> Subject"
 
 #: src/routes/(authenticated)/cgmsim/+layout.svelte
 msgid "<0/> Parameters"
@@ -38861,9 +38857,8 @@ msgstr "Stop Sensor"
 #~ msgid "Glucose ({0}):"
 #~ msgstr "Glucose ({0}):"
 
-#: src/lib/components/careportal/CareportalPumpDialog.svelte
-msgid "Subject (CGMSIM)"
-msgstr "Subject (CGMSIM)"
+#~ msgid "Subject (CGMSIM)"
+#~ msgstr "Subject (CGMSIM)"
 
 #: src/lib/components/careportal/CareportalPumpDialog.svelte
 msgid "Parameters (CGMSIM)"
@@ -38896,18 +38891,15 @@ msgstr "Touch-oriented insulin pump careportal interface"
 
 #: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/lib/components/dashboard/CgmSimProfileCard.svelte
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "Male"
 msgstr "Male"
 
 #: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 #: src/lib/components/dashboard/CgmSimProfileCard.svelte
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "Female"
 msgstr "Female"
 
 #: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "Other / Unspecified"
 msgstr "Other / Unspecified"
 
@@ -38971,7 +38963,6 @@ msgid "Biological sex <0/>"
 msgstr "Biological sex <0/>"
 
 #: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "kg"
 msgstr "kg"
 
@@ -38980,22 +38971,18 @@ msgid "Body weight (kg) <0/>"
 msgstr "Body weight (kg) <0/>"
 
 #: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "years"
 msgstr "years"
 
 #: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "Age (years) <0/>"
 msgstr "Age (years) <0/>"
 
 #: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "cm"
 msgstr "cm"
 
 #: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "Height (cm) <0/>"
 msgstr "Height (cm) <0/>"
 
@@ -39057,10 +39044,8 @@ msgstr "CGMSIM Profile"
 msgid "Virtual Patient"
 msgstr "Virtual Patient"
 
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-msgid "Configure Subject"
-msgstr "Configure Subject"
+#~ msgid "Configure Subject"
+#~ msgstr "Configure Subject"
 
 #. 0: subject.age
 #: src/lib/components/dashboard/CgmSimProfileCard.svelte
@@ -39117,53 +39102,41 @@ msgstr "No workspaces yet"
 #~ msgid "Please enter a valid height in cm."
 #~ msgstr "Please enter a valid height in cm."
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "Subject parameters saved successfully."
-msgstr "Subject parameters saved successfully."
+#~ msgid "Subject parameters saved successfully."
+#~ msgstr "Subject parameters saved successfully."
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "Failed to save subject parameters."
-msgstr "Failed to save subject parameters."
+#~ msgid "Failed to save subject parameters."
+#~ msgstr "Failed to save subject parameters."
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "Subject - CGMSIM - Nocturne"
-msgstr "Subject - CGMSIM - Nocturne"
+#~ msgid "Subject - CGMSIM - Nocturne"
+#~ msgstr "Subject - CGMSIM - Nocturne"
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "Simulated Subject Profile"
-msgstr "Simulated Subject Profile"
+#~ msgid "Simulated Subject Profile"
+#~ msgstr "Simulated Subject Profile"
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "Define physiological traits of the virtual patient used in the simulation model. All fields are required."
-msgstr "Define physiological traits of the virtual patient used in the simulation model. All fields are required."
+#~ msgid "Define physiological traits of the virtual patient used in the simulation model. All fields are required."
+#~ msgstr "Define physiological traits of the virtual patient used in the simulation model. All fields are required."
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "Biological Sex <0/>"
-msgstr "Biological Sex <0/>"
+#~ msgid "Biological Sex <0/>"
+#~ msgstr "Biological Sex <0/>"
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "Used for metabolic baseline and distribution models."
-msgstr "Used for metabolic baseline and distribution models."
+#~ msgid "Used for metabolic baseline and distribution models."
+#~ msgstr "Used for metabolic baseline and distribution models."
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "Body Weight (kg) <0/>"
-msgstr "Body Weight (kg) <0/>"
+#~ msgid "Body Weight (kg) <0/>"
+#~ msgstr "Body Weight (kg) <0/>"
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "Subject body weight in kilograms."
-msgstr "Subject body weight in kilograms."
+#~ msgid "Subject body weight in kilograms."
+#~ msgstr "Subject body weight in kilograms."
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "Subject age in years."
-msgstr "Subject age in years."
+#~ msgid "Subject age in years."
+#~ msgstr "Subject age in years."
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "Subject height in centimeters."
-msgstr "Subject height in centimeters."
+#~ msgid "Subject height in centimeters."
+#~ msgstr "Subject height in centimeters."
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "<0/> Save Subject"
-msgstr "<0/> Save Subject"
+#~ msgid "<0/> Save Subject"
+#~ msgstr "<0/> Save Subject"
 
 #~ msgid "Please enter a valid ISF value."
 #~ msgstr "Please enter a valid ISF value."
@@ -39307,21 +39280,17 @@ msgstr "Enter a valid insulin peak time."
 #~ msgid "Grams of carbs covered by 1 unit of insulin."
 #~ msgstr "Grams of carbs covered by 1 unit of insulin."
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "Select a biological sex."
-msgstr "Select a biological sex."
+#~ msgid "Select a biological sex."
+#~ msgstr "Select a biological sex."
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "Enter a valid weight in kg."
-msgstr "Enter a valid weight in kg."
+#~ msgid "Enter a valid weight in kg."
+#~ msgstr "Enter a valid weight in kg."
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "Enter a valid age in years."
-msgstr "Enter a valid age in years."
+#~ msgid "Enter a valid age in years."
+#~ msgstr "Enter a valid age in years."
 
-#: src/routes/(authenticated)/cgmsim/subject/+page.svelte
-msgid "Enter a valid height in cm."
-msgstr "Enter a valid height in cm."
+#~ msgid "Enter a valid height in cm."
+#~ msgstr "Enter a valid height in cm."
 
 #: src/routes/(unauthenticated)/auth/login/+page.svelte
 msgid "<0/> Do not have an account? Create one"
@@ -39821,3 +39790,8 @@ msgstr "Time in minutes when rapid-acting insulin reaches peak activity (e.g. 55
 #: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
 msgid "<0/> Save Kinetics"
 msgstr "<0/> Save Kinetics"
+
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+msgid "Configure Patient"
+msgstr "Configure Patient"
