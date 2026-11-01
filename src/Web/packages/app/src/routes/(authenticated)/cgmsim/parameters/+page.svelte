@@ -167,7 +167,7 @@
               min
             </span>
           </div>
-          <p class="text-xs text-muted-foreground">Time in minutes when rapid-acting insulin reaches peak activity (e.g. 55m Fiasp/Lyumjev, 75m Novorapid/Humalog).</p>
+          <p class="text-xs text-muted-foreground">Time in minutes when rapid-acting insulin reaches peak activity (for example: 55m Fiasp/Lyumjev, 75m Novorapid/Humalog).</p>
         </div>
       </div>
     </Card.Content>
