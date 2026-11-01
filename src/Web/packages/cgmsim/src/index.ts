@@ -66,16 +66,33 @@ async function main() {
       // 2. Simulate each tenant
       for (const tenant of tenants) {
         try {
-          // Fetch virtual patient parameters
+          // Fetch virtual patient parameters (Subject & CGMSIM kinetics)
           const settings = await apiClient.getCgmSimSettings(tenant.slug);
-          const params = settings?.parameters;
+          const cgmParams = settings?.parameters;
           const subject = settings?.subject;
 
+          // Fetch authoritative clinical Therapy Settings (ISF, CR, DIA, Basal Schedule)
+          const therapy = await apiClient.getTherapyParameters(tenant.slug, now);
+
+          // Therapy profile is the single source of truth for DIA, ISF, CR, and Basal profile
+          const resolvedDia = therapy?.dia ?? cgmParams?.dia ?? 4.0;
+          const resolvedIsf = therapy?.isf ?? cgmParams?.isf ?? 50.0;
+          const resolvedCr = therapy?.cr ?? cgmParams?.cr ?? 10.0;
+          const basalProfile = therapy?.basalProfile ?? [];
+
+          // Kinetic parameters specific to the simulator
+          const effectiveParams = {
+            dia: resolvedDia,
+            isf: resolvedIsf,
+            cr: resolvedCr,
+            carbsAbsTime: cgmParams?.carbsAbsTime ?? 180,
+            insulinPeak: cgmParams?.insulinPeak ?? 75,
+          };
+
           // Fetch treatments within DIA / basal window (45h covers GLA/DET/TOU/DEG long-acting curves)
-          const diaHours = Math.max(params?.dia || 4.0, 45.0);
+          const diaHours = Math.max(resolvedDia, 45.0);
           const diaWindowStart = new Date(now.getTime() - diaHours * 60 * 60 * 1000).toISOString();
           const treatments = await apiClient.getRecentTreatments(tenant.slug, diaWindowStart);
-          const basalProfile = await apiClient.getBasalProfile(tenant.slug);
 
           // Fetch current blood glucose reading
           const currentEntry = await apiClient.getCurrentEntry(tenant.slug);
@@ -100,8 +117,8 @@ async function main() {
           console.log(`\n  ┌── [${tenant.slug}] SIMULATOR INPUTS ──────────────────────────────────────────`);
           console.log(`  │ Target Time:       ${now.toISOString()} (mills: ${now.getTime()})`);
           console.log(
-            `  │ Virtual Patient:   ISF=${params?.isf ?? "50 (default)"} mg/dL, CR=${params?.cr ?? "10 (default)"} g/U, ` +
-              `DIA=${params?.dia ?? "4.0 (default)"}h, Peak=${params?.insulinPeak ?? "75 (default)"}m, CarbsAbs=${params?.carbsAbsTime ?? "180 (default)"}m | ` +
+            `  │ Virtual Patient:   ISF=${effectiveParams.isf} mg/dL (therapy), CR=${effectiveParams.cr} g/U (therapy), ` +
+              `DIA=${effectiveParams.dia}h (therapy), Peak=${effectiveParams.insulinPeak}m, CarbsAbs=${effectiveParams.carbsAbsTime}m | ` +
               `Weight=${subject?.weight ?? "70 (default)"}kg, Age=${subject?.age ?? "30 (default)"}, Gender=${subject?.sex ?? "male"}`
           );
 
@@ -204,7 +221,7 @@ async function main() {
           const { entry: nextEntry, result: simResult, pumpEnabled } = engine.computeNextReading(
             now,
             settings?.subject,
-            settings?.parameters,
+            effectiveParams,
             treatments,
             currentEntry,
             basalProfile,

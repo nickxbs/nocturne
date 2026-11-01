@@ -92,17 +92,38 @@ export interface CgmSimNoiseData {
   generatedAt?: string | null;
 }
 
+export interface ScheduleEntryDto {
+  time?: string;
+  timeAsSeconds?: number;
+  value?: number;
+}
+
 export interface ProfileSummaryResponse {
   therapySettings?: Array<{
     profileName?: string;
     isDefault?: boolean;
+    dia?: number;
+    carbsHr?: number;
+    delay?: number;
   }>;
   basalSchedules?: Array<{
     profileName?: string;
-    entries?: Array<{
-      time?: string;
-      timeAsSeconds?: number;
-      value?: number;
-    }>;
+    entries?: ScheduleEntryDto[];
   }>;
+  carbRatioSchedules?: Array<{
+    profileName?: string;
+    entries?: ScheduleEntryDto[];
+  }>;
+  sensitivitySchedules?: Array<{
+    profileName?: string;
+    entries?: ScheduleEntryDto[];
+  }>;
+}
+
+export interface ResolvedTherapyParameters {
+  dia: number;
+  isf: number;
+  cr: number;
+  carbsAbsTime?: number;
+  basalProfile: BasalProfileEntry[];
 }

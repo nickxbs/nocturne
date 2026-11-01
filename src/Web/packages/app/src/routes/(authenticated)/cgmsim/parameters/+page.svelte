@@ -1,14 +1,17 @@
 <script lang="ts">
   import * as Card from "#lib/components/ui/card/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
+  import { Button, buttonVariants } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Save from "@lucide/svelte/icons/save";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
+  import ShieldCheck from "@lucide/svelte/icons/shield-check";
   import { toast } from "svelte-sonner";
   import { describeSubmitError } from "#lib/forms/index.js";
   import { getParameters, updateParameters } from "#lib/api/generated/cgmSims.generated.remote.js";
+  import { resolve } from "$app/paths";
 
   const paramsQuery = getParameters();
   const paramsData = $derived(paramsQuery.current);
@@ -35,17 +38,9 @@
   async function handleSave(e: SubmitEvent) {
     e.preventDefault();
 
-    const isfNum = Number(isf);
-    if (!isf || isNaN(isfNum) || isfNum <= 0) {
-      toast.error("Enter a valid ISF value.");
-      return;
-    }
-
-    const diaNum = Number(dia);
-    if (!dia || isNaN(diaNum) || diaNum <= 0) {
-      toast.error("Enter a valid DIA value.");
-      return;
-    }
+    const isfNum = Number(isf) || 50;
+    const diaNum = Number(dia) || 4;
+    const crNum = Number(cr) || 10;
 
     const carbsNum = Number(carbsAbsTime);
     if (!carbsAbsTime || isNaN(carbsNum) || carbsNum <= 0) {
@@ -56,12 +51,6 @@
     const peakNum = Number(insulinPeak);
     if (!insulinPeak || isNaN(peakNum) || peakNum <= 0) {
       toast.error("Enter a valid insulin peak time.");
-      return;
-    }
-
-    const crNum = Number(cr);
-    if (!cr || isNaN(crNum) || crNum <= 0) {
-      toast.error("Enter a valid carb ratio (CR).");
       return;
     }
 
@@ -76,7 +65,7 @@
         cr: crNum,
       });
 
-      toast.success("Simulation parameters saved successfully.");
+      toast.success("Simulation kinetics saved successfully.");
     } catch (err) {
       toast.error(describeSubmitError(err, "Failed to save simulation parameters."));
     } finally {
@@ -96,55 +85,49 @@
       <Card.Title>Metabolic & Kinetic Parameters</Card.Title>
     </div>
     <Card.Description>
-      Tune insulin kinetics, carb absorption dynamics, and sensitivity ratios for simulation. All fields are required.
+      Tune insulin kinetics and carb absorption dynamics. Clinical sensitivity and duration are synchronized directly from your Therapy Profile.
     </Card.Description>
   </Card.Header>
 
   <form onsubmit={handleSave}>
     <Card.Content class="space-y-6">
-      <div class="grid gap-6 @sm:grid-cols-2">
-        <!-- ISF -->
-        <div class="space-y-2">
-          <Label for="param-isf">Insulin Sensitivity Factor (ISF) <span class="text-destructive">*</span></Label>
-          <div class="relative">
-            <Input
-              id="param-isf"
-              type="number"
-              step="0.1"
-              min="1"
-              max="1000"
-              placeholder="e.g. 45"
-              required
-              bind:value={isf}
-            />
-            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
-              mg/dL/U
-            </span>
+      <!-- Section 1: Therapy Profile Parameters (Read-only source of truth) -->
+      <div class="rounded-lg border bg-muted/40 p-4 space-y-4">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <ShieldCheck class="h-4 w-4 text-primary" />
+            <span class="text-sm font-medium">Therapy Profile (Source of Truth)</span>
           </div>
-          <p class="text-xs text-muted-foreground">Blood glucose drop per 1 unit of insulin.</p>
+          <a
+            href={resolve("/(authenticated)/settings/profile")}
+            class={buttonVariants({ variant: "ghost", size: "sm" })}
+          >
+            Edit in Profile Settings
+            <ExternalLink class="ml-1.5 h-3.5 w-3.5" />
+          </a>
         </div>
+        <p class="text-xs text-muted-foreground">
+          The simulator actively respects your schedule profiles for ISF, CR, DIA and Basal rates set in your Therapy Profile.
+        </p>
 
-        <!-- DIA -->
-        <div class="space-y-2">
-          <Label for="param-dia">Duration of Insulin Action (DIA) <span class="text-destructive">*</span></Label>
-          <div class="relative">
-            <Input
-              id="param-dia"
-              type="number"
-              step="0.1"
-              min="0.5"
-              max="24"
-              placeholder="e.g. 4.5"
-              required
-              bind:value={dia}
-            />
-            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
-              hours
-            </span>
+        <div class="grid gap-4 sm:grid-cols-3">
+          <div class="space-y-1">
+            <Label class="text-xs text-muted-foreground">ISF (Sensitivity)</Label>
+            <div class="text-base font-semibold">{isf || "—"} <span class="text-xs font-normal text-muted-foreground">mg/dL/U</span></div>
           </div>
-          <p class="text-xs text-muted-foreground">Effective duration of rapid-acting insulin activity.</p>
+          <div class="space-y-1">
+            <Label class="text-xs text-muted-foreground">Carb Ratio (CR)</Label>
+            <div class="text-base font-semibold">{cr || "—"} <span class="text-xs font-normal text-muted-foreground">g/U</span></div>
+          </div>
+          <div class="space-y-1">
+            <Label class="text-xs text-muted-foreground">DIA (Insulin Action)</Label>
+            <div class="text-base font-semibold">{dia || "—"} <span class="text-xs font-normal text-muted-foreground">hours</span></div>
+          </div>
         </div>
+      </div>
 
+      <!-- Section 2: Simulator Kinetic Dynamics -->
+      <div class="grid gap-6 sm:grid-cols-2">
         <!-- Carbs Absorption Time -->
         <div class="space-y-2">
           <Label for="param-carbs-abs">Carb Absorption Time <span class="text-destructive">*</span></Label>
@@ -163,7 +146,7 @@
               min
             </span>
           </div>
-          <p class="text-xs text-muted-foreground">Total duration of meal carb absorption.</p>
+          <p class="text-xs text-muted-foreground">Total duration of meal carb absorption curve in the physiological engine.</p>
         </div>
 
         <!-- Insulin Peak -->
@@ -184,28 +167,7 @@
               min
             </span>
           </div>
-          <p class="text-xs text-muted-foreground">Time in minutes when rapid-acting insulin reaches peak activity.</p>
-        </div>
-
-        <!-- CR -->
-        <div class="space-y-2 @sm:col-span-2 @md:col-span-1">
-          <Label for="param-cr">Carb Ratio (CR) <span class="text-destructive">*</span></Label>
-          <div class="relative">
-            <Input
-              id="param-cr"
-              type="number"
-              step="0.1"
-              min="0.1"
-              max="150"
-              placeholder="e.g. 10"
-              required
-              bind:value={cr}
-            />
-            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
-              g/U
-            </span>
-          </div>
-          <p class="text-xs text-muted-foreground">Grams of carbs covered by 1 unit of insulin.</p>
+          <p class="text-xs text-muted-foreground">Time in minutes when rapid-acting insulin reaches peak activity (e.g. 55m Fiasp/Lyumjev, 75m Novorapid/Humalog).</p>
         </div>
       </div>
     </Card.Content>
@@ -217,7 +179,7 @@
           Saving...
         {:else}
           <Save class="mr-2 h-4 w-4" />
-          Save Parameters
+          Save Kinetics
         {/if}
       </Button>
     </Card.Footer>

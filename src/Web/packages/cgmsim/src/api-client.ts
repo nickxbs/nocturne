@@ -7,6 +7,8 @@ import type {
   ConnectorSummary,
   CurrentEntry,
   ProfileSummaryResponse,
+  ResolvedTherapyParameters,
+  ScheduleEntryDto,
   SimulatedEntry,
   TenantSummary,
   Treatment,
@@ -350,6 +352,127 @@ export class NocturneApiClient {
       return json as CurrentEntry;
     } catch (err) {
       console.error(`[${tenantSlug}] Failed to fetch current entry:`, formatError(err));
+      return null;
+    }
+  }
+
+  /**
+   * Helper to resolve the active schedule value for a specific time of day (seconds from midnight).
+   */
+  private resolveScheduleValue(
+    entries: ScheduleEntryDto[] | undefined,
+    secondsOfDay: number,
+    defaultValue: number
+  ): number {
+    if (!entries || entries.length === 0) return defaultValue;
+
+    // Convert entries to sorted array with seconds
+    const sorted = entries
+      .map((e) => {
+        let sec = e.timeAsSeconds;
+        if (sec === undefined && e.time) {
+          const parts = e.time.split(":");
+          sec = (parseInt(parts[0] || "0", 10) * 3600) + (parseInt(parts[1] || "0", 10) * 60);
+        }
+        return { sec: sec ?? 0, value: e.value };
+      })
+      .filter((e): e is { sec: number; value: number } => typeof e.value === "number" && !isNaN(e.value))
+      .sort((a, b) => a.sec - b.sec);
+
+    if (sorted.length === 0) return defaultValue;
+
+    let matched = sorted[0]!.value;
+    for (const item of sorted) {
+      if (secondsOfDay >= item.sec) {
+        matched = item.value;
+      } else {
+        break;
+      }
+    }
+    return matched;
+  }
+
+  /**
+   * Fetches the tenant's complete therapy settings (DIA, ISF, CR, Basal) for a specific target time.
+   */
+  async getTherapyParameters(
+    tenantSlug: string,
+    targetTime: Date
+  ): Promise<ResolvedTherapyParameters | null> {
+    try {
+      const res = await fetch(`${this.config.apiUrl}/api/v4/profile/summary`, {
+        headers: await this.getHeaders(tenantSlug),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+
+      if (!res.ok) {
+        return null;
+      }
+
+      const summary = await parseJson<ProfileSummaryResponse>(res);
+      const settings = summary?.therapySettings ?? [];
+      const defaultProfile =
+        settings.find((s) => s.isDefault)?.profileName ??
+        settings[0]?.profileName ??
+        "Default";
+
+      const activeTherapySetting =
+        settings.find((s) => s.profileName === defaultProfile) ?? settings[0];
+
+      // Seconds from midnight for schedule lookup
+      const secondsOfDay =
+        targetTime.getHours() * 3600 +
+        targetTime.getMinutes() * 60 +
+        targetTime.getSeconds();
+
+      // Resolve ISF
+      const sensitivitySchedules = summary?.sensitivitySchedules ?? [];
+      const activeSensitivity =
+        sensitivitySchedules.find((s) => s.profileName === defaultProfile) ??
+        sensitivitySchedules[0];
+      const isf = this.resolveScheduleValue(activeSensitivity?.entries, secondsOfDay, 50);
+
+      // Resolve Carb Ratio (CR)
+      const carbRatioSchedules = summary?.carbRatioSchedules ?? [];
+      const activeCarbRatio =
+        carbRatioSchedules.find((s) => s.profileName === defaultProfile) ??
+        carbRatioSchedules[0];
+      const cr = this.resolveScheduleValue(activeCarbRatio?.entries, secondsOfDay, 10);
+
+      // Resolve DIA
+      const dia =
+        typeof activeTherapySetting?.dia === "number" && activeTherapySetting.dia > 0
+          ? activeTherapySetting.dia
+          : 4.0;
+
+      // Resolve Basal Profile
+      const basalSchedules = summary?.basalSchedules ?? [];
+      const activeBasal =
+        basalSchedules.find((s) => s.profileName === defaultProfile) ??
+        basalSchedules[0];
+      const basalEntries = activeBasal?.entries ?? [];
+
+      const basalProfile: BasalProfileEntry[] = [];
+      for (const e of basalEntries) {
+        if (typeof e.value !== "number" || e.value <= 0) continue;
+        let hour = 0;
+        if (typeof e.timeAsSeconds === "number") {
+          hour = Math.floor(e.timeAsSeconds / 3600);
+        } else if (typeof e.time === "string") {
+          const parts = e.time.split(":");
+          hour = parseInt(parts[0] || "0", 10) || 0;
+        }
+        basalProfile.push({ hour: Math.max(0, Math.min(23, hour)), rate: e.value });
+      }
+
+      return {
+        dia,
+        isf,
+        cr,
+        basalProfile,
+      };
+    } catch (err) {
+      console.warn(`[${tenantSlug}] Failed to fetch therapy parameters:`, formatError(err));
       return null;
     }
   }

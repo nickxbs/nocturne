@@ -32,6 +32,9 @@ public class CgmSimController : ControllerBase, IWriteScopedController
     private readonly ITempBasalRepository _tempBasalRepository;
     private readonly ICarbIntakeRepository _carbIntakeRepository;
     private readonly ITargetRangeResolver _targetRangeResolver;
+    private readonly ISensitivityResolver _sensitivityResolver;
+    private readonly ICarbRatioResolver _carbRatioResolver;
+    private readonly ITherapySettingsResolver _therapySettingsResolver;
 
     public CgmSimController(
         INocturneDbContextFactory contextFactory,
@@ -41,7 +44,10 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         IBolusRepository bolusRepository,
         ITempBasalRepository tempBasalRepository,
         ICarbIntakeRepository carbIntakeRepository,
-        ITargetRangeResolver targetRangeResolver)
+        ITargetRangeResolver targetRangeResolver,
+        ISensitivityResolver sensitivityResolver,
+        ICarbRatioResolver carbRatioResolver,
+        ITherapySettingsResolver therapySettingsResolver)
     {
         _contextFactory = contextFactory;
         _entryService = entryService;
@@ -51,6 +57,9 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         _tempBasalRepository = tempBasalRepository;
         _carbIntakeRepository = carbIntakeRepository;
         _targetRangeResolver = targetRangeResolver;
+        _sensitivityResolver = sensitivityResolver;
+        _carbRatioResolver = carbRatioResolver;
+        _therapySettingsResolver = therapySettingsResolver;
     }
 
     [HttpGet("subject")]
@@ -107,13 +116,18 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         await using var db = await _contextFactory.CreateAsync(ct);
         var entity = await GetOrCreateSettingsAsync(db, ct);
 
+        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var effectiveIsf = await _sensitivityResolver.GetSensitivityAsync(nowMills, ct: ct);
+        var effectiveCr = await _carbRatioResolver.GetCarbRatioAsync(nowMills, ct: ct);
+        var effectiveDia = await _therapySettingsResolver.GetDIAAsync(nowMills, ct: ct);
+
         return Ok(new CgmSimParameters
         {
-            Isf = entity.Isf,
-            Dia = entity.Dia,
+            Isf = effectiveIsf > 0 ? effectiveIsf : (entity.Isf > 0 ? entity.Isf : 50.0),
+            Dia = effectiveDia > 0 ? effectiveDia : (entity.Dia > 0 ? entity.Dia : 4.0),
             CarbsAbsTime = entity.CarbsAbsTime,
             InsulinPeak = entity.InsulinPeak,
-            Cr = entity.Cr,
+            Cr = effectiveCr > 0 ? effectiveCr : (entity.Cr > 0 ? entity.Cr : 10.0),
         });
     }
 
@@ -128,21 +142,29 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         await using var db = await _contextFactory.CreateAsync(ct);
         var entity = await GetOrCreateSettingsAsync(db, ct);
 
-        entity.Isf = model.Isf;
-        entity.Dia = model.Dia;
+        // Simulator-specific kinetics
         entity.CarbsAbsTime = model.CarbsAbsTime;
         entity.InsulinPeak = model.InsulinPeak;
-        entity.Cr = model.Cr;
+
+        // Keep entity values updated as fallback
+        if (model.Isf > 0) entity.Isf = model.Isf;
+        if (model.Dia > 0) entity.Dia = model.Dia;
+        if (model.Cr > 0) entity.Cr = model.Cr;
 
         await db.SaveChangesAsync(ct);
 
+        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var effectiveIsf = await _sensitivityResolver.GetSensitivityAsync(nowMills, ct: ct);
+        var effectiveCr = await _carbRatioResolver.GetCarbRatioAsync(nowMills, ct: ct);
+        var effectiveDia = await _therapySettingsResolver.GetDIAAsync(nowMills, ct: ct);
+
         return Ok(new CgmSimParameters
         {
-            Isf = entity.Isf,
-            Dia = entity.Dia,
+            Isf = effectiveIsf > 0 ? effectiveIsf : entity.Isf,
+            Dia = effectiveDia > 0 ? effectiveDia : entity.Dia,
             CarbsAbsTime = entity.CarbsAbsTime,
             InsulinPeak = entity.InsulinPeak,
-            Cr = entity.Cr,
+            Cr = effectiveCr > 0 ? effectiveCr : entity.Cr,
         });
     }
 
@@ -155,6 +177,11 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         await using var db = await _contextFactory.CreateAsync(ct);
         var entity = await GetOrCreateSettingsAsync(db, ct);
 
+        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var effectiveIsf = await _sensitivityResolver.GetSensitivityAsync(nowMills, ct: ct);
+        var effectiveCr = await _carbRatioResolver.GetCarbRatioAsync(nowMills, ct: ct);
+        var effectiveDia = await _therapySettingsResolver.GetDIAAsync(nowMills, ct: ct);
+
         return Ok(new CgmSimSettings
         {
             Subject = new CgmSimSubject
@@ -166,11 +193,11 @@ public class CgmSimController : ControllerBase, IWriteScopedController
             },
             Parameters = new CgmSimParameters
             {
-                Isf = entity.Isf,
-                Dia = entity.Dia,
+                Isf = effectiveIsf > 0 ? effectiveIsf : (entity.Isf > 0 ? entity.Isf : 50.0),
+                Dia = effectiveDia > 0 ? effectiveDia : (entity.Dia > 0 ? entity.Dia : 4.0),
                 CarbsAbsTime = entity.CarbsAbsTime,
                 InsulinPeak = entity.InsulinPeak,
-                Cr = entity.Cr,
+                Cr = effectiveCr > 0 ? effectiveCr : (entity.Cr > 0 ? entity.Cr : 10.0),
             },
             IsInitialized = entity.IsInitialized,
             UpdatedAt = entity.UpdatedAt,
@@ -237,10 +264,12 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         await using var db = await _contextFactory.CreateAsync(ct);
         var entity = await GetOrCreateSettingsAsync(db, ct);
 
-        var isf = entity.Isf > 0 ? entity.Isf : 50.0;
-        var cr = entity.Cr > 0 ? entity.Cr : 10.0;
-
         var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var effectiveIsf = await _sensitivityResolver.GetSensitivityAsync(nowMills, ct: ct);
+        var effectiveCr = await _carbRatioResolver.GetCarbRatioAsync(nowMills, ct: ct);
+
+        var isf = effectiveIsf > 0 ? effectiveIsf : (entity.Isf > 0 ? entity.Isf : 50.0);
+        var cr = effectiveCr > 0 ? effectiveCr : (entity.Cr > 0 ? entity.Cr : 10.0);
         var entries = (await _entryService.GetEntriesAsync("sgv", 1, 0, ct)).ToList();
         var currentEntry = entries.FirstOrDefault();
         double? currentBg = currentEntry is not null && (nowMills - currentEntry.Mills) <= 30 * 60 * 1000L
