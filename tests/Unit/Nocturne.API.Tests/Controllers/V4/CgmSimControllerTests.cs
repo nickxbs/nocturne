@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Moq;
 using Nocturne.API.Controllers.V4.CgmSim;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -251,7 +252,12 @@ public class CgmSimControllerTests
         IBolusRepository? bolusRepository = null,
         ITempBasalRepository? tempBasalRepository = null,
         ICarbIntakeRepository? carbIntakeRepository = null,
-        ITargetRangeResolver? targetRangeResolver = null)
+        ITargetRangeResolver? targetRangeResolver = null,
+        ISensitivityResolver? sensitivityResolver = null,
+        ICarbRatioResolver? carbRatioResolver = null,
+        ITherapySettingsResolver? therapySettingsResolver = null,
+        IPatientRecordRepository? patientRecordRepository = null,
+        IBodyWeightService? bodyWeightService = null)
     {
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -294,6 +300,31 @@ public class CgmSimControllerTests
             .Setup(r => r.GetBGTargetRangeAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Low: 70.0, High: 130.0));
 
+        var sensitivityMock = new Mock<ISensitivityResolver>();
+        sensitivityMock
+            .Setup(r => r.GetSensitivityAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0.0);
+
+        var carbRatioMock = new Mock<ICarbRatioResolver>();
+        carbRatioMock
+            .Setup(r => r.GetCarbRatioAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0.0);
+
+        var therapySettingsMock = new Mock<ITherapySettingsResolver>();
+        therapySettingsMock
+            .Setup(r => r.GetDIAAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0.0);
+
+        var patientRecordMock = new Mock<IPatientRecordRepository>();
+        patientRecordMock
+            .Setup(r => r.GetAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PatientRecord?)null);
+        patientRecordMock
+            .Setup(r => r.GetOrCreateAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PatientRecord());
+
+        var bodyWeightMock = new Mock<IBodyWeightService>();
+
         var controller = new CgmSimController(
             factory,
             entryService ?? entryServiceMock.Object,
@@ -302,7 +333,12 @@ public class CgmSimControllerTests
             bolusRepository ?? bolusRepoMock.Object,
             tempBasalRepository ?? tempBasalRepoMock.Object,
             carbIntakeRepository ?? carbIntakeRepoMock.Object,
-            targetRangeResolver ?? targetRangeMock.Object);
+            targetRangeResolver ?? targetRangeMock.Object,
+            sensitivityResolver ?? sensitivityMock.Object,
+            carbRatioResolver ?? carbRatioMock.Object,
+            therapySettingsResolver ?? therapySettingsMock.Object,
+            patientRecordRepository ?? patientRecordMock.Object,
+            bodyWeightService ?? bodyWeightMock.Object);
 
         return (controller, options);
     }
