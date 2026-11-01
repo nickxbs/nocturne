@@ -332,4 +332,47 @@ public class CgmSimController : ControllerBase, IWriteScopedController
 
         return entity;
     }
+
+    [HttpGet("noise")]
+    [RequireScope(Scope.TherapyRead)]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(CgmSimNoiseData), StatusCodes.Status200OK)]
+    public async Task<ActionResult<CgmSimNoiseData>> GetNoise(CancellationToken ct)
+    {
+        await using var db = await _contextFactory.CreateAsync(ct);
+        var entity = await GetOrCreateSettingsAsync(db, ct);
+
+        var points = string.IsNullOrEmpty(entity.NoisePointsJson)
+            ? []
+            : System.Text.Json.JsonSerializer.Deserialize<List<CgmSimNoisePoint>>(entity.NoisePointsJson) ?? [];
+
+        return Ok(new CgmSimNoiseData
+        {
+            Points = points,
+            GeneratedAt = entity.NoiseGeneratedAt,
+        });
+    }
+
+    [HttpPut("noise")]
+    [RequireDeclaredWriteScope]
+    [RemoteCommand(Invalidates = ["GetNoise"])]
+    [ProducesResponseType(typeof(CgmSimNoiseData), StatusCodes.Status200OK)]
+    public async Task<ActionResult<CgmSimNoiseData>> UpdateNoise(
+        [FromBody] CgmSimNoiseData model,
+        CancellationToken ct)
+    {
+        await using var db = await _contextFactory.CreateAsync(ct);
+        var entity = await GetOrCreateSettingsAsync(db, ct);
+
+        entity.NoisePointsJson = System.Text.Json.JsonSerializer.Serialize(model.Points ?? []);
+        entity.NoiseGeneratedAt = model.GeneratedAt ?? DateTime.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+
+        return Ok(new CgmSimNoiseData
+        {
+            Points = model.Points ?? [],
+            GeneratedAt = entity.NoiseGeneratedAt,
+        });
+    }
 }

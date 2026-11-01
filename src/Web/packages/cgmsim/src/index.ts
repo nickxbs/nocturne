@@ -1,6 +1,8 @@
 import { loadConfig } from "./config.js";
 import { NocturneApiClient, formatError } from "./api-client.js";
 import { CgmSimulatorEngine } from "./simulator.js";
+import { createPerlinArray, getNoiseForTimestamp } from "./noise.js";
+import type { CgmSimNoisePoint } from "./types.js";
 
 async function main() {
   const config = loadConfig();
@@ -13,6 +15,7 @@ async function main() {
   console.log(`Instance Key:      ${config.instanceKey ? "[Configured]" : "[Not set / Dev mode]"}`);
   console.log(`Scheduler:         ${config.enabled ? "ENABLED" : "DISABLED (idle mode)"}`);
   console.log(`Interval:          ${config.intervalMs / 1000} seconds`);
+  console.log(`Noise Parameters:  amplitude=${config.noiseAmplitude}, octaves=${config.noiseOctaves}, persistence=${config.noisePersistence}`);
   console.log(`Verbose Logs:      ${config.debug ? "ENABLED (SIMULATION_DEBUG=true)" : "DISABLED"}`);
   console.log("=================================================\n");
 
@@ -35,6 +38,9 @@ async function main() {
 
   const apiClient = new NocturneApiClient(config);
   const engine = new CgmSimulatorEngine();
+
+  // In-memory cache for tenants' Perlin noise arrays
+  const tenantNoiseCache = new Map<string, CgmSimNoisePoint[]>();
 
   let isRunning = false;
 
@@ -149,6 +155,42 @@ async function main() {
             }
           }
 
+          // Fetch or initialize Perlin noise array from DB / Memory
+          let noisePoints = tenantNoiseCache.get(tenant.slug);
+          if (!noisePoints || noisePoints.length === 0) {
+            const dbNoise = await apiClient.getCgmSimNoise(tenant.slug);
+            if (dbNoise?.points && dbNoise.points.length > 0) {
+              noisePoints = dbNoise.points;
+              tenantNoiseCache.set(tenant.slug, noisePoints);
+            }
+          }
+
+          const nowMs = now.getTime();
+          let currentNoise = noisePoints ? getNoiseForTimestamp(noisePoints, nowMs) : null;
+
+          // If no noise array exists or if current time is past the array range, generate 7 days of noise
+          if (currentNoise === null) {
+            console.log(
+              `  │ [Noise] Generating new 7-day Perlin noise array for tenant '${tenant.slug}' (amplitude=${config.noiseAmplitude}, octaves=${config.noiseOctaves}, persistence=${config.noisePersistence})...`
+            );
+            noisePoints = createPerlinArray(
+              config.noiseAmplitude,
+              config.noiseOctaves,
+              config.noisePersistence,
+              nowMs
+            );
+            tenantNoiseCache.set(tenant.slug, noisePoints);
+            currentNoise = getNoiseForTimestamp(noisePoints, nowMs) ?? 0;
+
+            // Persist to DB asynchronously
+            void apiClient.saveCgmSimNoise(tenant.slug, {
+              points: noisePoints,
+              generatedAt: now.toISOString(),
+            });
+          }
+
+          console.log(`  │ Noise Offset:      ${currentNoise >= 0 ? "+" : ""}${currentNoise.toFixed(3)} mg/dL`);
+
           // Compute next simulated reading using @lsandini/cgmsim-lib
           const customLogger = config.debug
             ? {
@@ -166,7 +208,7 @@ async function main() {
             treatments,
             currentEntry,
             basalProfile,
-            { debug: config.debug, logger: customLogger }
+            { debug: config.debug, logger: customLogger, noise: currentNoise }
           );
 
           // === LOG OUTPUTS ===

@@ -8,6 +8,9 @@ export interface SimulatorConfig {
   serviceName: string;
   targetTenantSlug?: string;
   allowDevFallback: boolean;
+  noiseAmplitude: number;
+  noiseOctaves: number;
+  noisePersistence: number;
 }
 
 export function loadConfig(): SimulatorConfig {
@@ -27,6 +30,15 @@ export function loadConfig(): SimulatorConfig {
   const targetTenantSlug = process.env.SIMULATION_TENANT?.trim();
   const allowDevFallback = process.env.ALLOW_DEV_FALLBACK !== "false";
 
+  const noiseAmpEnv = process.env.NOISE_AMPLITUDE ?? process.env.SIMULATION_NOISE_AMPLITUDE;
+  const noiseAmplitude = noiseAmpEnv ? parseFloat(noiseAmpEnv) : 1.0;
+
+  const noiseOctEnv = process.env.NOISE_OCTAVES ?? process.env.SIMULATION_NOISE_OCTAVES;
+  const noiseOctaves = noiseOctEnv ? parseInt(noiseOctEnv, 10) : 4;
+
+  const noisePersEnv = process.env.NOISE_PERSISTENCE ?? process.env.SIMULATION_NOISE_PERSISTENCE;
+  const noisePersistence = noisePersEnv ? parseFloat(noisePersEnv) : 0.5;
+
   return {
     enabled,
     debug,
@@ -37,5 +49,8 @@ export function loadConfig(): SimulatorConfig {
     serviceName,
     targetTenantSlug: targetTenantSlug || undefined,
     allowDevFallback,
+    noiseAmplitude: isNaN(noiseAmplitude) ? 1.0 : noiseAmplitude,
+    noiseOctaves: isNaN(noiseOctaves) || noiseOctaves < 1 ? 4 : noiseOctaves,
+    noisePersistence: isNaN(noisePersistence) ? 0.5 : noisePersistence,
   };
 }

@@ -82,6 +82,16 @@ export interface BasalProfileEntry {
   rate: number;
 }
 
+export interface CgmSimNoisePoint {
+  time: number;
+  noise: number;
+}
+
+export interface CgmSimNoiseData {
+  points: CgmSimNoisePoint[];
+  generatedAt?: string | null;
+}
+
 export interface ProfileSummaryResponse {
   therapySettings?: Array<{
     profileName?: string;

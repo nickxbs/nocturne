@@ -47,6 +47,12 @@ public class CgmSimSettingsEntity : ITenantScoped, IEntityTimestamped
     [Column("is_initialized")]
     public bool IsInitialized { get; set; } = false;
 
+    [Column("noise_points", TypeName = "jsonb")]
+    public string? NoisePointsJson { get; set; }
+
+    [Column("noise_generated_at")]
+    public DateTime? NoiseGeneratedAt { get; set; }
+
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

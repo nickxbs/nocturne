@@ -977,6 +977,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("isf");
 
+                    b.Property<DateTime?>("NoiseGeneratedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("noise_generated_at");
+
+                    b.Property<string>("NoisePointsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("noise_points");
+
                     b.Property<string>("Sex")
                         .IsRequired()
                         .HasMaxLength(32)

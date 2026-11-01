@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { SimulatorConfig } from "./config.js";
 import type {
   BasalProfileEntry,
+  CgmSimNoiseData,
   CgmSimSettings,
   ConnectorSummary,
   CurrentEntry,
@@ -400,6 +401,53 @@ export class NocturneApiClient {
     } catch (err) {
       console.warn(`[${tenantSlug}] Failed to fetch basal profile:`, formatError(err));
       return [];
+    }
+  }
+
+  /**
+   * Fetches the persisted Perlin noise dataset for a tenant.
+   */
+  async getCgmSimNoise(tenantSlug: string): Promise<CgmSimNoiseData | null> {
+    try {
+      const res = await fetch(`${this.config.apiUrl}/api/v4/cgmsim/noise`, {
+        headers: await this.getHeaders(tenantSlug),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+
+      if (!res.ok) {
+        if (res.status === 404) return null;
+        console.warn(`[${tenantSlug}] Error fetching CGMSIM noise: ${res.status}`);
+        return null;
+      }
+
+      return await parseJson<CgmSimNoiseData>(res);
+    } catch (err) {
+      console.error(`[${tenantSlug}] Failed to fetch CGMSIM noise:`, formatError(err));
+      return null;
+    }
+  }
+
+  /**
+   * Updates/persists the Perlin noise dataset for a tenant.
+   */
+  async saveCgmSimNoise(tenantSlug: string, noiseData: CgmSimNoiseData): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.config.apiUrl}/api/v4/cgmsim/noise`, {
+        method: "PUT",
+        headers: await this.getHeaders(tenantSlug),
+        body: JSON.stringify(noiseData),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+
+      if (!res.ok) {
+        console.warn(`[${tenantSlug}] Failed to save CGMSIM noise: ${res.status}`);
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      console.error(`[${tenantSlug}] Failed to save CGMSIM noise:`, formatError(err));
+      return false;
     }
   }
 

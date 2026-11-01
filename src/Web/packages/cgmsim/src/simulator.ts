@@ -61,7 +61,7 @@ export class CgmSimulatorEngine {
     treatments: Treatment[],
     previousEntry: CurrentEntry | null,
     basalProfile?: BasalProfileEntry[],
-    options?: { debug?: boolean; logger?: SimulationLogger }
+    options?: { debug?: boolean; logger?: SimulationLogger; noise?: number }
   ): { entry: SimulatedEntry; result: CoreSimulationResult; pumpEnabled: boolean } {
     const params = parameters || this.defaultParameters;
     const subj = subject || this.defaultSubject;
@@ -152,9 +152,12 @@ export class CgmSimulatorEngine {
 
     const direction: TrendDirection = toTrendDirection(simResult.direction);
 
+    const noiseOffset = options?.noise ?? 0;
+    const finalSgv = Math.max(39, Math.round(simResult.sgv + noiseOffset));
+
     const entry: SimulatedEntry = {
       type: "sgv",
-      sgv: Math.round(simResult.sgv),
+      sgv: finalSgv,
       direction,
       date: now.getTime(),
       dateString: now.toISOString(),

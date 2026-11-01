@@ -51,6 +51,24 @@ public class CgmSimParameters
 }
 
 /// <summary>
+/// A single point in the simulated CGM Perlin noise sequence.
+/// </summary>
+public class CgmSimNoisePoint
+{
+    public long Time { get; set; }
+    public double Noise { get; set; }
+}
+
+/// <summary>
+/// Cached Perlin noise sequence for the CGM simulation.
+/// </summary>
+public class CgmSimNoiseData
+{
+    public List<CgmSimNoisePoint> Points { get; set; } = [];
+    public DateTime? GeneratedAt { get; set; }
+}
+
+/// <summary>
 /// Complete CGM simulation configuration for a tenant.
 /// </summary>
 public class CgmSimSettings
