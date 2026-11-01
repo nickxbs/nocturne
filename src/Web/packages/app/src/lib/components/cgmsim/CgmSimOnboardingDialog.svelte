@@ -4,7 +4,7 @@
   import { Input } from "#lib/components/ui/input/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
   import * as Select from "#lib/components/ui/select/index.js";
-  import Sparkles from "@lucide/svelte/icons/sparkles";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import User from "@lucide/svelte/icons/user";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
@@ -49,22 +49,21 @@
     other: "Other / Unspecified",
   };
 
-  function randomizeSubject() {
-    const sexes = ["male", "female", "other"];
-    sex = sexes[Math.floor(Math.random() * sexes.length)]!;
-    weight = (Math.random() * 35 + 55).toFixed(1); // 55.0 - 90.0 kg
-    age = Math.floor(Math.random() * 45 + 20).toString(); // 20 - 65 years
-    height = (Math.random() * 35 + 155).toFixed(1); // 155.0 - 190.0 cm
-    toast.info("Patient values generated randomly.");
+  function resetSubjectDefaults() {
+    sex = "male";
+    weight = "70.0";
+    age = "30";
+    height = "170.0";
+    toast.info("Patient values set to default.");
   }
 
-  function randomizeParameters() {
-    isf = (Math.floor(Math.random() * 9 + 6) * 5).toString(); // 30 - 70 mg/dL/U
-    dia = (Math.random() * 2.0 + 3.5).toFixed(1); // 3.5 - 5.5 h
-    carbsAbsTime = (Math.floor(Math.random() * 8 + 8) * 15).toString(); // 120 - 225 min
-    insulinPeak = (Math.floor(Math.random() * 7 + 10) * 5).toString(); // 50 - 80 min
-    cr = (Math.random() * 7.0 + 8.0).toFixed(1); // 8.0 - 15.0 g/U
-    toast.info("Simulation parameters generated randomly.");
+  function resetParametersDefaults() {
+    isf = "50";
+    dia = "4.0";
+    carbsAbsTime = "180";
+    insulinPeak = "75";
+    cr = "10.0";
+    toast.info("Simulation parameters set to default.");
   }
 
   const isStep1Valid = $derived.by(() => {
@@ -237,10 +236,10 @@
               type="button"
               variant="outline"
               size="sm"
-              onclick={randomizeSubject}
+              onclick={resetSubjectDefaults}
             >
-              <Sparkles class="mr-1.5 h-3.5 w-3.5 text-warning" />
-              Generate random values
+              <RotateCcw class="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
+              Reset defaults
             </Button>
           </div>
 
@@ -353,10 +352,10 @@
               type="button"
               variant="outline"
               size="sm"
-              onclick={randomizeParameters}
+              onclick={resetParametersDefaults}
             >
-              <Sparkles class="mr-1.5 h-3.5 w-3.5 text-warning" />
-              Generate random values
+              <RotateCcw class="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
+              Reset defaults
             </Button>
           </div>
 
