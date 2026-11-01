@@ -38911,13 +38911,11 @@ msgstr "Female"
 msgid "Other / Unspecified"
 msgstr "Other / Unspecified"
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Patient values generated randomly."
-msgstr "Patient values generated randomly."
+#~ msgid "Patient values generated randomly."
+#~ msgstr "Patient values generated randomly."
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Simulation parameters generated randomly."
-msgstr "Simulation parameters generated randomly."
+#~ msgid "Simulation parameters generated randomly."
+#~ msgstr "Simulation parameters generated randomly."
 
 #~ msgid "Please fill in all patient data with valid values before proceeding."
 #~ msgstr "Please fill in all patient data with valid values before proceeding."
@@ -38961,10 +38959,8 @@ msgstr "<0/> Step 1: Patient Data (Subject)"
 msgid "Physiological traits of the virtual patient in the simulation model."
 msgstr "Physiological traits of the virtual patient in the simulation model."
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "<0/> Generate random values"
-msgstr "<0/> Generate random values"
+#~ msgid "<0/> Generate random values"
+#~ msgstr "<0/> Generate random values"
 
 #: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 msgid "Select sex..."
@@ -39184,9 +39180,8 @@ msgstr "<0/> Save Subject"
 #~ msgid "Please enter a valid carb ratio (CR)."
 #~ msgstr "Please enter a valid carb ratio (CR)."
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Simulation parameters saved successfully."
-msgstr "Simulation parameters saved successfully."
+#~ msgid "Simulation parameters saved successfully."
+#~ msgstr "Simulation parameters saved successfully."
 
 #: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
 msgid "Failed to save simulation parameters."
@@ -39203,21 +39198,17 @@ msgstr "Metabolic & Kinetic Parameters"
 #~ msgid "Tune insulin kinetics, carbohydrate absorption dynamics, and sensitivity ratios for simulation. All fields are required."
 #~ msgstr "Tune insulin kinetics, carbohydrate absorption dynamics, and sensitivity ratios for simulation. All fields are required."
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Insulin Sensitivity Factor (ISF) <0/>"
-msgstr "Insulin Sensitivity Factor (ISF) <0/>"
+#~ msgid "Insulin Sensitivity Factor (ISF) <0/>"
+#~ msgstr "Insulin Sensitivity Factor (ISF) <0/>"
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Blood glucose drop per 1 unit of insulin."
-msgstr "Blood glucose drop per 1 unit of insulin."
+#~ msgid "Blood glucose drop per 1 unit of insulin."
+#~ msgstr "Blood glucose drop per 1 unit of insulin."
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Duration of Insulin Action (DIA) <0/>"
-msgstr "Duration of Insulin Action (DIA) <0/>"
+#~ msgid "Duration of Insulin Action (DIA) <0/>"
+#~ msgstr "Duration of Insulin Action (DIA) <0/>"
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Effective duration of rapid-acting insulin activity."
-msgstr "Effective duration of rapid-acting insulin activity."
+#~ msgid "Effective duration of rapid-acting insulin activity."
+#~ msgstr "Effective duration of rapid-acting insulin activity."
 
 #~ msgid "Total duration of meal carbohydrate absorption."
 #~ msgstr "Total duration of meal carbohydrate absorption."
@@ -39226,20 +39217,17 @@ msgstr "Effective duration of rapid-acting insulin activity."
 msgid "Insulin Peak Time <0/>"
 msgstr "Insulin Peak Time <0/>"
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Time in minutes when rapid-acting insulin reaches peak activity."
-msgstr "Time in minutes when rapid-acting insulin reaches peak activity."
+#~ msgid "Time in minutes when rapid-acting insulin reaches peak activity."
+#~ msgstr "Time in minutes when rapid-acting insulin reaches peak activity."
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Carb Ratio (CR) <0/>"
-msgstr "Carb Ratio (CR) <0/>"
+#~ msgid "Carb Ratio (CR) <0/>"
+#~ msgstr "Carb Ratio (CR) <0/>"
 
 #~ msgid "Grams of carbohydrate covered by 1 unit of insulin."
 #~ msgstr "Grams of carbohydrate covered by 1 unit of insulin."
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "<0/> Save Parameters"
-msgstr "<0/> Save Parameters"
+#~ msgid "<0/> Save Parameters"
+#~ msgstr "<0/> Save Parameters"
 
 #~ msgid "<0/> Don't have an account? Create one"
 #~ msgstr "<0/> Don't have an account? Create one"
@@ -39293,13 +39281,11 @@ msgstr "Insulin kinetics, carb absorption, and sensitivity."
 msgid "You do not have access to any workspaces yet. You can create your own personal workspace to start logging and monitoring glucose."
 msgstr "You do not have access to any workspaces yet. You can create your own personal workspace to start logging and monitoring glucose."
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Enter a valid ISF value."
-msgstr "Enter a valid ISF value."
+#~ msgid "Enter a valid ISF value."
+#~ msgstr "Enter a valid ISF value."
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Enter a valid DIA value."
-msgstr "Enter a valid DIA value."
+#~ msgid "Enter a valid DIA value."
+#~ msgstr "Enter a valid DIA value."
 
 #: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
 msgid "Enter a valid carb absorption time."
@@ -39309,21 +39295,17 @@ msgstr "Enter a valid carb absorption time."
 msgid "Enter a valid insulin peak time."
 msgstr "Enter a valid insulin peak time."
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Enter a valid carb ratio (CR)."
-msgstr "Enter a valid carb ratio (CR)."
+#~ msgid "Enter a valid carb ratio (CR)."
+#~ msgstr "Enter a valid carb ratio (CR)."
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Tune insulin kinetics, carb absorption dynamics, and sensitivity ratios for simulation. All fields are required."
-msgstr "Tune insulin kinetics, carb absorption dynamics, and sensitivity ratios for simulation. All fields are required."
+#~ msgid "Tune insulin kinetics, carb absorption dynamics, and sensitivity ratios for simulation. All fields are required."
+#~ msgstr "Tune insulin kinetics, carb absorption dynamics, and sensitivity ratios for simulation. All fields are required."
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Total duration of meal carb absorption."
-msgstr "Total duration of meal carb absorption."
+#~ msgid "Total duration of meal carb absorption."
+#~ msgstr "Total duration of meal carb absorption."
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Grams of carbs covered by 1 unit of insulin."
-msgstr "Grams of carbs covered by 1 unit of insulin."
+#~ msgid "Grams of carbs covered by 1 unit of insulin."
+#~ msgstr "Grams of carbs covered by 1 unit of insulin."
 
 #: src/routes/(authenticated)/cgmsim/subject/+page.svelte
 msgid "Select a biological sex."
@@ -39782,3 +39764,60 @@ msgstr "Basal Dose ({0})"
 #: src/routes/(authenticated)/careportal/+page.svelte
 msgid "RES:"
 msgstr "RES:"
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Patient values set to default."
+msgstr "Patient values set to default."
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "Simulation parameters set to default."
+msgstr "Simulation parameters set to default."
+
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
+msgid "<0/> Reset defaults"
+msgstr "<0/> Reset defaults"
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Simulation kinetics saved successfully."
+msgstr "Simulation kinetics saved successfully."
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Tune insulin kinetics and carb absorption dynamics. Clinical sensitivity and duration are synchronized directly from your Therapy Profile."
+msgstr "Tune insulin kinetics and carb absorption dynamics. Clinical sensitivity and duration are synchronized directly from your Therapy Profile."
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Therapy Profile (Source of Truth)"
+msgstr "Therapy Profile (Source of Truth)"
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Edit in Profile Settings <0/>"
+msgstr "Edit in Profile Settings <0/>"
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "ISF (Sensitivity)"
+msgstr "ISF (Sensitivity)"
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Carb Ratio (CR)"
+msgstr "Carb Ratio (CR)"
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "DIA (Insulin Action)"
+msgstr "DIA (Insulin Action)"
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "The simulator actively respects your schedule profiles for ISF, CR, DIA and Basal rates set in your Therapy Profile."
+msgstr "The simulator actively respects your schedule profiles for ISF, CR, DIA and Basal rates set in your Therapy Profile."
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Total duration of meal carb absorption curve in the physiological engine."
+msgstr "Total duration of meal carb absorption curve in the physiological engine."
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Time in minutes when rapid-acting insulin reaches peak activity (e.g. 55m Fiasp/Lyumjev, 75m Novorapid/Humalog)."
+msgstr "Time in minutes when rapid-acting insulin reaches peak activity (e.g. 55m Fiasp/Lyumjev, 75m Novorapid/Humalog)."
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "<0/> Save Kinetics"
+msgstr "<0/> Save Kinetics"
