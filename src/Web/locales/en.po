@@ -39783,9 +39783,8 @@ msgstr "The simulator actively respects your schedule profiles for ISF, CR, DIA 
 msgid "Total duration of meal carb absorption curve in the physiological engine."
 msgstr "Total duration of meal carb absorption curve in the physiological engine."
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Time in minutes when rapid-acting insulin reaches peak activity (e.g. 55m Fiasp/Lyumjev, 75m Novorapid/Humalog)."
-msgstr "Time in minutes when rapid-acting insulin reaches peak activity (e.g. 55m Fiasp/Lyumjev, 75m Novorapid/Humalog)."
+#~ msgid "Time in minutes when rapid-acting insulin reaches peak activity (e.g. 55m Fiasp/Lyumjev, 75m Novorapid/Humalog)."
+#~ msgstr "Time in minutes when rapid-acting insulin reaches peak activity (e.g. 55m Fiasp/Lyumjev, 75m Novorapid/Humalog)."
 
 #: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
 msgid "<0/> Save Kinetics"
@@ -39795,3 +39794,7 @@ msgstr "<0/> Save Kinetics"
 #: src/lib/components/dashboard/CgmSimProfileCard.svelte
 msgid "Configure Patient"
 msgstr "Configure Patient"
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Time in minutes when rapid-acting insulin reaches peak activity (for example: 55m Fiasp/Lyumjev, 75m Novorapid/Humalog)."
+msgstr "Time in minutes when rapid-acting insulin reaches peak activity (for example: 55m Fiasp/Lyumjev, 75m Novorapid/Humalog)."
