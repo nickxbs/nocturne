@@ -62,14 +62,14 @@
       >
         <span class="inline-flex items-center -space-x-1.5">
           <ArrowRight
-            class="size-5 sm:size-6 stroke-[2.75] transition-transform duration-500"
-            style="transform: rotate({arrowDegrees}deg)"
+            class="size-5 sm:size-6 rotate-(--arrow-angle) transition-transform duration-500"
+            style="--arrow-angle: {arrowDegrees}deg"
             aria-hidden="true"
           />
           {#if isDoubleTrend}
             <ArrowRight
-              class="size-5 sm:size-6 stroke-[2.75] transition-transform duration-500"
-              style="transform: rotate({arrowDegrees}deg)"
+              class="size-5 sm:size-6 rotate-(--arrow-angle) transition-transform duration-500"
+              style="--arrow-angle: {arrowDegrees}deg"
               aria-hidden="true"
             />
           {/if}
@@ -132,9 +132,9 @@
         onclick={() => (pumpDialogOpen = true)}
         aria-label="Open Careportal Pump Menu"
         data-testid="careportal-fab-button"
-        class="shrink-0 rounded-lg font-mono text-xs font-bold uppercase tracking-wider shadow-sm gap-1.5 px-3 sm:px-4"
+        class="shrink-0"
       >
-        <Plus class="size-4 stroke-[2.5]" />
+        <Plus class="size-4" />
         <span>PDM Touch</span>
       </Button>
     </div>

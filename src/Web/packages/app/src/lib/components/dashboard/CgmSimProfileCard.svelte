@@ -35,12 +35,11 @@
             <span>Subject</span>
           </div>
           <Button
-            variant="ghost"
+            variant="ghost-muted"
             size="icon-xs"
             href={resolve("/(authenticated)/settings/patient")}
             title="Configure Patient"
             aria-label="Configure Patient"
-            class="h-5 w-5 text-muted-foreground hover:text-foreground"
           >
             <ExternalLink class="size-3" />
           </Button>
@@ -82,12 +81,11 @@
             <span>Kinetics</span>
           </div>
           <Button
-            variant="ghost"
+            variant="ghost-muted"
             size="icon-xs"
             href={resolve("/(authenticated)/cgmsim/parameters")}
             title="Configure Parameters"
             aria-label="Configure Parameters"
-            class="h-5 w-5 text-muted-foreground hover:text-foreground"
           >
             <ExternalLink class="size-3" />
           </Button>

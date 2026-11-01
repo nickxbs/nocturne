@@ -112,15 +112,15 @@
 
         <div class="grid gap-4 sm:grid-cols-3">
           <div class="space-y-1">
-            <Label class="text-xs text-muted-foreground">ISF (Sensitivity)</Label>
+            <Label size="sm" variant="muted">ISF (Sensitivity)</Label>
             <div class="text-base font-semibold">{isf || "—"} <span class="text-xs font-normal text-muted-foreground">mg/dL/U</span></div>
           </div>
           <div class="space-y-1">
-            <Label class="text-xs text-muted-foreground">Carb Ratio (CR)</Label>
+            <Label size="sm" variant="muted">Carb Ratio (CR)</Label>
             <div class="text-base font-semibold">{cr || "—"} <span class="text-xs font-normal text-muted-foreground">g/U</span></div>
           </div>
           <div class="space-y-1">
-            <Label class="text-xs text-muted-foreground">DIA (Insulin Action)</Label>
+            <Label size="sm" variant="muted">DIA (Insulin Action)</Label>
             <div class="text-base font-semibold">{dia || "—"} <span class="text-xs font-normal text-muted-foreground">hours</span></div>
           </div>
         </div>

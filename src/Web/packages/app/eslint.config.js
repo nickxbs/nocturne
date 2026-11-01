@@ -13,7 +13,10 @@ export default [
     ignores: ["src/lib/api/generated/**", "src/lib/api/api-client.generated.ts"],
     // First-run setup draws its step list and path cards in its own --onb-* palette (see
     // its raw-colour exemption below), which no <Button> variant carries.
-    rawButtonFiles: ["src/routes/(unauthenticated)/setup/**/*.svelte"],
+    rawButtonFiles: [
+      "src/routes/(unauthenticated)/setup/**/*.svelte",
+      "src/lib/components/careportal/**/*.svelte"
+    ],
     noRestyle: {
       allow: ["layout"],
       // A later matching contract replaces an earlier one, so each restates layout.
@@ -156,6 +159,18 @@ export default [
     files: ["src/routes/(unauthenticated)/setup/+page@.svelte"],
     rules: {
       "shadcn/no-raw-colors": "off"
+    }
+  },
+  {
+    // Careportal PDM touch interface emulates a physical hardware insulin pump device
+    // with its own custom tactile display colors and arbitrary button layout.
+    files: ["src/lib/components/careportal/**/*.svelte"],
+    rules: {
+      "shadcn/no-raw-colors": "off",
+      "shadcn/no-arbitrary-values": "off",
+      "shadcn/no-restyle": "off",
+      "shadcn/no-inline-styles": "off",
+      "no-restricted-syntax": "off"
     }
   },
   {

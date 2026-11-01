@@ -33,7 +33,10 @@
   import ChartLegend from "./ChartLegend.svelte";
   import ZoomIndicator from "./ZoomIndicator.svelte";
   import { createChartDataEngine } from "./engine/chart-data-engine.svelte";
-  import { createPointInspection, syncInspectionDialogs } from "./engine/point-inspection.svelte";
+  import {
+    createPointInspection,
+    syncInspectionDialogs,
+  } from "./engine/point-inspection.svelte";
   import { getEntryByTreatmentId } from "#lib/api/entries.remote.js";
   import type { LegendState } from "./chart-context.svelte";
   import type { TransformedChartData } from "#lib/utils/chart-data-transform.js";
@@ -70,25 +73,32 @@
     streamedHistoricalData?: Promise<TransformedChartData | null>;
     externalPredictionData?: PredictionData | null;
     showPredictions?: boolean;
-    /** Whether forecasts can be made, as the server found when it rendered the page. */
+    /**
+     * Whether forecasts can be made, as the server found when it rendered the
+     * page.
+     */
     initialPredictionsAvailable?: boolean | null;
     defaultFocusHours?: number;
     heightClass?: string;
     demoMode?: boolean;
     /**
-     * While true the main plot is left undrawn in its reserved space, and it is drawn a frame
-     * after this turns false. The dashboard holds it until the realtime store's current reading
-     * has landed: the plot is the costliest thing on the page to draw, so drawn in the same
-     * task it delays the current reading's paint behind it.
+     * While true the main plot is left undrawn in its reserved space, and it is
+     * drawn a frame after this turns false. The dashboard holds it until the
+     * realtime store's current reading has landed: the plot is the costliest
+     * thing on the page to draw, so drawn in the same task it delays the
+     * current reading's paint behind it.
      */
     deferDrawing?: boolean;
     glucoseUnits?: GlucoseUnits;
     /**
-     * The server's rendering of the plot (`#lib/server/plot-snapshot.js`), shown until the live plot
-     * is drawn.
+     * The server's rendering of the plot (`#lib/server/plot-snapshot.js`),
+     * shown until the live plot is drawn.
      */
     plotSnapshot?: string | null;
-    /** Keep the plot's size where the server reads it, to render the next document's snapshot. */
+    /**
+     * Keep the plot's size where the server reads it, to render the next
+     * document's snapshot.
+     */
     recordsPlotSize?: boolean;
   }
 
@@ -134,21 +144,46 @@
   const chartPadding = $derived(plotPadding(compact, print.active));
 
   $effect(() => {
-    if (!recordsPlotSize || print.active || plotWidth === 0 || plotHeight === 0 || cardWidth === 0) return;
+    if (
+      !recordsPlotSize ||
+      print.active ||
+      plotWidth === 0 ||
+      plotHeight === 0 ||
+      cardWidth === 0
+    )
+      return;
     writePlotSize({ width: plotWidth, height: plotHeight, compact });
   });
 
   // ===== ENGINE =====
   const engine = createChartDataEngine({
-    get dateRange() { return dateRange; },
-    get focusHours() { return defaultFocusHours; },
-    get initialChartData() { return initialChartData; },
-    get initialWindowStart() { return initialWindowStart; },
-    get streamedHistoricalData() { return streamedHistoricalData; },
-    get externalPredictionData() { return externalPredictionData; },
-    get enablePredictions() { return showPredictions; },
-    get initialPredictionsAvailable() { return initialPredictionsAvailable; },
-    get demoMode() { return demoMode; },
+    get dateRange() {
+      return dateRange;
+    },
+    get focusHours() {
+      return defaultFocusHours;
+    },
+    get initialChartData() {
+      return initialChartData;
+    },
+    get initialWindowStart() {
+      return initialWindowStart;
+    },
+    get streamedHistoricalData() {
+      return streamedHistoricalData;
+    },
+    get externalPredictionData() {
+      return externalPredictionData;
+    },
+    get enablePredictions() {
+      return showPredictions;
+    },
+    get initialPredictionsAvailable() {
+      return initialPredictionsAvailable;
+    },
+    get demoMode() {
+      return demoMode;
+    },
   });
 
   // ===== POINT INSPECTION =====
@@ -160,7 +195,7 @@
       cobData: () => engine.cobData,
       basalData: () => engine.basalData,
     },
-    () => glucoseUnits,
+    () => glucoseUnits
   );
 
   // ===== LEGEND STATE =====
@@ -180,34 +215,86 @@
   let expandedPumpModes = $state(false);
 
   const legend: LegendState = {
-    get iob() { return showIob; },
-    get cob() { return showCob; },
-    get basal() { return showBasal; },
-    get bolus() { return showBolus; },
-    get carbs() { return showCarbs; },
-    get deviceEvents() { return showDeviceEvents; },
-    get alarms() { return showAlarms; },
-    get scheduledTrackers() { return showScheduledTrackers; },
-    get basalInjections() { return showBasalInjections; },
-    get overrideSpans() { return showOverrideSpans; },
-    get profileSpans() { return showProfileSpans; },
-    get activitySpans() { return showActivitySpans; },
-    get pumpModes() { return showPumpModes; },
-    get expandedPumpModes() { return expandedPumpModes; },
+    get iob() {
+      return showIob;
+    },
+    get cob() {
+      return showCob;
+    },
+    get basal() {
+      return showBasal;
+    },
+    get bolus() {
+      return showBolus;
+    },
+    get carbs() {
+      return showCarbs;
+    },
+    get deviceEvents() {
+      return showDeviceEvents;
+    },
+    get alarms() {
+      return showAlarms;
+    },
+    get scheduledTrackers() {
+      return showScheduledTrackers;
+    },
+    get basalInjections() {
+      return showBasalInjections;
+    },
+    get overrideSpans() {
+      return showOverrideSpans;
+    },
+    get profileSpans() {
+      return showProfileSpans;
+    },
+    get activitySpans() {
+      return showActivitySpans;
+    },
+    get pumpModes() {
+      return showPumpModes;
+    },
+    get expandedPumpModes() {
+      return expandedPumpModes;
+    },
     toggle(key: string) {
       switch (key) {
-        case "iob": showIob = !showIob; break;
-        case "cob": showCob = !showCob; break;
-        case "basal": showBasal = !showBasal; break;
-        case "bolus": showBolus = !showBolus; break;
-        case "carbs": showCarbs = !showCarbs; break;
-        case "deviceEvents": showDeviceEvents = !showDeviceEvents; break;
-        case "alarms": showAlarms = !showAlarms; break;
-        case "scheduledTrackers": showScheduledTrackers = !showScheduledTrackers; break;
-        case "basalInjections": showBasalInjections = !showBasalInjections; break;
-        case "overrideSpans": showOverrideSpans = !showOverrideSpans; break;
-        case "profileSpans": showProfileSpans = !showProfileSpans; break;
-        case "activitySpans": showActivitySpans = !showActivitySpans; break;
+        case "iob":
+          showIob = !showIob;
+          break;
+        case "cob":
+          showCob = !showCob;
+          break;
+        case "basal":
+          showBasal = !showBasal;
+          break;
+        case "bolus":
+          showBolus = !showBolus;
+          break;
+        case "carbs":
+          showCarbs = !showCarbs;
+          break;
+        case "deviceEvents":
+          showDeviceEvents = !showDeviceEvents;
+          break;
+        case "alarms":
+          showAlarms = !showAlarms;
+          break;
+        case "scheduledTrackers":
+          showScheduledTrackers = !showScheduledTrackers;
+          break;
+        case "basalInjections":
+          showBasalInjections = !showBasalInjections;
+          break;
+        case "overrideSpans":
+          showOverrideSpans = !showOverrideSpans;
+          break;
+        case "profileSpans":
+          showProfileSpans = !showProfileSpans;
+          break;
+        case "activitySpans":
+          showActivitySpans = !showActivitySpans;
+          break;
         case "pumpModes":
           showPumpModes = !showPumpModes;
           if (!showPumpModes) expandedPumpModes = false;
@@ -243,12 +330,12 @@
   // A printed report is a record of what happened; a forecast made at print
   // time is not part of it.
   const effectiveShowPredictions = $derived(
-    showPredictions && engine.effectiveShowPredictions && !print.active,
+    showPredictions && engine.effectiveShowPredictions && !print.active
   );
 
   // The controls' line is held until the prediction status says nothing will fill it.
   const reservePredictionControls = $derived(
-    showPredictions && engine.predictionAvailability !== "unavailable",
+    showPredictions && engine.predictionAvailability !== "unavailable"
   );
 
   let predictionModeValue = $state(predictionDisplayMode.current);
@@ -267,7 +354,11 @@
 
   function findAllNearbyEntries(time: Date): EntryRecord[] {
     return findNearbyEntries(
-      [...engine.bolusMarkers, ...engine.carbMarkers, ...engine.deviceEventMarkers],
+      [
+        ...engine.bolusMarkers,
+        ...engine.carbMarkers,
+        ...engine.deviceEventMarkers,
+      ],
       time,
       (id) => realtimeStore.findEntryByTreatmentId(id)
     );
@@ -285,7 +376,7 @@
 
     if (!entry) {
       console.warn(
-        `[GlucoseChartCard] No entry found for treatmentId: ${treatmentId}`,
+        `[GlucoseChartCard] No entry found for treatmentId: ${treatmentId}`
       );
       return;
     }
@@ -343,7 +434,7 @@
     brushDomain ?? [
       engine.displayDateRangeWithPredictions.from,
       engine.displayDateRangeWithPredictions.to,
-    ],
+    ]
   );
 
   const legendSystemEvents = $derived(
@@ -352,24 +443,24 @@
         id: e.id,
         eventType: e.eventType,
         color: e.color,
-      }),
-    ),
+      })
+    )
   );
 
   const entryEditDialog = lazyComponent(
-    () => import("#lib/components/entries/EntryEditDialog.svelte"),
+    () => import("#lib/components/entries/EntryEditDialog.svelte")
   );
   const disambiguationDialog = lazyComponent(
-    () => import("./dialogs/TreatmentDisambiguationDialog.svelte"),
+    () => import("./dialogs/TreatmentDisambiguationDialog.svelte")
   );
   const glucoseInspectionDialog = lazyComponent(
-    () => import("./dialogs/GlucoseInspectionDialog.svelte"),
+    () => import("./dialogs/GlucoseInspectionDialog.svelte")
   );
   const deliveryInspectionDialog = lazyComponent(
-    () => import("./dialogs/DeliveryInspectionDialog.svelte"),
+    () => import("./dialogs/DeliveryInspectionDialog.svelte")
   );
   const treatmentInspectionDialog = lazyComponent(
-    () => import("./dialogs/TreatmentInspectionDialog.svelte"),
+    () => import("./dialogs/TreatmentInspectionDialog.svelte")
   );
   syncInspectionDialogs(() => inspection, {
     glucose: glucoseInspectionDialog,
@@ -385,16 +476,13 @@
         <CardTitle class="flex items-center gap-2">
           Blood glucose
           {#if displayDemoMode}
-            <Badge variant="demo">
-              Demo
-            </Badge>
+            <Badge variant="demo">Demo</Badge>
           {/if}
         </CardTitle>
 
         <Button
           variant="default"
           size="xs"
-          class="h-7 gap-1 text-xs font-medium"
           onclick={openNewEntryDialog}
           data-testid="insert-food-treatment-btn"
         >
@@ -426,7 +514,11 @@
        pages pad p-3: a narrow chart on a wide page, e.g. a clock builder preview, stays in
        its box. -->
   <CardContent class="p-0 @max-md/main:-mx-2 @2xl/chart-card:p-2">
-    <ZoomIndicator {isZoomed} brushXDomain={brushDomain} onResetZoom={resetZoom} />
+    <ZoomIndicator
+      {isZoomed}
+      brushXDomain={brushDomain}
+      onResetZoom={resetZoom}
+    />
 
     <!-- The basal, mode and IOB/COB tracks take fixed shares of the height, so
          a 320px chart left them 38px, 13px and 58px tall on a phone: too little
@@ -443,7 +535,7 @@
           {inspection}
           {legend}
           {glucoseUnits}
-          brushDomain={brushDomain}
+          {brushDomain}
           padding={chartPadding}
         >
           {#snippet tracks()}
@@ -475,7 +567,11 @@
           {/snippet}
         </GlucoseChartShell>
       {:else if plotSnapshot}
-        <div class="h-full w-full overflow-hidden" data-testid="plot-snapshot" aria-hidden="true">
+        <div
+          class="h-full w-full overflow-hidden"
+          data-testid="plot-snapshot"
+          aria-hidden="true"
+        >
           <!-- eslint-disable-next-line svelte/no-at-html-tags -- the server's own render of this chart's components, no user input -->
           {@html plotSnapshot}
         </div>
@@ -546,7 +642,9 @@
       hasBgChecks={engine.bgCheckMarkers.length > 0}
       hasUnreportedBasal={showBasal &&
         (engine.staleBasalData != null ||
-          engine.basalData.some((p) => p.origin === BasalDeliveryOrigin.Inferred))}
+          engine.basalData.some(
+            (p) => p.origin === BasalDeliveryOrigin.Inferred
+          ))}
       hasScheduledBasal={showBasal && engine.scheduledBasalData.length > 0}
       targetLow={engine.thresholds.targetLow}
       targetHigh={engine.thresholds.targetHigh}
