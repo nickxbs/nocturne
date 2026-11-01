@@ -51,7 +51,7 @@ export function createPerlinArray(
     ) {
       noiseValue = 0;
     } else {
-      noiseValue = noise[i] / 10 - 0.05;
+      noiseValue = (noise[i] - 0.5) * 10; // -5 to 5
     }
 
     noiseArray.push({
