@@ -26,9 +26,6 @@ public class CgmSimSettingsEntity : ITenantScoped, IEntityTimestamped
     [Column("age")]
     public int Age { get; set; } = 30;
 
-    [Column("height")]
-    public double Height { get; set; } = 170.0;
-
     [Column("isf")]
     public double Isf { get; set; } = 50.0;
 

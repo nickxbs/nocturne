@@ -21,7 +21,6 @@ export interface CgmSimSubject {
   sex: string;
   weight: number;
   age: number;
-  height: number;
 }
 
 export interface CgmSimParameters {

@@ -45,7 +45,7 @@
           </Button>
         </div>
 
-        <div class="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+        <div class="grid grid-cols-3 gap-x-2 gap-y-1.5 text-xs">
           <div class="space-y-0.5">
             <span class="text-muted-foreground text-2xs block leading-none">Sex</span>
             <span class="font-medium text-foreground leading-none" data-testid="cgmsim-subject-sex">
@@ -62,12 +62,6 @@
             <span class="text-muted-foreground text-2xs block leading-none">Age</span>
             <span class="font-medium text-foreground leading-none" data-testid="cgmsim-subject-age">
               {subject?.age != null ? `${subject.age} yrs` : "-"}
-            </span>
-          </div>
-          <div class="space-y-0.5">
-            <span class="text-muted-foreground text-2xs block leading-none">Height</span>
-            <span class="font-medium text-foreground leading-none" data-testid="cgmsim-subject-height">
-              {subject?.height != null ? `${subject.height} cm` : "-"}
             </span>
           </div>
         </div>

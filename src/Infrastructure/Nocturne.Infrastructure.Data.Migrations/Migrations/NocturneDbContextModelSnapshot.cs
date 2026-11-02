@@ -961,10 +961,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("dia");
 
-                    b.Property<double>("Height")
-                        .HasColumnType("double precision")
-                        .HasColumnName("height");
-
                     b.Property<int>("InsulinPeak")
                         .HasColumnType("integer")
                         .HasColumnName("insulin_peak");

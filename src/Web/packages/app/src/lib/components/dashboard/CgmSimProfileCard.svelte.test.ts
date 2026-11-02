@@ -9,7 +9,6 @@ const mockSettings = vi.hoisted(() => ({
     sex: "female",
     weight: 62.5,
     age: 28,
-    height: 168.0,
   },
   parameters: {
     isf: 45.0,
@@ -37,7 +36,6 @@ describe("CgmSimProfileCard", () => {
     await expect.element(page.getByTestId("cgmsim-subject-sex")).toHaveTextContent("Female");
     await expect.element(page.getByTestId("cgmsim-subject-weight")).toHaveTextContent("62.5 kg");
     await expect.element(page.getByTestId("cgmsim-subject-age")).toHaveTextContent("28 yrs");
-    await expect.element(page.getByTestId("cgmsim-subject-height")).toHaveTextContent("168 cm");
 
     // Parameter fields
     await expect.element(page.getByTestId("cgmsim-param-isf")).toHaveTextContent("45 mg/dL/U");

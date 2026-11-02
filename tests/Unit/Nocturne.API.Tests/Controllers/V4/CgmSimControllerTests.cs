@@ -5,6 +5,7 @@ using Moq;
 using Nocturne.API.Controllers.V4.CgmSim;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -34,7 +35,6 @@ public class CgmSimControllerTests
         subject.Sex.Should().Be("other");
         subject.Weight.Should().Be(70.0);
         subject.Age.Should().Be(30);
-        subject.Height.Should().Be(170.0);
 
         await using var db = new NocturneDbContext(options) { TenantId = Tenant };
         (await db.CgmSimSettings.CountAsync()).Should().Be(1);
@@ -50,7 +50,6 @@ public class CgmSimControllerTests
             Sex = "female",
             Weight = 62.5,
             Age = 28,
-            Height = 168.0,
         };
 
         var result = await controller.UpdateSubject(updateModel, CancellationToken.None);
@@ -60,7 +59,6 @@ public class CgmSimControllerTests
         subject.Sex.Should().Be("female");
         subject.Weight.Should().Be(62.5);
         subject.Age.Should().Be(28);
-        subject.Height.Should().Be(168.0);
 
         await using var db = new NocturneDbContext(options) { TenantId = Tenant };
         var stored = await db.CgmSimSettings.FirstOrDefaultAsync();
@@ -68,7 +66,6 @@ public class CgmSimControllerTests
         stored!.Sex.Should().Be("female");
         stored.Weight.Should().Be(62.5);
         stored.Age.Should().Be(28);
-        stored.Height.Should().Be(168.0);
     }
 
     [Fact]
@@ -155,7 +152,6 @@ public class CgmSimControllerTests
                 Sex = "female",
                 Weight = 65.0,
                 Age = 25,
-                Height = 165.0,
             },
             Parameters = new CgmSimParameters
             {
@@ -252,12 +248,14 @@ public class CgmSimControllerTests
         IBolusRepository? bolusRepository = null,
         ITempBasalRepository? tempBasalRepository = null,
         ICarbIntakeRepository? carbIntakeRepository = null,
-        ITargetRangeResolver? targetRangeResolver = null,
+        ITargetRangeResolver targetRangeResolver = null!,
         ISensitivityResolver? sensitivityResolver = null,
         ICarbRatioResolver? carbRatioResolver = null,
         ITherapySettingsResolver? therapySettingsResolver = null,
         IPatientRecordRepository? patientRecordRepository = null,
-        IBodyWeightService? bodyWeightService = null)
+        IBodyWeightService? bodyWeightService = null,
+        IProfileWriteService? profileWriteService = null,
+        ITherapySettingsRepository? therapySettingsRepository = null)
     {
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -324,6 +322,11 @@ public class CgmSimControllerTests
             .ReturnsAsync(new PatientRecord());
 
         var bodyWeightMock = new Mock<IBodyWeightService>();
+        var profileWriteMock = new Mock<IProfileWriteService>();
+        var therapyRepoMock = new Mock<ITherapySettingsRepository>();
+        therapyRepoMock
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<TherapySettings>());
 
         var controller = new CgmSimController(
             factory,
@@ -338,7 +341,9 @@ public class CgmSimControllerTests
             carbRatioResolver ?? carbRatioMock.Object,
             therapySettingsResolver ?? therapySettingsMock.Object,
             patientRecordRepository ?? patientRecordMock.Object,
-            bodyWeightService ?? bodyWeightMock.Object);
+            bodyWeightService ?? bodyWeightMock.Object,
+            profileWriteService ?? profileWriteMock.Object,
+            therapySettingsRepository ?? therapyRepoMock.Object);
 
         return (controller, options);
     }

@@ -9,7 +9,6 @@ describe("CgmSimulatorEngine using @lsandini/cgmsim-lib", () => {
     sex: "male",
     weight: 70.0,
     age: 30,
-    height: 170.0,
   };
 
   const mockParams: CgmSimParameters = {

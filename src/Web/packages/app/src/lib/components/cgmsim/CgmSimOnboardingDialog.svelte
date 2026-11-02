@@ -34,7 +34,6 @@
   let sex = $state<string>("");
   let weight = $state<string>("");
   let age = $state<string>("");
-  let height = $state<string>("");
 
   // Step 2: Simulation parameters (initially empty)
   let isf = $state<string>("");
@@ -53,7 +52,6 @@
     sex = "male";
     weight = "70.0";
     age = "30";
-    height = "170.0";
     toast.info("Patient values set to default.");
   }
 
@@ -69,7 +67,6 @@
   const isStep1Valid = $derived.by(() => {
     const w = Number(weight);
     const a = Number(age);
-    const h = Number(height);
     return (
       sex.trim().length > 0 &&
       !isNaN(w) &&
@@ -77,10 +74,7 @@
       w <= 500 &&
       !isNaN(a) &&
       a >= 1 &&
-      a <= 150 &&
-      !isNaN(h) &&
-      h >= 20 &&
-      h <= 300
+      a <= 150
     );
   });
 
@@ -134,7 +128,6 @@
           sex,
           weight: Number(weight),
           age: Math.round(Number(age)),
-          height: Number(height),
         },
         parameters: {
           isf: Number(isf),
@@ -284,7 +277,7 @@
             </div>
 
             <!-- Age -->
-            <div class="space-y-1.5">
+            <div class="space-y-1.5 sm:col-span-2">
               <Label for="onboarding-subject-age" size="sm">
                 Age (years) <span class="text-destructive">*</span>
               </Label>
@@ -301,28 +294,6 @@
                 />
                 <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
                   years
-                </span>
-              </div>
-            </div>
-
-            <!-- Height -->
-            <div class="space-y-1.5">
-              <Label for="onboarding-subject-height" size="sm">
-                Height (cm) <span class="text-destructive">*</span>
-              </Label>
-              <div class="relative">
-                <Input
-                  id="onboarding-subject-height"
-                  type="number"
-                  step="0.5"
-                  min="20"
-                  max="300"
-                  placeholder="e.g. 170.0"
-                  required
-                  bind:value={height}
-                />
-                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
-                  cm
                 </span>
               </div>
             </div>

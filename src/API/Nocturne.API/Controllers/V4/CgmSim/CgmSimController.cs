@@ -6,9 +6,11 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.CgmSim;
 using Nocturne.Infrastructure.Data;
@@ -38,6 +40,8 @@ public class CgmSimController : ControllerBase, IWriteScopedController
     private readonly ITherapySettingsResolver _therapySettingsResolver;
     private readonly IPatientRecordRepository _patientRecordRepository;
     private readonly IBodyWeightService _bodyWeightService;
+    private readonly IProfileWriteService _profileWriteService;
+    private readonly ITherapySettingsRepository _therapySettingsRepository;
 
     public CgmSimController(
         INocturneDbContextFactory contextFactory,
@@ -52,7 +56,9 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         ICarbRatioResolver carbRatioResolver,
         ITherapySettingsResolver therapySettingsResolver,
         IPatientRecordRepository patientRecordRepository,
-        IBodyWeightService bodyWeightService)
+        IBodyWeightService bodyWeightService,
+        IProfileWriteService profileWriteService,
+        ITherapySettingsRepository therapySettingsRepository)
     {
         _contextFactory = contextFactory;
         _entryService = entryService;
@@ -67,6 +73,8 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         _therapySettingsResolver = therapySettingsResolver;
         _patientRecordRepository = patientRecordRepository;
         _bodyWeightService = bodyWeightService;
+        _profileWriteService = profileWriteService;
+        _therapySettingsRepository = therapySettingsRepository;
     }
 
     [HttpGet("subject")]
@@ -131,7 +139,6 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         entity.Sex = model.Sex;
         entity.Weight = model.Weight;
         entity.Age = model.Age;
-        entity.Height = model.Height;
 
         await db.SaveChangesAsync(ct);
 
@@ -280,7 +287,6 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         entity.Sex = request.Subject.Sex;
         entity.Weight = request.Subject.Weight;
         entity.Age = request.Subject.Age;
-        entity.Height = request.Subject.Height;
 
         entity.Isf = request.Parameters.Isf;
         entity.Dia = request.Parameters.Dia;
@@ -291,6 +297,8 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         entity.IsInitialized = true;
 
         await db.SaveChangesAsync(ct);
+
+        await EnsureTherapyProfileAsync(request.Parameters, ct);
 
         var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var effectiveIsf = await _sensitivityResolver.GetSensitivityAsync(nowMills, ct: ct);
@@ -420,15 +428,71 @@ public class CgmSimController : ControllerBase, IWriteScopedController
             ? (double)latestWeight.WeightKg
             : (entity.Weight > 0 ? entity.Weight : 70.0);
 
-        var height = entity.Height > 0 ? entity.Height : 170.0;
-
         return new CgmSimSubject
         {
             Sex = sex,
             Weight = weight,
             Age = Math.Max(1, Math.Min(150, age)),
-            Height = height,
         };
+    }
+
+    private async Task EnsureTherapyProfileAsync(CgmSimParameters parameters, CancellationToken ct)
+    {
+        var existing = await _therapySettingsRepository.GetAsync(
+            null, null, null, null, limit: 1, offset: 0, descending: true, ct: ct);
+        if (existing.Any())
+            return;
+
+        var profile = new Profile
+        {
+            DefaultProfile = "Default",
+            Units = "mg/dL",
+            EnteredBy = "cgmsim",
+            StartDate = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            Store = new Dictionary<string, ProfileData>
+            {
+                ["Default"] = new ProfileData
+                {
+                    Dia = parameters.Dia > 0 ? parameters.Dia : 4.0,
+                    CarbsHr = parameters.CarbsAbsTime > 0 ? (int)Math.Round(60.0 * 60.0 / parameters.CarbsAbsTime) : 20,
+                    Timezone = "UTC",
+                    Units = "mg/dL",
+                    Basal =
+                    [
+                        new TimeValue { Time = "00:00", Value = 1.0, TimeAsSeconds = 0 }
+                    ],
+                    CarbRatio =
+                    [
+                        new TimeValue
+                        {
+                            Time = "00:00",
+                            Value = parameters.Cr > 0 ? parameters.Cr : 10.0,
+                            TimeAsSeconds = 0
+                        }
+                    ],
+                    Sens =
+                    [
+                        new TimeValue
+                        {
+                            Time = "00:00",
+                            Value = parameters.Isf > 0 ? parameters.Isf : 50.0,
+                            TimeAsSeconds = 0
+                        }
+                    ],
+                    TargetLow =
+                    [
+                        new TimeValue { Time = "00:00", Value = 100.0, TimeAsSeconds = 0 }
+                    ],
+                    TargetHigh =
+                    [
+                        new TimeValue { Time = "00:00", Value = 120.0, TimeAsSeconds = 0 }
+                    ]
+                }
+            }
+        };
+
+        await _profileWriteService.CreateProfilesAsync([profile], ct);
     }
 
     private static async Task<CgmSimSettingsEntity> GetOrCreateSettingsAsync(

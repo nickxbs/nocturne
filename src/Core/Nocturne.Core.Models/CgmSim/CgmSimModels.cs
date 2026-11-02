@@ -18,10 +18,6 @@ public class CgmSimSubject
     [Required]
     [Range(1, 150)]
     public int Age { get; set; } = 30;
-
-    [Required]
-    [Range(20.0, 300.0)]
-    public double Height { get; set; } = 170.0;
 }
 
 /// <summary>
