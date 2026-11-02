@@ -24464,7 +24464,6 @@ msgstr "Entraînements"
 msgid "Body fat"
 msgstr "Masse grasse"
 
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Height"
 msgstr "Taille"
@@ -38981,13 +38980,11 @@ msgstr ""
 msgid "Age (years) <0/>"
 msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "cm"
-msgstr ""
+#~ msgid "cm"
+#~ msgstr ""
 
-#: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-msgid "Height (cm) <0/>"
-msgstr ""
+#~ msgid "Height (cm) <0/>"
+#~ msgstr ""
 
 #: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
 msgid "Next: Simulation Parameters <0/>"
@@ -39059,10 +39056,8 @@ msgstr ""
 msgid "Age"
 msgstr ""
 
-#. 0: subject.height
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-msgid "{0} cm"
-msgstr ""
+#~ msgid "{0} cm"
+#~ msgstr ""
 
 #: src/lib/components/dashboard/CgmSimProfileCard.svelte
 msgid "Kinetics"
