@@ -32,7 +32,6 @@ import Users from "@lucide/svelte/icons/users";
 import PlayCircle from "@lucide/svelte/icons/circle-play";
 import HistoryIcon from "@lucide/svelte/icons/history";
 import Activity from "@lucide/svelte/icons/activity";
-import Syringe from "@lucide/svelte/icons/syringe";
 import { satisfiesScope } from "#lib/authorization/scopes.js";
 import { getSidebarReportItems } from "#lib/navigation/report-navigation.svelte.js";
 import { filterTenantlessNav } from "#lib/navigation/tenantless-navigation.js";
@@ -49,7 +48,6 @@ export type NavItemId =
   | "reports"
   | "clock"
   | "tenants"
-  | "careportal"
   | "food"
   | "meals"
   | "tools"
@@ -202,12 +200,6 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
   }
 
   items.push(
-    {
-      id: "careportal",
-      title: "Careportal",
-      href: "/careportal",
-      icon: Syringe,
-    },
     {
       id: "food",
       title: "Food",

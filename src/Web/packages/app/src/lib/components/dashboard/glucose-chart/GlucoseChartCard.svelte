@@ -387,7 +387,7 @@
     if (nearby.length <= 1) {
       selectedEntry = entry;
       correlatedRecords = realtimeStore.findCorrelatedEntries(entry);
-      entryEditDialog.open = true;
+      treatmentInspectionDialog.open = true;
     } else {
       nearbyEntries = nearby;
       disambiguationDialog.open = true;
@@ -399,13 +399,11 @@
     nearbyEntries = [];
     selectedEntry = entry;
     correlatedRecords = realtimeStore.findCorrelatedEntries(entry);
-    entryEditDialog.open = true;
+    treatmentInspectionDialog.open = true;
   }
 
-  function openNewEntryDialog() {
-    selectedEntry = null;
-    correlatedRecords = [];
-    entryEditDialog.open = true;
+  function openPdmDialog() {
+    pdmDialog.open = true;
   }
 
   // ===== INSPECTION DIALOG STATE =====
@@ -447,8 +445,8 @@
     )
   );
 
-  const entryEditDialog = lazyComponent(
-    () => import("#lib/components/entries/EntryEditDialog.svelte")
+  const pdmDialog = lazyComponent(
+    () => import("#lib/components/careportal/CareportalPumpDialog.svelte")
   );
   const disambiguationDialog = lazyComponent(
     () => import("./dialogs/TreatmentDisambiguationDialog.svelte")
@@ -481,13 +479,14 @@
         </CardTitle>
 
         <Button
-          variant="default"
-          size="xs"
-          onclick={openNewEntryDialog}
-          data-testid="insert-food-treatment-btn"
+          variant="outline"
+          size="icon-xs"
+          onclick={openPdmDialog}
+          aria-label="Open PDM Touch"
+          title="Open PDM Touch"
+          data-testid="open-pdm-btn"
         >
-          <Plus class="size-3" />
-          <span>CarePortal</span>
+          <Plus class="size-3.5" />
         </Button>
       </div>
 
@@ -659,17 +658,11 @@
   </Card>
 </div>
 
-<!-- Entry Edit Dialog -->
-{#if entryEditDialog.component}
-  <entryEditDialog.component
-    bind:open={entryEditDialog.open}
-    entry={selectedEntry}
-    {correlatedRecords}
-    onClose={() => {
-      entryEditDialog.open = false;
-      selectedEntry = null;
-      correlatedRecords = [];
-    }}
+<!-- PDM Touch Dialog -->
+{#if pdmDialog.component}
+  <pdmDialog.component
+    bind:open={pdmDialog.open}
+    currentReservoir={realtimeStore.currentReservoir}
   />
 {/if}
 
@@ -772,17 +765,11 @@
       lowThreshold={engine.thresholds.low}
       hasGlucoseContext={true}
       hasDeliveryContext={inspection.context.basalRate != null}
+      entry={selectedEntry}
+      {correlatedRecords}
       onClose={closeAllInspections}
       onNavigateGlucose={() => inspection.navigateTo("glucose")}
       onNavigateDelivery={() => inspection.navigateTo("delivery")}
-      onEditEntry={() => {
-        closeAllInspections();
-        if (inspection.context?.nearbyBolus?.treatmentId) {
-          handleMarkerClick(inspection.context.nearbyBolus.treatmentId);
-        } else if (inspection.context?.nearbyCarbs?.treatmentId) {
-          handleMarkerClick(inspection.context.nearbyCarbs.treatmentId);
-        }
-      }}
     />
   {/if}
 {/if}

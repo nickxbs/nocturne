@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import Harness from "./RecentTreatmentsCardHarness.test.svelte";
 
 describe("RecentTreatmentsCard", () => {
-  it("loads the entry dialog when a treatment row is first clicked", async () => {
+  it("loads the inspection dialog when a treatment row is first clicked", async () => {
     render(Harness, {
       entries: [{ kind: "carbs", data: { id: "carb-1", mills: Date.now() - 60_000, carbs: 30 } }],
     });
@@ -15,6 +15,6 @@ describe("RecentTreatmentsCard", () => {
 
     await page.getByRole("button", { name: /Carbs/ }).click();
 
-    await expect.element(dialog.getByText("Edit entry")).toBeVisible();
+    await expect.element(dialog.getByText("30g carbs")).toBeVisible();
   });
 });
