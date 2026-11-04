@@ -39765,3 +39765,7 @@ msgstr "Time in minutes when rapid-acting insulin reaches peak activity (for exa
 #: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Open PDM Touch"
 msgstr "Open PDM Touch"
+
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+msgid "PDM"
+msgstr "PDM"

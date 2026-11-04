@@ -39768,3 +39768,7 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Open PDM Touch"
 msgstr ""
+
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+msgid "PDM"
+msgstr ""
