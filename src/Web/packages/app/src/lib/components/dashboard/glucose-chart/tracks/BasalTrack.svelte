@@ -68,18 +68,31 @@
       segments.push(currentSegment);
     }
 
-    // Add closing points so curveStepAfter renders the last step of each segment.
-    // Without this, a segment with a single point (e.g. a temp basal immediately
-    // followed by a suspended period) produces no visible area.
+    // Add closing points so curveStepAfter renders the last step of each segment,
+    // and extends the final segment to the end of the visible chart domain.
+    // Without this, a segment with a single point produces no visible area, and the
+    // final segment terminates at its starting point instead of spanning to the end.
+    const domainEnd = chartCtx.xScale?.domain?.()?.[1];
+    const endTimestamp = domainEnd instanceof Date
+      ? domainEnd.getTime()
+      : ctx.engine.displayDateRange.to.getTime();
+
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i];
       const lastPoint = seg.points[seg.points.length - 1];
       const nextSegFirstPoint = segments[i + 1]?.points[0];
 
-      if (nextSegFirstPoint && lastPoint.timestamp !== nextSegFirstPoint.timestamp) {
+      if (nextSegFirstPoint) {
+        if (lastPoint.timestamp !== nextSegFirstPoint.timestamp) {
+          seg.points.push({
+            ...lastPoint,
+            timestamp: nextSegFirstPoint.timestamp,
+          });
+        }
+      } else if (lastPoint.timestamp != null && lastPoint.timestamp < endTimestamp) {
         seg.points.push({
           ...lastPoint,
-          timestamp: nextSegFirstPoint.timestamp,
+          timestamp: endTimestamp,
         });
       }
     }

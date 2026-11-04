@@ -479,14 +479,15 @@
         </CardTitle>
 
         <Button
-          variant="outline"
-          size="icon-xs"
+          variant="default"
+          size="xs"
           onclick={openPdmDialog}
           aria-label="Open PDM Touch"
           title="Open PDM Touch"
           data-testid="open-pdm-btn"
         >
-          <Plus class="size-3.5" />
+          <Plus class="size-3" />
+          <span>PDM</span>
         </Button>
       </div>
 

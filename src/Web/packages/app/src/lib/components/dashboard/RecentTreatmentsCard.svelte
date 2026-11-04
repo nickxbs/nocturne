@@ -87,13 +87,7 @@
   });
 
   const selectedCarbLabel = $derived.by(() => {
-    if (selectedEntry?.kind === "carbs") {
-      return selectedEntry.data.label;
-    }
-    const correlated = correlatedRecords.find(
-      (r): r is Extract<EntryRecord, { kind: "carbs" }> => r.kind === "carbs",
-    );
-    return correlated?.data.label;
+    return undefined;
   });
 
   const selectedCarbDataSource = $derived.by(() => {
