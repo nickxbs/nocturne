@@ -165,12 +165,12 @@ describe("glucose-chart mark registration", () => {
 		expect(labels).toContain("0.75U/h");
 		expect(labels).toContain("120%");
 
-		// Inferred basal draws one fill rect per step, under a single <pattern>
-		// per segment rather than one per step.
+		// Inferred basal draws one fill rect per step (including the final step
+		// extended to the domain end), under a single <pattern> per segment.
 		expect(
 			container.querySelectorAll("rect[fill='insulin-temp-basal']")
 				.length,
-		).toBe(n - 1);
+		).toBe(n);
 		expect(container.querySelectorAll("pattern").length).toBeLessThanOrEqual(2);
 	});
 });

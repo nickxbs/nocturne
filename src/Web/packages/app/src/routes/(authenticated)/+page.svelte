@@ -19,6 +19,7 @@
   import FirstReadingChartArea from "#lib/components/dashboard/first-reading/FirstReadingChartArea.svelte";
   import SetupStrip from "#lib/components/setup-hub/SetupStrip.svelte";
   import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
   import type { PageData } from "./$types";
 
   const { data }: { data: PageData } = $props();
@@ -61,6 +62,11 @@
   );
 
   const showPredictions = $derived(showsPredictions(uiSettings));
+  const canLoadCgmSimProfile = $derived(
+    !data.isShareHost &&
+      data.isAuthenticated &&
+      satisfiesScope(data.effectivePermissions ?? [], "therapy.read")
+  );
 </script>
 
 {#if data.tenantless}
@@ -96,7 +102,7 @@
         </div>
 
         <div class="@3xl:col-span-5 flex flex-col">
-          <CgmSimProfileCard />
+          <CgmSimProfileCard enabled={canLoadCgmSimProfile} />
         </div>
       </div>
 

@@ -15,6 +15,6 @@ describe("RecentTreatmentsCard", () => {
 
     await page.getByRole("button", { name: /Carbs/ }).click();
 
-    await expect.element(dialog.getByText("30g carbs")).toBeVisible();
+    await expect.element(dialog.getByText("30g carbs").first()).toBeVisible();
   });
 });

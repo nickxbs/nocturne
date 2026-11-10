@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { describe, it, expect, vi } from "vitest";
-import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { remoteQuery, remoteQueryError } from "#lib/test-stubs/remote-resource.js";
 import CgmSimProfileCard from "./CgmSimProfileCard.svelte";
 
 const mockSettings = vi.hoisted(() => ({
@@ -21,11 +21,18 @@ const mockSettings = vi.hoisted(() => ({
   updatedAt: new Date().toISOString(),
 }));
 
+const getSettingsMock = vi.hoisted(() => vi.fn());
+
 vi.mock("#lib/api/generated/cgmSims.generated.remote.js", () => ({
-  getSettings: () => remoteQuery(() => mockSettings),
+  getSettings: getSettingsMock,
 }));
 
 describe("CgmSimProfileCard", () => {
+  beforeEach(() => {
+    getSettingsMock.mockReset();
+    getSettingsMock.mockImplementation(() => remoteQuery(() => mockSettings));
+  });
+
   it("renders subject and parameter values in readonly format", async () => {
     render(CgmSimProfileCard);
 
@@ -55,5 +62,22 @@ describe("CgmSimProfileCard", () => {
     const paramsLink = page.getByRole("link", { name: "Configure Parameters" });
     await expect.element(paramsLink).toBeVisible();
     await expect.element(paramsLink).toHaveAttribute("href", "/cgmsim/parameters");
+  });
+
+  it("skips fetching settings when disabled", async () => {
+    render(CgmSimProfileCard, { props: { enabled: false } });
+
+    await expect.element(page.getByTestId("cgmsim-profile-card")).toBeVisible();
+    await expect.element(page.getByTestId("cgmsim-subject-sex")).toHaveTextContent("-");
+    expect(getSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it("renders a contained fallback instead of crashing when loading settings fails", async () => {
+    getSettingsMock.mockImplementation(() => remoteQueryError(new Error("Forbidden")));
+
+    render(CgmSimProfileCard);
+
+    await expect.element(page.getByTestId("cgmsim-profile-card")).toBeVisible();
+    await expect.element(page.getByTestId("cgmsim-profile-error")).toBeVisible();
   });
 });

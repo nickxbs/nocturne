@@ -75,11 +75,12 @@
     const domainEnd = chartCtx.xScale?.domain?.()?.[1];
     const endTimestamp = domainEnd instanceof Date
       ? domainEnd.getTime()
-      : ctx.engine.displayDateRange.to.getTime();
+      : (ctx.engine.displayDateRange?.to?.getTime?.() ?? Date.now());
 
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i];
       const lastPoint = seg.points[seg.points.length - 1];
+      if (!lastPoint) continue;
       const nextSegFirstPoint = segments[i + 1]?.points[0];
 
       if (nextSegFirstPoint) {
