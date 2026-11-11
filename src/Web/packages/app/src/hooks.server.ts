@@ -296,6 +296,7 @@ const readinessHandle: Handle = async ({ event, resolve }) => {
       recoveryMode: body.recoveryMode === true,
       errorCode: typeof body.error === "string" ? body.error : undefined,
       marketingUrl: MARKETING_URL,
+      allowSetupRequired: event.url.pathname.startsWith("/join"),
     });
 
     if (redirect) {

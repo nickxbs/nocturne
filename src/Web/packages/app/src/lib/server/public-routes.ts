@@ -25,6 +25,8 @@ export interface StatusProbeFailure {
   errorCode?: string;
   /** The marketing site to land an unresolvable non-share host on, if one is configured. */
   marketingUrl: string | undefined;
+  /** Whether the requested route (e.g. /join) may render while the tenant is awaiting its first credential. */
+  allowSetupRequired?: boolean;
 }
 
 /**
@@ -44,6 +46,7 @@ export function statusProbeRedirect({
   recoveryMode,
   errorCode,
   marketingUrl,
+  allowSetupRequired = false,
 }: StatusProbeFailure): { location: string; status: 302 | 303 } | null {
   if (isShareHost && (apiStatus === 404 || apiStatus === 403 || apiStatus === 503)) {
     return { location: SHARE_UNAVAILABLE_PATH, status: 303 };
@@ -51,6 +54,10 @@ export function statusProbeRedirect({
 
   if (apiStatus === 403 && errorCode === TENANT_INACTIVE_CODE) {
     return { location: TENANT_INACTIVE_PATH, status: 303 };
+  }
+
+  if (apiStatus === 503 && !recoveryMode && errorCode === "setup_required" && allowSetupRequired) {
+    return null;
   }
 
   // Any 503 (setup_required, no tenants, or an unparseable body) means the instance isn't ready.

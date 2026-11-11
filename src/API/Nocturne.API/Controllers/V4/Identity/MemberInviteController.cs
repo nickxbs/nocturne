@@ -185,6 +185,7 @@ public class MemberInviteController : ControllerBase
     /// </remarks>
     [HttpGet("{token}/info")]
     [AllowAnonymous]
+    [AllowDuringSetup]
     [EnableRateLimiting("invite-lookup")]
     [InviteTokenAuthorized]
     [RemoteQuery]
@@ -243,6 +244,7 @@ public class MemberInviteController : ControllerBase
     /// </remarks>
     [HttpPost("{token}/accept")]
     [Authorize]
+    [AllowDuringSetup]
     [InviteTokenAuthorized]
     [DenyDemoSubject]
     [RemoteCommand]

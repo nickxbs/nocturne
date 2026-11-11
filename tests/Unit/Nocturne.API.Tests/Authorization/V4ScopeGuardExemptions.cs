@@ -23,6 +23,7 @@ internal static class V4ScopeGuardExemptions
             ["OidcProviderAdminController"] = PlatformAdminRole,
             ["PlatformSettingsController"] = PlatformAdminRole,
             ["TenantController"] = PlatformAdminRole,
+            ["TenantBootstrapInviteController"] = PlatformAdminRole,
             ["TenantDirectGrantController"] = PlatformAdminRole,
             ["ChatIdentityDirectoryController"] = InstanceKey,
         };
