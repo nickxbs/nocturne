@@ -516,6 +516,7 @@ msgstr "Verification code"
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/PointInspectionPicker.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentDisambiguationDialog.svelte
+#: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/meals/MealBolusDialog.svelte
@@ -835,6 +836,7 @@ msgstr "Add"
 #: src/lib/components/admin/SubjectEditDialog.svelte
 #: src/lib/components/audit/AuditMutationsTable.svelte
 #: src/lib/components/audit/AuditMutationsTable.svelte
+#: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/trackers/+page.svelte
@@ -1202,6 +1204,7 @@ msgid "Sat"
 msgstr "Sat"
 
 #: src/lib/components/alerts/AlertRuleRow.svelte
+#: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/food/InlineEditor.svelte
@@ -1379,7 +1382,6 @@ msgstr "Time"
 
 #: src/lib/components/audit/AuditMutationsTable.svelte
 #: src/lib/components/audit/AuditReadsTable.svelte
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 msgid "Subject"
 msgstr "Subject"
 
@@ -2000,8 +2002,6 @@ msgid "{0}m"
 msgstr "{0}m"
 
 #. 0: m
-#. 0: params.carbsAbsTime
-#. 0: params.insulinPeak
 #. 0: bolusCalc.preBolus
 #. 0: minutes
 #. 0: minutesBefore ?? "–"
@@ -2009,8 +2009,6 @@ msgstr "{0}m"
 #. 0: min
 #. 0: therapy.delay ?? "-"
 #: src/lib/components/clock-builder/ElementInspector.svelte
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
@@ -2104,7 +2102,6 @@ msgid "System"
 msgstr "System"
 
 #: src/lib/components/clock-builder/TextStyleControls.svelte
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Weight"
 msgstr "Weight"
@@ -2607,6 +2604,7 @@ msgstr "Type DELETE"
 
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 #: src/lib/components/connectors/DemoDataSection.svelte
+#: src/lib/components/entries/EntryEditDialog.svelte
 msgid "<0/> Deleting..."
 msgstr "<0/> Deleting..."
 
@@ -3023,7 +3021,6 @@ msgid "Connect your CGM app or AID system to push data to Nocturne"
 msgstr "Connect your CGM app or AID system to push data to Nocturne"
 
 #: src/lib/components/connectors/UploaderAppsCard.svelte
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/lib/components/entries/FoodBreakdown.svelte
 #: src/lib/components/meals/MealsTable.svelte
 #: src/lib/components/meals/MealsTable.svelte
@@ -3773,39 +3770,48 @@ msgstr "Notes"
 msgid "Add notes..."
 msgstr "Add notes..."
 
-#~ msgid "Entry updated"
-#~ msgstr "Entry updated"
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Entry updated"
+msgstr "Entry updated"
 
-#~ msgid "Entry created"
-#~ msgstr "Entry created"
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Entry created"
+msgstr "Entry created"
 
 #~ msgid "Failed to save entry"
 #~ msgstr "Failed to save entry"
 
-#~ msgid "Entry deleted"
-#~ msgstr "Entry deleted"
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Entry deleted"
+msgstr "Entry deleted"
 
+#: src/lib/components/entries/EntryEditDialog.svelte
 #: src/routes/(authenticated)/settings/timezone/+page.svelte
 #: src/routes/(authenticated)/settings/weight/+page.svelte
 msgid "Failed to delete entry"
 msgstr "Failed to delete entry"
 
+#: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/meals/MealBolusDialog.svelte
 #: src/lib/components/meals/MealBolusDialog.svelte
 msgid "Failed to save bolus"
 msgstr "Failed to save bolus"
 
-#~ msgid "Failed to save carb intake"
-#~ msgstr "Failed to save carb intake"
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Failed to save carb intake"
+msgstr "Failed to save carb intake"
 
-#~ msgid "Failed to save BG check"
-#~ msgstr "Failed to save BG check"
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Failed to save BG check"
+msgstr "Failed to save BG check"
 
-#~ msgid "Failed to save note"
-#~ msgstr "Failed to save note"
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Failed to save note"
+msgstr "Failed to save note"
 
-#~ msgid "Failed to save device event"
-#~ msgstr "Failed to save device event"
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Failed to save device event"
+msgstr "Failed to save device event"
 
 #~ msgid "Edit Entry"
 #~ msgstr "Edit Entry"
@@ -3813,21 +3819,25 @@ msgstr "Failed to save bolus"
 #~ msgid "New Entry"
 #~ msgstr "New Entry"
 
-#~ msgid "Edit the details of this entry and its correlated records."
-#~ msgstr "Edit the details of this entry and its correlated records."
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Edit the details of this entry and its correlated records."
+msgstr "Edit the details of this entry and its correlated records."
 
-#~ msgid "Create a new entry. Add multiple record types to correlate them."
-#~ msgstr "Create a new entry. Add multiple record types to correlate them."
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Create a new entry. Add multiple record types to correlate them."
+msgstr "Create a new entry. Add multiple record types to correlate them."
 
 #~ msgid "Date & Time"
 #~ msgstr "Date & Time"
 
-#~ msgid "Source:"
-#~ msgstr "Source:"
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Source:"
+msgstr "Source:"
 
 #~ msgid "<0/> Add Section"
 #~ msgstr "<0/> Add Section"
 
+#: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
@@ -4665,7 +4675,6 @@ msgstr "Role"
 msgid "hours"
 msgstr "hours"
 
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/lib/components/patient/InsulinFormFields.svelte
 msgid "Peak"
 msgstr "Peak"
@@ -5001,7 +5010,6 @@ msgstr "Select an icon"
 #~ msgid "I:C Ratio"
 #~ msgstr "I:C Ratio"
 
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 msgid "ISF"
 msgstr "ISF"
@@ -12733,7 +12741,6 @@ msgstr "· Entered by {0}"
 #~ msgid "Created {0} <0/>"
 #~ msgstr "Created {0} <0/>"
 
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/routes/(authenticated)/settings/profile/+page.svelte
 #: src/routes/(authenticated)/settings/profile/+page.svelte
 msgid "DIA"
@@ -15784,8 +15791,9 @@ msgstr "Optional notes..."
 msgid "<0/> Add a food to this carb entry"
 msgstr "<0/> Add a food to this carb entry"
 
-#~ msgid "Failed to save basal injection"
-#~ msgstr "Failed to save basal injection"
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Failed to save basal injection"
+msgstr "Failed to save basal injection"
 
 #: src/lib/components/layout/DemoBanner.svelte
 msgid "Resetting soon"
@@ -16654,11 +16662,9 @@ msgstr "Windows where readings oscillate in a way that is unlikely to be physiol
 msgid "{0} pp"
 msgstr "{0} pp"
 
-#. 0: params.dia
 #. 0: minutes / 60
 #. 0: minutesAfter == null ? "–" \\: minutesAfter / 60
 #. 0: e.event.timeToNadirHours.toFixed(1)
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 #: src/lib/components/reports/sensor-integrity/HypoAfterNoiseLog.svelte
@@ -17234,9 +17240,7 @@ msgstr "Recorded weights"
 #~ msgid "No entries yet."
 #~ msgstr "No entries yet."
 
-#. 0: subject.weight
 #. 0: entry.weightKg
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/routes/(authenticated)/settings/weight/+page.svelte
 msgid "{0} kg"
 msgstr "{0} kg"
@@ -20044,7 +20048,6 @@ msgstr "After this the link stops working. Anyone who already joined keeps their
 msgid "You cannot change your own roles or permissions. Ask another member who can manage members to change them for you."
 msgstr "You cannot change your own roles or permissions. Ask another member who can manage members to change them for you."
 
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/lib/components/patient/PatientClinicalForm.svelte
 msgid "Sex"
 msgstr "Sex"
@@ -28187,9 +28190,7 @@ msgstr "Observed grams per unit"
 msgid "Drop per unit above schedule"
 msgstr "Drop per unit above schedule"
 
-#. 0: params.cr
 #. 0: value.toFixed(1)
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 msgid "{0} g/U"
 msgstr "{0} g/U"
@@ -31648,6 +31649,7 @@ msgid "Send a test alert"
 msgstr "Send a test alert"
 
 #: src/lib/components/admin/OidcProviderDialog.svelte
+#: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/routes/(authenticated)/settings/patient/+page.svelte
@@ -33443,18 +33445,22 @@ msgstr "<0/> Device event"
 msgid "Event type"
 msgstr "Event type"
 
-#~ msgid "Edit entry"
-#~ msgstr "Edit entry"
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Edit entry"
+msgstr "Edit entry"
 
-#~ msgid "New entry"
-#~ msgstr "New entry"
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "New entry"
+msgstr "New entry"
 
+#: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Date & time"
 msgstr "Date & time"
 
-#~ msgid "<0/> Add section"
-#~ msgstr "<0/> Add section"
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "<0/> Add section"
+msgstr "<0/> Add section"
 
 #: src/lib/components/entries/FoodBreakdown.svelte
 msgid "Food breakdown"
@@ -38426,9 +38432,8 @@ msgstr "bar"
 #~ msgid "Parameters"
 #~ msgstr "Parameters"
 
-#: src/lib/test-stubs/CgmSimProfileCard.test-stub.svelte
-msgid "cgmsim profile card"
-msgstr "cgmsim profile card"
+#~ msgid "cgmsim profile card"
+#~ msgstr "cgmsim profile card"
 
 #~ msgid "Careportal - Nocturne"
 #~ msgstr "Careportal - Nocturne"
@@ -38861,12 +38866,10 @@ msgid "Touch-oriented insulin pump careportal interface"
 msgstr "Touch-oriented insulin pump careportal interface"
 
 #: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 msgid "Male"
 msgstr "Male"
 
 #: src/lib/components/cgmsim/CgmSimOnboardingDialog.svelte
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 msgid "Female"
 msgstr "Female"
 
@@ -39005,52 +39008,38 @@ msgstr "<0/> Initializing..."
 msgid "<0/> Complete and Start"
 msgstr "<0/> Complete and Start"
 
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-msgid "CGMSIM Profile"
-msgstr "CGMSIM Profile"
+#~ msgid "CGMSIM Profile"
+#~ msgstr "CGMSIM Profile"
 
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-msgid "Virtual Patient"
-msgstr "Virtual Patient"
+#~ msgid "Virtual Patient"
+#~ msgstr "Virtual Patient"
 
 #~ msgid "Configure Subject"
 #~ msgstr "Configure Subject"
 
-#. 0: subject.age
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-msgid "{0} yrs"
-msgstr "{0} yrs"
+#~ msgid "{0} yrs"
+#~ msgstr "{0} yrs"
 
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-msgid "Age"
-msgstr "Age"
+#~ msgid "Age"
+#~ msgstr "Age"
 
 #~ msgid "{0} cm"
 #~ msgstr "{0} cm"
 
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-msgid "Kinetics"
-msgstr "Kinetics"
+#~ msgid "Kinetics"
+#~ msgstr "Kinetics"
 
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-msgid "Configure Parameters"
-msgstr "Configure Parameters"
+#~ msgid "Configure Parameters"
+#~ msgstr "Configure Parameters"
 
-#. 0: params.isf
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-msgid "{0} mg/dL/U"
-msgstr "{0} mg/dL/U"
+#~ msgid "{0} mg/dL/U"
+#~ msgstr "{0} mg/dL/U"
 
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-msgid "CR"
-msgstr "CR"
+#~ msgid "CR"
+#~ msgstr "CR"
 
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-msgid "Carb Abs"
-msgstr "Carb Abs"
+#~ msgid "Carb Abs"
+#~ msgstr "Carb Abs"
 
 #: src/lib/components/tenants/TenantsOverview.svelte
 msgid "No workspaces yet"
@@ -39754,25 +39743,18 @@ msgstr "Total duration of meal carb absorption curve in the physiological engine
 msgid "<0/> Save Kinetics"
 msgstr "<0/> Save Kinetics"
 
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-msgid "Configure Patient"
-msgstr "Configure Patient"
+#~ msgid "Configure Patient"
+#~ msgstr "Configure Patient"
 
 #: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
 msgid "Time in minutes when rapid-acting insulin reaches peak activity (for example: 55m Fiasp/Lyumjev, 75m Novorapid/Humalog)."
 msgstr "Time in minutes when rapid-acting insulin reaches peak activity (for example: 55m Fiasp/Lyumjev, 75m Novorapid/Humalog)."
 
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-msgid "Open PDM Touch"
-msgstr "Open PDM Touch"
+#~ msgid "Open PDM Touch"
+#~ msgstr "Open PDM Touch"
 
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-msgid "PDM"
-msgstr "PDM"
+#~ msgid "PDM"
+#~ msgstr "PDM"
 
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-#: src/lib/components/dashboard/CgmSimProfileCard.svelte
-msgid "Unable to load CGMSIM profile."
-msgstr "Unable to load CGMSIM profile."
+#~ msgid "Unable to load CGMSIM profile."
+#~ msgstr "Unable to load CGMSIM profile."
