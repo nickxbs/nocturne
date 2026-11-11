@@ -39006,9 +39006,11 @@ msgid "<0/> Complete and Start"
 msgstr ""
 
 #: src/lib/components/dashboard/CgmSimProfileCard.svelte
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 msgid "CGMSIM Profile"
 msgstr ""
 
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
 #: src/lib/components/dashboard/CgmSimProfileCard.svelte
 msgid "Virtual Patient"
 msgstr ""
@@ -39768,4 +39770,9 @@ msgstr ""
 
 #: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "PDM"
+msgstr ""
+
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+#: src/lib/components/dashboard/CgmSimProfileCard.svelte
+msgid "Unable to load CGMSIM profile."
 msgstr ""
