@@ -14,7 +14,6 @@
   import { time } from "#lib/utils/formatting.js";
   import { entryDetails, entryLabel } from "#lib/utils/entry-summary.js";
   import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
-  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 
   interface ComponentProps {
     entries?: EntryRecord[];
@@ -38,72 +37,14 @@
 
   let selectedEntry = $state<EntryRecord | null>(null);
   let correlatedRecords = $state<EntryRecord[]>([]);
-  const treatmentInspectionDialog = lazyComponent(
-    () => import("./glucose-chart/dialogs/TreatmentInspectionDialog.svelte"),
+  const entryEditDialog = lazyComponent(
+    () => import("#lib/components/entries/EntryEditDialog.svelte"),
   );
-
-  const selectedTimestamp = $derived(
-    new Date(selectedEntry?.data.mills ?? Date.now())
-  );
-
-  const selectedBolusInsulin = $derived.by(() => {
-    if (selectedEntry?.kind === "bolus") {
-      return selectedEntry.data.insulin;
-    }
-    const correlated = correlatedRecords.find(
-      (r): r is Extract<EntryRecord, { kind: "bolus" }> => r.kind === "bolus",
-    );
-    return correlated?.data.insulin;
-  });
-
-  const selectedBolusType = $derived.by(() => {
-    if (selectedEntry?.kind === "bolus") {
-      return selectedEntry.data.bolusType;
-    }
-    const correlated = correlatedRecords.find(
-      (r): r is Extract<EntryRecord, { kind: "bolus" }> => r.kind === "bolus",
-    );
-    return correlated?.data.bolusType;
-  });
-
-  const selectedBolusDataSource = $derived.by(() => {
-    if (selectedEntry?.kind === "bolus") {
-      return selectedEntry.data.dataSource;
-    }
-    const correlated = correlatedRecords.find(
-      (r): r is Extract<EntryRecord, { kind: "bolus" }> => r.kind === "bolus",
-    );
-    return correlated?.data.dataSource;
-  });
-
-  const selectedCarbGrams = $derived.by(() => {
-    if (selectedEntry?.kind === "carbs") {
-      return selectedEntry.data.carbs;
-    }
-    const correlated = correlatedRecords.find(
-      (r): r is Extract<EntryRecord, { kind: "carbs" }> => r.kind === "carbs",
-    );
-    return correlated?.data.carbs;
-  });
-
-  const selectedCarbLabel = $derived.by(() => {
-    return undefined;
-  });
-
-  const selectedCarbDataSource = $derived.by(() => {
-    if (selectedEntry?.kind === "carbs") {
-      return selectedEntry.data.dataSource;
-    }
-    const correlated = correlatedRecords.find(
-      (r): r is Extract<EntryRecord, { kind: "carbs" }> => r.kind === "carbs",
-    );
-    return correlated?.data.dataSource;
-  });
 
   function handleEntryClick(entry: EntryRecord) {
     selectedEntry = entry;
     correlatedRecords = realtimeStore.findCorrelatedEntries(entry);
-    treatmentInspectionDialog.open = true;
+    entryEditDialog.open = true;
   }
 </script>
 
@@ -171,26 +112,13 @@
   </svelte:boundary>
 </Card>
 
-{#if treatmentInspectionDialog.component && selectedEntry}
-  <treatmentInspectionDialog.component
-    glucoseUnits={glucoseUnits.current}
-    bind:open={treatmentInspectionDialog.open}
-    timestamp={selectedTimestamp}
-    bolusInsulin={selectedBolusInsulin}
-    bolusType={selectedBolusType}
-    bolusDataSource={selectedBolusDataSource}
-    carbGrams={selectedCarbGrams}
-    carbLabel={selectedCarbLabel}
-    carbDataSource={selectedCarbDataSource}
+{#if entryEditDialog.component}
+  <entryEditDialog.component
+    bind:open={entryEditDialog.open}
     entry={selectedEntry}
     {correlatedRecords}
-    glucoseData={[]}
-    highThreshold={180}
-    lowThreshold={70}
-    hasGlucoseContext={false}
-    hasDeliveryContext={false}
     onClose={() => {
-      treatmentInspectionDialog.open = false;
+      entryEditDialog.open = false;
       selectedEntry = null;
       correlatedRecords = [];
     }}

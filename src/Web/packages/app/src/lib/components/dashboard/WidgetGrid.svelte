@@ -17,8 +17,8 @@
   const displayWidgets = $derived(knownTopWidgets(widgets).slice(0, maxWidgets));
 </script>
 
-<Card size="flush" class="@container h-full">
-  <div class="grid h-full grid-cols-1 divide-y divide-border @2xl:grid-cols-3 @2xl:divide-x @2xl:divide-y-0">
+<Card size="flush" class="@container">
+  <div class="grid grid-cols-1 divide-y divide-border @2xl:grid-cols-3 @2xl:divide-x @2xl:divide-y-0">
     {#each displayWidgets as widgetId (widgetId)}
       {#await loadTopWidget(widgetId)}
         <WidgetPlaceholder shape={topWidgetPlaceholder(widgetId)} />

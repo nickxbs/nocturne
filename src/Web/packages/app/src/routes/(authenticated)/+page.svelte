@@ -5,7 +5,6 @@
     RecentEntriesCard,
     RecentTreatmentsCard,
     WidgetGrid,
-    CgmSimProfileCard,
   } from "#lib/components/dashboard/index.js";
   import { showsCurrentGlucoseWidget } from "#lib/components/dashboard/top-widget-ids.js";
   import { getUiSettings } from "#lib/api/ui-settings.remote.js";
@@ -19,7 +18,6 @@
   import FirstReadingChartArea from "#lib/components/dashboard/first-reading/FirstReadingChartArea.svelte";
   import SetupStrip from "#lib/components/setup-hub/SetupStrip.svelte";
   import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
-  import { satisfiesScope } from "#lib/authorization/scopes.js";
   import type { PageData } from "./$types";
 
   const { data }: { data: PageData } = $props();
@@ -62,11 +60,6 @@
   );
 
   const showPredictions = $derived(showsPredictions(uiSettings));
-  const canLoadCgmSimProfile = $derived(
-    !data.isShareHost &&
-      data.isAuthenticated &&
-      satisfiesScope(data.effectivePermissions ?? [], "therapy.read")
-  );
 </script>
 
 {#if data.tenantless}
@@ -91,19 +84,12 @@
         (`dashboardTopWidgets`), and tenant settings carry no top-placement row
         to gate it with.
       -->
-      <div class="grid grid-cols-1 @3xl:grid-cols-12 gap-3 @md:gap-4 items-stretch">
-        <div
-          class="@3xl:col-span-7 flex flex-col"
-          {@attach coachmark({
-            ...coachFor("quick-tour.widgets"),
-          })}
-        >
-          <WidgetGrid widgets={topWidgets} maxWidgets={3} />
-        </div>
-
-        <div class="@3xl:col-span-5 flex flex-col">
-          <CgmSimProfileCard enabled={canLoadCgmSimProfile} />
-        </div>
+      <div
+        {@attach coachmark({
+          ...coachFor("quick-tour.widgets"),
+        })}
+      >
+        <WidgetGrid widgets={topWidgets} />
       </div>
 
       {#if isMainSectionEnabled(widgets, WidgetId.GlucoseChart)}

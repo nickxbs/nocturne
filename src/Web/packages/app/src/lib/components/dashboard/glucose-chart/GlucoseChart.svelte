@@ -144,7 +144,7 @@
     if (nearby.length <= 1) {
       selectedEntry = entry;
       correlatedRecords = realtimeStore.findCorrelatedEntries(entry);
-      treatmentInspectionDialog.open = true;
+      entryEditDialog.open = true;
     } else {
       nearbyEntries = nearby;
       disambiguationDialog.open = true;
@@ -156,7 +156,7 @@
     nearbyEntries = [];
     selectedEntry = entry;
     correlatedRecords = realtimeStore.findCorrelatedEntries(entry);
-    treatmentInspectionDialog.open = true;
+    entryEditDialog.open = true;
   }
 
   // ---- Inspection dialog handlers ----
@@ -168,6 +168,9 @@
     inspection?.close();
   }
 
+  const entryEditDialog = lazyComponent(
+    () => import("#lib/components/entries/EntryEditDialog.svelte"),
+  );
   const disambiguationDialog = lazyComponent(
     () => import("./dialogs/TreatmentDisambiguationDialog.svelte"),
   );
@@ -228,6 +231,20 @@
     <ChartTooltip {tooltipExtras} onTimeClick={openDayInReview} />
   {/snippet}
 </GlucoseChartShell>
+
+<!-- Entry Edit Dialog -->
+{#if entryEditDialog.component}
+  <entryEditDialog.component
+    bind:open={entryEditDialog.open}
+    entry={selectedEntry}
+    {correlatedRecords}
+    onClose={() => {
+      entryEditDialog.open = false;
+      selectedEntry = null;
+      correlatedRecords = [];
+    }}
+  />
+{/if}
 
 <!-- Disambiguation Dialog -->
 {#if disambiguationDialog.component}
@@ -326,11 +343,17 @@
         lowThreshold={engine.thresholds.low}
         hasGlucoseContext={true}
         hasDeliveryContext={inspection.context.basalRate != null}
-        entry={selectedEntry}
-        {correlatedRecords}
         onClose={closeAllInspections}
         onNavigateGlucose={() => inspection.navigateTo("glucose")}
         onNavigateDelivery={() => inspection.navigateTo("delivery")}
+        onEditEntry={() => {
+          closeAllInspections();
+          if (inspection.context?.nearbyBolus?.treatmentId) {
+            handleMarkerClick(inspection.context.nearbyBolus.treatmentId);
+          } else if (inspection.context?.nearbyCarbs?.treatmentId) {
+            handleMarkerClick(inspection.context.nearbyCarbs.treatmentId);
+          }
+        }}
       />
     {/if}
   {/if}

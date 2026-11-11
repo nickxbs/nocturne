@@ -1,3 +1,4 @@
+export { default as EntryEditDialog } from "./EntryEditDialog.svelte";
 export { default as BolusSection } from "./BolusSection.svelte";
 export { default as CarbIntakeSection } from "./CarbIntakeSection.svelte";
 export { default as BGCheckSection } from "./BGCheckSection.svelte";
