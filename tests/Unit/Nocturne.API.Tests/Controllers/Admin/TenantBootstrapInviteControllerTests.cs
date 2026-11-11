@@ -44,7 +44,11 @@ public class TenantBootstrapInviteControllerTests : IDisposable
             var accessor = sp.GetRequiredService<ITenantAccessor>();
             return new TenantReadContext(accessor, null, null);
         });
-        services.AddSingleton<INocturneDbContextFactory>(_ => _rootContext.AsFactory());
+        services.AddScoped<INocturneDbContextFactory>(sp =>
+        {
+            var tenantId = sp.GetRequiredService<ITenantAccessor>().TenantId;
+            return (tenantId == Guid.Empty ? _rootContext : _db.CreateContext(tenantId)).AsFactory();
+        });
         services.AddScoped<ITenantRepository, TenantRepository>();
         services.AddScoped<ITenantMembershipRepository, TenantMembershipRepository>();
         services.AddScoped<ISubjectRepository, SubjectRepository>();
@@ -121,12 +125,11 @@ public class TenantBootstrapInviteControllerTests : IDisposable
                 Id = Guid.CreateVersion7(),
                 TenantId = tenantId,
                 SubjectId = ownerId,
-                Roles =
+                MemberRoles =
                 [
                     new TenantMemberRoleEntity
                     {
                         Id = Guid.CreateVersion7(),
-                        TenantId = tenantId,
                         TenantRoleId = _ownerRoleId,
                     },
                 ],
@@ -158,7 +161,10 @@ public class TenantBootstrapInviteControllerTests : IDisposable
         payload.Invite.InviteUrl.Should().StartWith("https://alice.nocturne.example/join?token=");
         payload.Invite.CreatedByName.Should().Be(TenantBootstrapInviteService.PlatformInviterSubjectName);
 
-        var invites = await _serviceProvider.GetRequiredService<IMemberInviteService>()
+        await using var tenantScope = _serviceProvider.CreateAsyncScope();
+        tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(
+            new TenantContext(_tenantId, "alice", "Alice", true, false));
+        var invites = await tenantScope.ServiceProvider.GetRequiredService<IMemberInviteService>()
             .GetInvitesForTenantAsync(_tenantId);
         invites.Should().ContainSingle();
         invites[0].MaxUses.Should().Be(1);

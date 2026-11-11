@@ -66,7 +66,7 @@ public sealed class TenantBootstrapInviteService
         // invite must be created inside a child scope pinned to the target tenant.
         await using var scope = _scopeFactory.CreateAsyncScope();
         scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(
-            new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive));
+            new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo));
 
         var inviteService = scope.ServiceProvider.GetRequiredService<IMemberInviteService>();
         var invite = await inviteService.CreateInviteAsync(

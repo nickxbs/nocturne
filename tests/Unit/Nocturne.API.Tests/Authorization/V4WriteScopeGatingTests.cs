@@ -162,6 +162,7 @@ public class V4WriteScopeGatingTests
         new Dictionary<string, string>(V4ScopeGuardExemptions.Controllers, StringComparer.Ordinal)
         {
             ["SubjectAdminController"] = V4ScopeGuardExemptions.PlatformAdminRole,
+            ["TenantBootstrapInviteController"] = V4ScopeGuardExemptions.PlatformAdminRole,
 
             ["DeduplicationController"] = NotDataCategory.SuperuserAttribute,
             ["MigrationController"] = NotDataCategory.SuperuserAttribute,
