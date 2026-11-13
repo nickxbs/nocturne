@@ -155,6 +155,12 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
       strict: true,
     },
     {
+      id: "cgmsim",
+      title: "CGMSIM",
+      icon: Activity,
+      href: "/cgmsim/parameters",
+    },
+    {
       id: "calendar",
       title: "Calendar",
       href: "/calendar",
@@ -217,12 +223,6 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
       title: "Tools",
       icon: Wrench,
       children: [{ title: "Packing", href: "/tools/packing", icon: Wrench }],
-    },
-    {
-      id: "cgmsim",
-      title: "CGMSIM",
-      icon: Activity,
-      href: "/cgmsim/parameters",
     }
   );
 

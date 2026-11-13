@@ -49,6 +49,13 @@ function titles(viewer: NavViewer): string[] {
 }
 
 describe("buildAppNavigation", () => {
+  it("places CGMSIM as the second item in the navigation", () => {
+    const nav = buildAppNavigation(MEMBER);
+    expect(nav[0]?.id).toBe("dashboard");
+    expect(nav[1]?.id).toBe("cgmsim");
+    expect(nav[1]?.title).toBe("CGMSIM");
+  });
+
   it("gives a member every surface", () => {
     const visible = titles(MEMBER);
 
