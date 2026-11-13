@@ -32916,6 +32916,7 @@ msgid "API - Device status"
 msgstr ""
 
 #: src/lib/components/admin/RoleDialog.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Careportal"
 msgstr ""
 
@@ -39824,4 +39825,9 @@ msgstr ""
 
 #: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
 msgid "Total duration of meal carb absorption curve."
+msgstr ""
+
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+msgid "Open Careportal"
 msgstr ""

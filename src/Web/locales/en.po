@@ -32913,6 +32913,7 @@ msgid "API - Device status"
 msgstr "API - Device status"
 
 #: src/lib/components/admin/RoleDialog.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Careportal"
 msgstr "Careportal"
 
@@ -39822,3 +39823,8 @@ msgstr "Active duration of rapid-acting insulin."
 #: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
 msgid "Total duration of meal carb absorption curve."
 msgstr "Total duration of meal carb absorption curve."
+
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+msgid "Open Careportal"
+msgstr "Open Careportal"
