@@ -111,4 +111,14 @@ describe("GlucoseChartCard inspection dialogs", () => {
     await expect.element(dialog.getByText("6.7").first()).toBeVisible();
     expect(dialog.element().textContent).not.toMatch(/(?<!\d)120(?!\d)/);
   });
+
+  it("renders the careportal button on the dashboard card header", async () => {
+    render(Harness, {
+      props: { initiallyDeferred: false, onready: () => {} },
+    });
+
+    const careportalBtn = page.getByTestId("open-careportal-btn");
+    await expect.element(careportalBtn).toBeVisible();
+    expect(careportalBtn.element().textContent).toContain("Careportal");
+  });
 });

@@ -8,6 +8,8 @@
     CardHeader,
     CardTitle,
   } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import Plus from "@lucide/svelte/icons/plus";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { IsMobile } from "#lib/hooks/is-mobile.svelte.js";
   import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
@@ -348,6 +350,14 @@
     ),
   );
 
+  const careportalDialog = lazyComponent(
+    () => import("#lib/components/careportal/CareportalPumpDialog.svelte"),
+  );
+
+  function openCareportalDialog() {
+    careportalDialog.open = true;
+  }
+
   const entryEditDialog = lazyComponent(
     () => import("#lib/components/entries/EntryEditDialog.svelte"),
   );
@@ -373,14 +383,29 @@
 {#snippet chartBody()}
   <CardHeader class="pb-2 px-1 @2xl/chart-card:px-6">
     <div class="flex items-center justify-between flex-wrap gap-2">
-      <CardTitle class="flex items-center gap-2">
-        Blood glucose
-        {#if displayDemoMode}
-          <Badge variant="demo">
-            Demo
-          </Badge>
-        {/if}
-      </CardTitle>
+      <div class="flex items-center gap-2">
+        <CardTitle class="flex items-center gap-2">
+          Blood glucose
+          {#if displayDemoMode}
+            <Badge variant="demo">
+              Demo
+            </Badge>
+          {/if}
+        </CardTitle>
+
+        <Button
+          variant="default"
+          size="xs"
+          class="h-7 gap-1 text-xs font-medium"
+          onclick={openCareportalDialog}
+          aria-label="Open Careportal"
+          title="Open Careportal"
+          data-testid="open-careportal-btn"
+        >
+          <Plus class="size-3" />
+          <span>Careportal</span>
+        </Button>
+      </div>
 
       <!-- Until the prediction status says there is nothing to show, this slot holds the
            controls' space whether or not they render, so the plot does not move when the status
@@ -539,6 +564,14 @@
     {@render chartBody()}
   </Card>
 </div>
+
+<!-- Careportal Pump Dialog -->
+{#if careportalDialog.component}
+  <careportalDialog.component
+    bind:open={careportalDialog.open}
+    currentReservoir={realtimeStore.currentReservoir}
+  />
+{/if}
 
 <!-- Entry Edit Dialog -->
 {#if entryEditDialog.component}
