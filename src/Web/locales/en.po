@@ -535,6 +535,7 @@ msgstr "Verification code"
 #: src/lib/components/profile/ProfileCreateDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/profile/ProfileSwitchDialog.svelte
+#: src/lib/components/schedule/SensitivityCard.svelte
 #: src/lib/components/schedule/TargetRangeCard.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/lib/components/settings/ApiTokens.svelte
@@ -849,6 +850,7 @@ msgstr "Create"
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
 #: src/lib/components/meals/MealBolusDialog.svelte
+#: src/lib/components/schedule/SensitivityCard.svelte
 #: src/lib/components/schedule/TargetRangeCard.svelte
 #: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
@@ -3400,6 +3402,7 @@ msgstr "Error loading recent entries."
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/meals/MealBolusDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
+#: src/lib/components/schedule/SensitivityCard.svelte
 #: src/lib/components/schedule/TargetRangeCard.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
@@ -12429,6 +12432,7 @@ msgstr "Role deleted successfully."
 #: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/InspectionFooter.svelte
 #: src/lib/components/members/RolesSection.svelte
+#: src/lib/components/schedule/SensitivityCard.svelte
 #: src/lib/components/schedule/TargetRangeCard.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 #: src/routes/(unauthenticated)/clock/[id]/+page@.svelte
@@ -12770,6 +12774,9 @@ msgstr "Grams of carbs per unit of insulin"
 #~ msgstr "Insulin Sensitivity (ISF)"
 
 #: src/lib/components/schedule/ProfileSchedules.svelte
+#: src/lib/components/schedule/SensitivityCard.svelte
+#: src/lib/components/schedule/SensitivityCard.svelte
+#: src/lib/components/schedule/SensitivityCard.svelte
 msgid "BG drop per unit of insulin"
 msgstr "BG drop per unit of insulin"
 
@@ -20080,6 +20087,7 @@ msgstr "Prefer not to say"
 msgid "Sleep sessions, stages, and overnight biometrics"
 msgstr "Sleep sessions, stages, and overnight biometrics"
 
+#: src/lib/components/schedule/SensitivityCard.svelte
 #: src/lib/components/schedule/TargetRangeCard.svelte
 msgid "Every time block needs a start time."
 msgstr "Every time block needs a start time."
@@ -20092,6 +20100,7 @@ msgstr "Low and high targets must be greater than zero."
 msgid "Each low target must be below its high target."
 msgstr "Each low target must be below its high target."
 
+#: src/lib/components/schedule/SensitivityCard.svelte
 #: src/lib/components/schedule/TargetRangeCard.svelte
 msgid "Time blocks must have unique start times."
 msgstr "Time blocks must have unique start times."
@@ -27953,6 +27962,9 @@ msgstr "A higher basal rate means more insulin every hour."
 
 #: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
 #: src/lib/components/schedule/ProfileSchedules.svelte
+#: src/lib/components/schedule/SensitivityCard.svelte
+#: src/lib/components/schedule/SensitivityCard.svelte
+#: src/lib/components/schedule/SensitivityCard.svelte
 msgid "Insulin sensitivity (ISF)"
 msgstr "Insulin sensitivity (ISF)"
 
@@ -39111,8 +39123,9 @@ msgstr "No workspaces yet"
 #~ msgid "Please enter a valid carb ratio (CR)."
 #~ msgstr "Please enter a valid carb ratio (CR)."
 
-#~ msgid "Simulation parameters saved successfully."
-#~ msgstr "Simulation parameters saved successfully."
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Simulation parameters saved successfully."
+msgstr "Simulation parameters saved successfully."
 
 #: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
 msgid "Failed to save simulation parameters."
@@ -39122,21 +39135,22 @@ msgstr "Failed to save simulation parameters."
 msgid "Parameters - CGMSIM - Nocturne"
 msgstr "Parameters - CGMSIM - Nocturne"
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Metabolic & Kinetic Parameters"
-msgstr "Metabolic & Kinetic Parameters"
+#~ msgid "Metabolic & Kinetic Parameters"
+#~ msgstr "Metabolic & Kinetic Parameters"
 
 #~ msgid "Tune insulin kinetics, carbohydrate absorption dynamics, and sensitivity ratios for simulation. All fields are required."
 #~ msgstr "Tune insulin kinetics, carbohydrate absorption dynamics, and sensitivity ratios for simulation. All fields are required."
 
-#~ msgid "Insulin Sensitivity Factor (ISF) <0/>"
-#~ msgstr "Insulin Sensitivity Factor (ISF) <0/>"
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Insulin Sensitivity Factor (ISF) <0/>"
+msgstr "Insulin Sensitivity Factor (ISF) <0/>"
 
 #~ msgid "Blood glucose drop per 1 unit of insulin."
 #~ msgstr "Blood glucose drop per 1 unit of insulin."
 
-#~ msgid "Duration of Insulin Action (DIA) <0/>"
-#~ msgstr "Duration of Insulin Action (DIA) <0/>"
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Duration of Insulin Action (DIA) <0/>"
+msgstr "Duration of Insulin Action (DIA) <0/>"
 
 #~ msgid "Effective duration of rapid-acting insulin activity."
 #~ msgstr "Effective duration of rapid-acting insulin activity."
@@ -39148,17 +39162,20 @@ msgstr "Metabolic & Kinetic Parameters"
 msgid "Insulin Peak Time <0/>"
 msgstr "Insulin Peak Time <0/>"
 
-#~ msgid "Time in minutes when rapid-acting insulin reaches peak activity."
-#~ msgstr "Time in minutes when rapid-acting insulin reaches peak activity."
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Time in minutes when rapid-acting insulin reaches peak activity."
+msgstr "Time in minutes when rapid-acting insulin reaches peak activity."
 
-#~ msgid "Carb Ratio (CR) <0/>"
-#~ msgstr "Carb Ratio (CR) <0/>"
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Carb Ratio (CR) <0/>"
+msgstr "Carb Ratio (CR) <0/>"
 
 #~ msgid "Grams of carbohydrate covered by 1 unit of insulin."
 #~ msgstr "Grams of carbohydrate covered by 1 unit of insulin."
 
-#~ msgid "<0/> Save Parameters"
-#~ msgstr "<0/> Save Parameters"
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "<0/> Save Parameters"
+msgstr "<0/> Save Parameters"
 
 #~ msgid "<0/> Don't have an account? Create one"
 #~ msgstr "<0/> Don't have an account? Create one"
@@ -39217,13 +39234,11 @@ msgstr "You do not have access to any workspaces yet. You can create your own pe
 #~ msgid "Enter a valid DIA value."
 #~ msgstr "Enter a valid DIA value."
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Enter a valid carb absorption time."
-msgstr "Enter a valid carb absorption time."
+#~ msgid "Enter a valid carb absorption time."
+#~ msgstr "Enter a valid carb absorption time."
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Enter a valid insulin peak time."
-msgstr "Enter a valid insulin peak time."
+#~ msgid "Enter a valid insulin peak time."
+#~ msgstr "Enter a valid insulin peak time."
 
 #~ msgid "Enter a valid carb ratio (CR)."
 #~ msgstr "Enter a valid carb ratio (CR)."
@@ -39700,55 +39715,44 @@ msgstr "Simulation parameters set to default."
 msgid "<0/> Reset defaults"
 msgstr "<0/> Reset defaults"
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Simulation kinetics saved successfully."
-msgstr "Simulation kinetics saved successfully."
+#~ msgid "Simulation kinetics saved successfully."
+#~ msgstr "Simulation kinetics saved successfully."
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Tune insulin kinetics and carb absorption dynamics. Clinical sensitivity and duration are synchronized directly from your Therapy Profile."
-msgstr "Tune insulin kinetics and carb absorption dynamics. Clinical sensitivity and duration are synchronized directly from your Therapy Profile."
+#~ msgid "Tune insulin kinetics and carb absorption dynamics. Clinical sensitivity and duration are synchronized directly from your Therapy Profile."
+#~ msgstr "Tune insulin kinetics and carb absorption dynamics. Clinical sensitivity and duration are synchronized directly from your Therapy Profile."
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Therapy Profile (Source of Truth)"
-msgstr "Therapy Profile (Source of Truth)"
+#~ msgid "Therapy Profile (Source of Truth)"
+#~ msgstr "Therapy Profile (Source of Truth)"
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Edit in Profile Settings <0/>"
-msgstr "Edit in Profile Settings <0/>"
+#~ msgid "Edit in Profile Settings <0/>"
+#~ msgstr "Edit in Profile Settings <0/>"
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "ISF (Sensitivity)"
-msgstr "ISF (Sensitivity)"
+#~ msgid "ISF (Sensitivity)"
+#~ msgstr "ISF (Sensitivity)"
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Carb Ratio (CR)"
-msgstr "Carb Ratio (CR)"
+#~ msgid "Carb Ratio (CR)"
+#~ msgstr "Carb Ratio (CR)"
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "DIA (Insulin Action)"
-msgstr "DIA (Insulin Action)"
+#~ msgid "DIA (Insulin Action)"
+#~ msgstr "DIA (Insulin Action)"
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "The simulator actively respects your schedule profiles for ISF, CR, DIA and Basal rates set in your Therapy Profile."
-msgstr "The simulator actively respects your schedule profiles for ISF, CR, DIA and Basal rates set in your Therapy Profile."
+#~ msgid "The simulator actively respects your schedule profiles for ISF, CR, DIA and Basal rates set in your Therapy Profile."
+#~ msgstr "The simulator actively respects your schedule profiles for ISF, CR, DIA and Basal rates set in your Therapy Profile."
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Total duration of meal carb absorption curve in the physiological engine."
-msgstr "Total duration of meal carb absorption curve in the physiological engine."
+#~ msgid "Total duration of meal carb absorption curve in the physiological engine."
+#~ msgstr "Total duration of meal carb absorption curve in the physiological engine."
 
 #~ msgid "Time in minutes when rapid-acting insulin reaches peak activity (e.g. 55m Fiasp/Lyumjev, 75m Novorapid/Humalog)."
 #~ msgstr "Time in minutes when rapid-acting insulin reaches peak activity (e.g. 55m Fiasp/Lyumjev, 75m Novorapid/Humalog)."
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "<0/> Save Kinetics"
-msgstr "<0/> Save Kinetics"
+#~ msgid "<0/> Save Kinetics"
+#~ msgstr "<0/> Save Kinetics"
 
 #~ msgid "Configure Patient"
 #~ msgstr "Configure Patient"
 
-#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
-msgid "Time in minutes when rapid-acting insulin reaches peak activity (for example: 55m Fiasp/Lyumjev, 75m Novorapid/Humalog)."
-msgstr "Time in minutes when rapid-acting insulin reaches peak activity (for example: 55m Fiasp/Lyumjev, 75m Novorapid/Humalog)."
+#~ msgid "Time in minutes when rapid-acting insulin reaches peak activity (for example: 55m Fiasp/Lyumjev, 75m Novorapid/Humalog)."
+#~ msgstr "Time in minutes when rapid-acting insulin reaches peak activity (for example: 55m Fiasp/Lyumjev, 75m Novorapid/Humalog)."
 
 #~ msgid "Open PDM Touch"
 #~ msgstr "Open PDM Touch"
@@ -39758,3 +39762,63 @@ msgstr "Time in minutes when rapid-acting insulin reaches peak activity (for exa
 
 #~ msgid "Unable to load CGMSIM profile."
 #~ msgstr "Unable to load CGMSIM profile."
+
+#: src/lib/components/schedule/SensitivityCard.svelte
+msgid "Sensitivity values must be greater than zero."
+msgstr "Sensitivity values must be greater than zero."
+
+#: src/lib/components/schedule/SensitivityCard.svelte
+msgid "Failed to save sensitivity schedule"
+msgstr "Failed to save sensitivity schedule"
+
+#: src/lib/components/schedule/SensitivityCard.svelte
+msgid "No insulin sensitivity configured"
+msgstr "No insulin sensitivity configured"
+
+#: src/lib/components/schedule/SensitivityCard.svelte
+msgid "Set insulin sensitivity"
+msgstr "Set insulin sensitivity"
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Enter an ISF between 1 and 1000 mg/dL/U."
+msgstr "Enter an ISF between 1 and 1000 mg/dL/U."
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Enter a carb ratio between 0.1 and 200 g/U."
+msgstr "Enter a carb ratio between 0.1 and 200 g/U."
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Enter a DIA between 0.5 and 24 hours."
+msgstr "Enter a DIA between 0.5 and 24 hours."
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Enter a carb absorption time between 5 and 1440 minutes."
+msgstr "Enter a carb absorption time between 5 and 1440 minutes."
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Enter an insulin peak time between 5 and 360 minutes."
+msgstr "Enter an insulin peak time between 5 and 360 minutes."
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Simulation Parameters"
+msgstr "Simulation Parameters"
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Configure metabolic and kinetic parameters for the CGM simulator. These settings operate independently from your therapy profiles."
+msgstr "Configure metabolic and kinetic parameters for the CGM simulator. These settings operate independently from your therapy profiles."
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Blood glucose drop per unit of insulin."
+msgstr "Blood glucose drop per unit of insulin."
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Grams of carbohydrates covered by one unit of insulin."
+msgstr "Grams of carbohydrates covered by one unit of insulin."
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Active duration of rapid-acting insulin."
+msgstr "Active duration of rapid-acting insulin."
+
+#: src/routes/(authenticated)/cgmsim/parameters/+page.svelte
+msgid "Total duration of meal carb absorption curve."
+msgstr "Total duration of meal carb absorption curve."
