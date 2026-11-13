@@ -6,7 +6,6 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
-using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -35,13 +34,8 @@ public class CgmSimController : ControllerBase, IWriteScopedController
     private readonly ITempBasalRepository _tempBasalRepository;
     private readonly ICarbIntakeRepository _carbIntakeRepository;
     private readonly ITargetRangeResolver _targetRangeResolver;
-    private readonly ISensitivityResolver _sensitivityResolver;
-    private readonly ICarbRatioResolver _carbRatioResolver;
-    private readonly ITherapySettingsResolver _therapySettingsResolver;
     private readonly IPatientRecordRepository _patientRecordRepository;
     private readonly IBodyWeightService _bodyWeightService;
-    private readonly IProfileWriteService _profileWriteService;
-    private readonly ITherapySettingsRepository _therapySettingsRepository;
 
     public CgmSimController(
         INocturneDbContextFactory contextFactory,
@@ -52,13 +46,8 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         ITempBasalRepository tempBasalRepository,
         ICarbIntakeRepository carbIntakeRepository,
         ITargetRangeResolver targetRangeResolver,
-        ISensitivityResolver sensitivityResolver,
-        ICarbRatioResolver carbRatioResolver,
-        ITherapySettingsResolver therapySettingsResolver,
         IPatientRecordRepository patientRecordRepository,
-        IBodyWeightService bodyWeightService,
-        IProfileWriteService profileWriteService,
-        ITherapySettingsRepository therapySettingsRepository)
+        IBodyWeightService bodyWeightService)
     {
         _contextFactory = contextFactory;
         _entryService = entryService;
@@ -68,13 +57,8 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         _tempBasalRepository = tempBasalRepository;
         _carbIntakeRepository = carbIntakeRepository;
         _targetRangeResolver = targetRangeResolver;
-        _sensitivityResolver = sensitivityResolver;
-        _carbRatioResolver = carbRatioResolver;
-        _therapySettingsResolver = therapySettingsResolver;
         _patientRecordRepository = patientRecordRepository;
         _bodyWeightService = bodyWeightService;
-        _profileWriteService = profileWriteService;
-        _therapySettingsRepository = therapySettingsRepository;
     }
 
     [HttpGet("subject")]
@@ -155,18 +139,13 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         await using var db = await _contextFactory.CreateAsync(ct);
         var entity = await GetOrCreateSettingsAsync(db, ct);
 
-        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var effectiveIsf = await _sensitivityResolver.GetSensitivityAsync(nowMills, ct: ct);
-        var effectiveCr = await _carbRatioResolver.GetCarbRatioAsync(nowMills, ct: ct);
-        var effectiveDia = await _therapySettingsResolver.GetDIAAsync(nowMills, ct: ct);
-
         return Ok(new CgmSimParameters
         {
-            Isf = effectiveIsf > 0 ? effectiveIsf : (entity.Isf > 0 ? entity.Isf : 50.0),
-            Dia = effectiveDia > 0 ? effectiveDia : (entity.Dia > 0 ? entity.Dia : 4.0),
+            Isf = entity.Isf > 0 ? entity.Isf : 50.0,
+            Dia = entity.Dia > 0 ? entity.Dia : 4.0,
             CarbsAbsTime = entity.CarbsAbsTime,
             InsulinPeak = entity.InsulinPeak,
-            Cr = effectiveCr > 0 ? effectiveCr : (entity.Cr > 0 ? entity.Cr : 10.0),
+            Cr = entity.Cr > 0 ? entity.Cr : 10.0,
         });
     }
 
@@ -181,29 +160,22 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         await using var db = await _contextFactory.CreateAsync(ct);
         var entity = await GetOrCreateSettingsAsync(db, ct);
 
-        // Simulator-specific kinetics
+        // Simulator-specific kinetics and parameters
         entity.CarbsAbsTime = model.CarbsAbsTime;
         entity.InsulinPeak = model.InsulinPeak;
-
-        // Keep entity values updated as fallback
         if (model.Isf > 0) entity.Isf = model.Isf;
         if (model.Dia > 0) entity.Dia = model.Dia;
         if (model.Cr > 0) entity.Cr = model.Cr;
 
         await db.SaveChangesAsync(ct);
 
-        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var effectiveIsf = await _sensitivityResolver.GetSensitivityAsync(nowMills, ct: ct);
-        var effectiveCr = await _carbRatioResolver.GetCarbRatioAsync(nowMills, ct: ct);
-        var effectiveDia = await _therapySettingsResolver.GetDIAAsync(nowMills, ct: ct);
-
         return Ok(new CgmSimParameters
         {
-            Isf = effectiveIsf > 0 ? effectiveIsf : entity.Isf,
-            Dia = effectiveDia > 0 ? effectiveDia : entity.Dia,
+            Isf = entity.Isf,
+            Dia = entity.Dia,
             CarbsAbsTime = entity.CarbsAbsTime,
             InsulinPeak = entity.InsulinPeak,
-            Cr = effectiveCr > 0 ? effectiveCr : entity.Cr,
+            Cr = entity.Cr,
         });
     }
 
@@ -216,11 +188,6 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         await using var db = await _contextFactory.CreateAsync(ct);
         var entity = await GetOrCreateSettingsAsync(db, ct);
 
-        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var effectiveIsf = await _sensitivityResolver.GetSensitivityAsync(nowMills, ct: ct);
-        var effectiveCr = await _carbRatioResolver.GetCarbRatioAsync(nowMills, ct: ct);
-        var effectiveDia = await _therapySettingsResolver.GetDIAAsync(nowMills, ct: ct);
-
         var subject = await ResolveEffectiveSubjectAsync(entity, ct);
 
         return Ok(new CgmSimSettings
@@ -228,11 +195,11 @@ public class CgmSimController : ControllerBase, IWriteScopedController
             Subject = subject,
             Parameters = new CgmSimParameters
             {
-                Isf = effectiveIsf > 0 ? effectiveIsf : (entity.Isf > 0 ? entity.Isf : 50.0),
-                Dia = effectiveDia > 0 ? effectiveDia : (entity.Dia > 0 ? entity.Dia : 4.0),
+                Isf = entity.Isf > 0 ? entity.Isf : 50.0,
+                Dia = entity.Dia > 0 ? entity.Dia : 4.0,
                 CarbsAbsTime = entity.CarbsAbsTime,
                 InsulinPeak = entity.InsulinPeak,
-                Cr = effectiveCr > 0 ? effectiveCr : (entity.Cr > 0 ? entity.Cr : 10.0),
+                Cr = entity.Cr > 0 ? entity.Cr : 10.0,
             },
             IsInitialized = entity.IsInitialized,
             UpdatedAt = entity.UpdatedAt,
@@ -298,13 +265,6 @@ public class CgmSimController : ControllerBase, IWriteScopedController
 
         await db.SaveChangesAsync(ct);
 
-        await EnsureTherapyProfileAsync(request.Parameters, ct);
-
-        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var effectiveIsf = await _sensitivityResolver.GetSensitivityAsync(nowMills, ct: ct);
-        var effectiveCr = await _carbRatioResolver.GetCarbRatioAsync(nowMills, ct: ct);
-        var effectiveDia = await _therapySettingsResolver.GetDIAAsync(nowMills, ct: ct);
-
         var subject = await ResolveEffectiveSubjectAsync(entity, ct);
 
         return Ok(new CgmSimSettings
@@ -312,11 +272,11 @@ public class CgmSimController : ControllerBase, IWriteScopedController
             Subject = subject,
             Parameters = new CgmSimParameters
             {
-                Isf = effectiveIsf > 0 ? effectiveIsf : entity.Isf,
-                Dia = effectiveDia > 0 ? effectiveDia : entity.Dia,
+                Isf = entity.Isf,
+                Dia = entity.Dia,
                 CarbsAbsTime = entity.CarbsAbsTime,
                 InsulinPeak = entity.InsulinPeak,
-                Cr = effectiveCr > 0 ? effectiveCr : entity.Cr,
+                Cr = entity.Cr,
             },
             IsInitialized = entity.IsInitialized,
             UpdatedAt = entity.UpdatedAt,
@@ -335,12 +295,9 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         await using var db = await _contextFactory.CreateAsync(ct);
         var entity = await GetOrCreateSettingsAsync(db, ct);
 
+        var isf = entity.Isf > 0 ? entity.Isf : 50.0;
+        var cr = entity.Cr > 0 ? entity.Cr : 10.0;
         var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var effectiveIsf = await _sensitivityResolver.GetSensitivityAsync(nowMills, ct: ct);
-        var effectiveCr = await _carbRatioResolver.GetCarbRatioAsync(nowMills, ct: ct);
-
-        var isf = effectiveIsf > 0 ? effectiveIsf : (entity.Isf > 0 ? entity.Isf : 50.0);
-        var cr = effectiveCr > 0 ? effectiveCr : (entity.Cr > 0 ? entity.Cr : 10.0);
         var entries = (await _entryService.GetEntriesAsync("sgv", 1, 0, ct)).ToList();
         var currentEntry = entries.FirstOrDefault();
         double? currentBg = currentEntry is not null && (nowMills - currentEntry.Mills) <= 30 * 60 * 1000L
@@ -434,65 +391,6 @@ public class CgmSimController : ControllerBase, IWriteScopedController
             Weight = weight,
             Age = Math.Max(1, Math.Min(150, age)),
         };
-    }
-
-    private async Task EnsureTherapyProfileAsync(CgmSimParameters parameters, CancellationToken ct)
-    {
-        var existing = await _therapySettingsRepository.GetAsync(
-            null, null, null, null, limit: 1, offset: 0, descending: true, ct: ct);
-        if (existing.Any())
-            return;
-
-        var profile = new Profile
-        {
-            DefaultProfile = "Default",
-            Units = "mg/dL",
-            EnteredBy = "cgmsim",
-            StartDate = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-            Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            Store = new Dictionary<string, ProfileData>
-            {
-                ["Default"] = new ProfileData
-                {
-                    Dia = parameters.Dia > 0 ? parameters.Dia : 4.0,
-                    CarbsHr = parameters.CarbsAbsTime > 0 ? (int)Math.Round(60.0 * 60.0 / parameters.CarbsAbsTime) : 20,
-                    Timezone = "UTC",
-                    Units = "mg/dL",
-                    Basal =
-                    [
-                        new TimeValue { Time = "00:00", Value = 1.0, TimeAsSeconds = 0 }
-                    ],
-                    CarbRatio =
-                    [
-                        new TimeValue
-                        {
-                            Time = "00:00",
-                            Value = parameters.Cr > 0 ? parameters.Cr : 10.0,
-                            TimeAsSeconds = 0
-                        }
-                    ],
-                    Sens =
-                    [
-                        new TimeValue
-                        {
-                            Time = "00:00",
-                            Value = parameters.Isf > 0 ? parameters.Isf : 50.0,
-                            TimeAsSeconds = 0
-                        }
-                    ],
-                    TargetLow =
-                    [
-                        new TimeValue { Time = "00:00", Value = 100.0, TimeAsSeconds = 0 }
-                    ],
-                    TargetHigh =
-                    [
-                        new TimeValue { Time = "00:00", Value = 120.0, TimeAsSeconds = 0 }
-                    ]
-                }
-            }
-        };
-
-        await _profileWriteService.CreateProfilesAsync([profile], ct);
     }
 
     private static async Task<CgmSimSettingsEntity> GetOrCreateSettingsAsync(

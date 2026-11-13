@@ -122,6 +122,48 @@ public class CgmSimControllerTests
     }
 
     [Fact]
+    public async Task Parameters_AreIndependentFromProfile_AndEditableAutonomously()
+    {
+        var (controller, _) = NewController();
+
+        // Update CGMSIM parameters with custom kinetic & metabolic values
+        var customParameters = new CgmSimParameters
+        {
+            Isf = 42.0,
+            Dia = 5.5,
+            Cr = 8.5,
+            CarbsAbsTime = 200,
+            InsulinPeak = 65,
+        };
+
+        var updateResult = await controller.UpdateParameters(customParameters, CancellationToken.None);
+        var updated = updateResult.Result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<CgmSimParameters>().Subject;
+        updated.Isf.Should().Be(42.0);
+        updated.Dia.Should().Be(5.5);
+        updated.Cr.Should().Be(8.5);
+        updated.CarbsAbsTime.Should().Be(200);
+        updated.InsulinPeak.Should().Be(65);
+
+        // Verify GetParameters returns the exact custom parameters
+        var getResult = await controller.GetParameters(CancellationToken.None);
+        var retrieved = getResult.Result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<CgmSimParameters>().Subject;
+        retrieved.Isf.Should().Be(42.0);
+        retrieved.Dia.Should().Be(5.5);
+        retrieved.Cr.Should().Be(8.5);
+        retrieved.CarbsAbsTime.Should().Be(200);
+        retrieved.InsulinPeak.Should().Be(65);
+
+        // Verify GetSettings includes the independent parameters
+        var settingsResult = await controller.GetSettings(CancellationToken.None);
+        var settings = settingsResult.Result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<CgmSimSettings>().Subject;
+        settings.Parameters.Isf.Should().Be(42.0);
+        settings.Parameters.Dia.Should().Be(5.5);
+        settings.Parameters.Cr.Should().Be(8.5);
+        settings.Parameters.CarbsAbsTime.Should().Be(200);
+        settings.Parameters.InsulinPeak.Should().Be(65);
+    }
+
+    [Fact]
     public async Task GetSettings_ReturnsBothSubjectAndParameters()
     {
         var (controller, _) = NewController();
@@ -248,14 +290,9 @@ public class CgmSimControllerTests
         IBolusRepository? bolusRepository = null,
         ITempBasalRepository? tempBasalRepository = null,
         ICarbIntakeRepository? carbIntakeRepository = null,
-        ITargetRangeResolver targetRangeResolver = null!,
-        ISensitivityResolver? sensitivityResolver = null,
-        ICarbRatioResolver? carbRatioResolver = null,
-        ITherapySettingsResolver? therapySettingsResolver = null,
+        ITargetRangeResolver? targetRangeResolver = null,
         IPatientRecordRepository? patientRecordRepository = null,
-        IBodyWeightService? bodyWeightService = null,
-        IProfileWriteService? profileWriteService = null,
-        ITherapySettingsRepository? therapySettingsRepository = null)
+        IBodyWeightService? bodyWeightService = null)
     {
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -298,21 +335,6 @@ public class CgmSimControllerTests
             .Setup(r => r.GetBGTargetRangeAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Low: 70.0, High: 130.0));
 
-        var sensitivityMock = new Mock<ISensitivityResolver>();
-        sensitivityMock
-            .Setup(r => r.GetSensitivityAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(0.0);
-
-        var carbRatioMock = new Mock<ICarbRatioResolver>();
-        carbRatioMock
-            .Setup(r => r.GetCarbRatioAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(0.0);
-
-        var therapySettingsMock = new Mock<ITherapySettingsResolver>();
-        therapySettingsMock
-            .Setup(r => r.GetDIAAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(0.0);
-
         var patientRecordMock = new Mock<IPatientRecordRepository>();
         patientRecordMock
             .Setup(r => r.GetAsync(It.IsAny<CancellationToken>()))
@@ -322,11 +344,6 @@ public class CgmSimControllerTests
             .ReturnsAsync(new PatientRecord());
 
         var bodyWeightMock = new Mock<IBodyWeightService>();
-        var profileWriteMock = new Mock<IProfileWriteService>();
-        var therapyRepoMock = new Mock<ITherapySettingsRepository>();
-        therapyRepoMock
-            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<TherapySettings>());
 
         var controller = new CgmSimController(
             factory,
@@ -337,13 +354,8 @@ public class CgmSimControllerTests
             tempBasalRepository ?? tempBasalRepoMock.Object,
             carbIntakeRepository ?? carbIntakeRepoMock.Object,
             targetRangeResolver ?? targetRangeMock.Object,
-            sensitivityResolver ?? sensitivityMock.Object,
-            carbRatioResolver ?? carbRatioMock.Object,
-            therapySettingsResolver ?? therapySettingsMock.Object,
             patientRecordRepository ?? patientRecordMock.Object,
-            bodyWeightService ?? bodyWeightMock.Object,
-            profileWriteService ?? profileWriteMock.Object,
-            therapySettingsRepository ?? therapyRepoMock.Object);
+            bodyWeightService ?? bodyWeightMock.Object);
 
         return (controller, options);
     }
