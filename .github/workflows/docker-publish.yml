@@ -154,7 +154,7 @@ jobs:
           set -euo pipefail
           ref="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-api:${{ steps.tags.outputs.build_tag }}"
           probe="$RUNNER_TEMP/alerts-native-probe"
-          dotnet publish scripts/alerts-native-probe.cs -o "$probe"
+          dotnet publish scripts/alerts-native-probe.cs -f net10.0 -o "$probe"
           find "$probe" -name '*nocturne_alerts*' -delete
           for pair in "linux/amd64:linux-x64" "linux/arm64:linux-arm64"; do
             platform="${pair%%:*}"

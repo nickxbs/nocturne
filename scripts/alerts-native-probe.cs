@@ -5,12 +5,13 @@
 // there (its glibc, its architecture), not just that the file exists.
 //
 // Usage:
-//   dotnet publish scripts/alerts-native-probe.cs -o <dir>
+//   dotnet publish scripts/alerts-native-probe.cs -f net10.0 -o <dir>
 //   find <dir> -name '*nocturne_alerts*' -delete    # the probe refuses to run beside a copy
 //   docker run --rm --platform linux/amd64 --entrypoint dotnet -v <dir>:/probe:ro \
 //     -e NOCTURNE_ALERTS_NATIVE_DIR=/app/runtimes/linux-x64/native <api-image> /probe/alerts-native-probe.dll
 
 #:project ../src/Core/Nocturne.Core.Alerts.Native/Nocturne.Core.Alerts.Native.csproj
+#:property TargetFramework=net10.0
 #:property PublishAot=false
 
 using System.Runtime.InteropServices;
