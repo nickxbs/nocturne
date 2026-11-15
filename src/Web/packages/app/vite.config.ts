@@ -37,6 +37,7 @@ const reactAliases = {
   "react-dom": dirname(require.resolve("react-dom/package.json")),
 };
 import { wuchale } from 'wuchale/vite'
+import { privateDevCatalogue } from './wuchale.dev.js'
 
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
@@ -89,6 +90,8 @@ export default defineConfig(({ mode }) => {
         preprocess: vitePreprocess(),
         compilerOptions: { experimental: { async: true } },
         adapter: adapter({ out: "build", precompress: true }),
+        // Turns off SvelteKit's form origin check; csrfHandle in hooks.server.ts runs it instead.
+        csrf: { trustedOrigins: ["*"] },
         experimental: { remoteFunctions: true },
         tracing: { server: true },
         alias: {
@@ -101,6 +104,7 @@ export default defineConfig(({ mode }) => {
       route: '/_translations',  // Route where editor UI is served
       localesDir: '../../locales',  // Path to .po files
     }),
+      privateDevCatalogue('app'),
       wuchale(),
       // Custom plugin to integrate WebSocket bridge into Vite dev server
       {

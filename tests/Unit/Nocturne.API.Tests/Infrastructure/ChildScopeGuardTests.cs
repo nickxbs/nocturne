@@ -47,37 +47,23 @@ public partial class ChildScopeGuardTests
         "src/API/Nocturne.API/Program.cs: GlobalStatement",
         "src/API/Nocturne.API/Hubs/HubConnectionRevalidator.cs: HubConnectionRevalidator.RevalidateAsync",
         "src/API/Nocturne.API/Services/Alerts/AlertRuleConditionAuditService.cs: AlertRuleConditionAuditService.ExecuteAsync",
-        "src/API/Nocturne.API/Services/Alerts/AlertSweepService.cs: AlertSweepService.BeginTenantScope",
-        "src/API/Nocturne.API/Services/Alerts/AlertSweepService.cs: AlertSweepService.CheckSnoozedInstancesAsync",
-        "src/API/Nocturne.API/Services/Alerts/AlertSweepService.cs: AlertSweepService.CloseHysteresisWindowsAsync",
-        "src/API/Nocturne.API/Services/Alerts/AlertSweepService.cs: AlertSweepService.EvaluateAutoResolveAsync",
-        "src/API/Nocturne.API/Services/Alerts/AlertSweepService.cs: AlertSweepService.EvaluateWallClockRulesAsync",
-        "src/API/Nocturne.API/Services/Alerts/AlertSweepService.cs: AlertSweepService.ProcessTenantSnoozesAsync",
-        "src/API/Nocturne.API/Services/Alerts/RuleScopeClassBackfillService.cs: RuleScopeClassBackfillService.ExecuteAsync",
         "src/API/Nocturne.API/Services/Auth/AuthorizationSeedService.cs: AuthorizationSeedService.StartAsync",
         "src/API/Nocturne.API/Services/Auth/OidcProviderService.cs: OidcProviderService.SyncConfigProvidersAsync",
-        "src/API/Nocturne.API/Services/BackgroundServices/ApsSnapshotCurvesBackfillService.cs: ApsSnapshotCurvesBackfillService.ExecuteAsync",
-        "src/API/Nocturne.API/Services/BackgroundServices/CompressionLowDetectionService.cs: CompressionLowDetectionService.ScanReadyNightsAsync",
-        "src/API/Nocturne.API/Services/BackgroundServices/ConnectorBackgroundService.cs: ConnectorBackgroundService.SyncForTenantAsync",
-        "src/API/Nocturne.API/Services/BackgroundServices/DeduplicationReconciliationBackgroundService.cs: DeduplicationReconciliationBackgroundService.ReconcileAllTenantsAsync",
         "src/API/Nocturne.API/Services/BackgroundServices/DemoServiceHealthMonitor.cs: DemoServiceHealthMonitor.CleanupDemoDataAsync",
         "src/API/Nocturne.API/Services/BackgroundServices/EnrolmentPruningService.cs: EnrolmentPruningService.PruneAbandonedEnrolmentsAsync",
         "src/API/Nocturne.API/Services/BackgroundServices/NightscoutConnectorBackgroundService.cs: NightscoutConnectorBackgroundService.StartListenerForTenantAsync",
         "src/API/Nocturne.API/Services/BackgroundServices/NocturneRemoteConnectorBackgroundService.cs: NocturneRemoteConnectorBackgroundService.StartRealtimeListenersAsync",
-        "src/API/Nocturne.API/Services/BackgroundServices/NotificationCleanupService.cs: NotificationCleanupService.ExecuteAsync",
-        "src/API/Nocturne.API/Services/BackgroundServices/TempBasalOriginCorroborationService.cs: TempBasalOriginCorroborationService.RunAsync",
-        "src/API/Nocturne.API/Services/BackgroundServices/TempBasalRateSweepService.cs: TempBasalRateSweepService.ExecuteAsync",
         "src/API/Nocturne.API/Services/Chat/ChatIdentityPendingLinkCleanupService.cs: ChatIdentityPendingLinkCleanupService.SweepAsync",
         "src/API/Nocturne.API/Services/Compatibility/DiscrepancyMaintenanceService.cs: DiscrepancyMaintenanceService.PerformMaintenanceAsync",
         "src/API/Nocturne.API/Services/Health/GoogleHealth/GoogleHealthWorker.cs: GoogleHealthWorker.ProcessRequestsAsync",
         "src/API/Nocturne.API/Services/Health/GoogleHealth/GoogleHealthWorker.cs: GoogleHealthWorker.SyncTenantAsync",
         "src/API/Nocturne.API/Services/Health/GoogleHealth/PostgresGoogleHealthGrantHolders.cs: PostgresGoogleHealthGrantHolders.AdoptAsync",
+        "src/API/Nocturne.API/Services/Jobs/JobScheduler.cs: JobScheduler.RunAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationStartupService.cs: MigrationStartupService.NotifyIfPendingAsync",
-        "src/API/Nocturne.API/Services/Monitoring/TrackerAlertRuleBackfillService.cs: TrackerAlertRuleBackfillService.ExecuteAsync",
-        "src/API/Nocturne.API/Services/Notifications/NotificationResolutionService.cs: NotificationResolutionService.EvaluateAllTenantsAsync",
         "src/API/Nocturne.API/Services/Platform/InstanceKey/InstanceKeyChangeService.cs: InstanceKeyChangeService.ReconcilePlatformAsync",
         "src/API/Nocturne.API/Services/Platform/InstanceKey/InstanceKeyChangeService.cs: InstanceKeyChangeService.ReconcileTenantAsync",
-        "src/API/Nocturne.API/Services/Platform/Releases/ReleaseNoticeService.cs: ReleaseNoticeService.NotifyOwnersAsync",
+        "src/API/Nocturne.API/Services/Platform/Releases/ReleaseNoticeJob.cs: ReleaseNoticeJob.NotifyOwnersAsync",
+        "src/API/Nocturne.API/Services/Seeding/SampleDataLiveFeedService.cs: SampleDataLiveFeedService.AdvanceAllAsync",
 
         // Credential and identity lookups: subjects, grants, memberships and guest links, which no
         // category or history policy narrows.
@@ -93,9 +79,7 @@ public partial class ChildScopeGuardTests
 
         // Job and connector bookkeeping: job runs, migration sources, sync cursors and locks, none of
         // them time-series.
-        "src/API/Nocturne.API/Services/Connectors/ConnectorCursorResetJobService.cs: ConnectorCursorResetJobService.FindRecordAsync",
         "src/API/Nocturne.API/Services/Connectors/ConnectorCursorResetJobService.cs: ConnectorCursorResetJobService.StartResetAsync",
-        "src/API/Nocturne.API/Services/Connectors/ConnectorCursorResetJobService.cs: ConnectorResetJob.PersistSnapshotAsync",
         "src/API/Nocturne.API/Services/Health/GoogleHealth/GoogleHealthCoordinator.cs: GoogleHealthCoordinator.PendingTenantsAsync",
         "src/API/Nocturne.API/Services/Health/GoogleHealth/GoogleHealthCoordinator.cs: GoogleHealthCoordinator.ReadAsync",
         "src/API/Nocturne.API/Services/Health/GoogleHealth/GoogleHealthCoordinator.cs: GoogleHealthCoordinator.WriteAsync",
@@ -103,6 +87,11 @@ public partial class ChildScopeGuardTests
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.FindRunAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.GetHistoryAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.GetSourcesAsync",
+
+        // A share's zone and timezone timeline, which no category governs and every local-day report
+        // needs. Each returns only the zone id or the timeline's entries.
+        "src/API/Nocturne.API/Services/Analytics/ShareClockReader.cs: ShareClockReader.ReadTimelineAsync",
+        "src/API/Nocturne.API/Services/Analytics/ShareClockReader.cs: ShareClockReader.ReadTimezoneAsync",
 
         // Work a request starts that returns nothing it read. It writes as the system, and the caller
         // reads what it wrote back under the caller's own policies. Read as the caller, a sync or an
@@ -125,6 +114,7 @@ public partial class ChildScopeGuardTests
         "src/API/Nocturne.API/Services/Seeding/SampleDataSeeder.cs: SampleDataSeeder.SeedInTenantScopeAsync",
         "src/API/Nocturne.API/Services/V4/LoopClosedLoopStamper.cs: LoopClosedLoopStamper.RunAsync",
         "src/API/Nocturne.API/Services/V4/TempBasalRateReresolver.cs: TempBasalRateReresolver.RunAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/DemoDataPurgeRepository.cs: DemoDataPurgeRepository.ReportInTenantAsync",
     ];
 
     private static readonly IReadOnlyList<string> Openers = Scan();
@@ -339,50 +329,16 @@ public partial class ChildScopeGuardTests
 
     private static List<string> Scan()
     {
-        var root = RepositoryRoot();
-        var sources = new List<(string File, string Text)>();
-
-        foreach (var tree in ScannedTrees)
-        {
-            foreach (var path in Directory.EnumerateFiles(Path.Combine(root, tree), "*.cs", SearchOption.AllDirectories))
-            {
-                if (path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                    || path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
-                    continue;
-
-                sources.Add((Path.GetRelativePath(root, path).Replace('\\', '/'), File.ReadAllText(path)));
-            }
-        }
-
-        var trees = new Dictionary<string, SyntaxTree>(StringComparer.Ordinal);
-        SyntaxTree Parse((string File, string Text) source) =>
-            trees.TryGetValue(source.File, out var tree)
-                ? tree
-                : trees[source.File] = CSharpSyntaxTree.ParseText(source.Text);
+        var sources = ScannedTrees.SelectMany(RepoSources.Under).ToList();
 
         var helpers = ScopeHelpers(sources
-            .Where(s => s.File != Seam && MayDeclareHelper(s.Text))
-            .Select(Parse)
+            .Where(s => s.Path != Seam && MayDeclareHelper(s.Text))
+            .Select(s => s.Tree)
             .ToList());
 
         return sources
             .Where(s => MayOpen(s.Text, helpers.Keys))
-            .SelectMany(s => OpeningMembers(Parse(s), helpers).Select(member => $"{s.File}: {member}"))
+            .SelectMany(s => OpeningMembers(s.Tree, helpers).Select(member => $"{s.Path}: {member}"))
             .ToList();
-    }
-
-    private static string RepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null)
-        {
-            if (Directory.Exists(Path.Combine(directory.FullName, "tests", "Unit")))
-                return directory.FullName;
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException($"No tests/Unit directory above {AppContext.BaseDirectory}.");
     }
 }

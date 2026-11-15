@@ -1,9 +1,7 @@
 using System.Net.Http.Json;
-using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
@@ -11,14 +9,12 @@ using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Services;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Core.Models.Identity;
 using Nocturne.API.Configuration;
 using SameSiteMode = Nocturne.Core.Models.Configuration.SameSiteMode;
 
@@ -43,7 +39,9 @@ public partial class SetupController : ControllerBase
     private readonly IRecoveryCodeService _recoveryCodeService;
     private readonly ISessionService _sessionService;
     private readonly ISubjectService _subjectService;
-    private readonly INocturneDbContextFactory _dbFactory;
+    private readonly ISubjectRepository _subjects;
+    private readonly ITenantRepository _tenants;
+    private readonly ITenantMembershipRepository _members;
     private readonly OidcOptions _oidcOptions;
     private readonly IOidcAuthService _oidcAuthService;
     private readonly OperatorConfiguration _operatorConfig;
@@ -51,7 +49,6 @@ public partial class SetupController : ControllerBase
     private readonly PlatformAdminBootstrapService _platformAdminBootstrap;
     private readonly IInstanceSetupState _setupState;
     private readonly ILogger<SetupController> _logger;
-    private readonly IUsernameValidator _usernameValidator;
 
     public SetupController(
         ITenantService tenantService,
@@ -59,22 +56,25 @@ public partial class SetupController : ControllerBase
         IRecoveryCodeService recoveryCodeService,
         ISessionService sessionService,
         ISubjectService subjectService,
-        INocturneDbContextFactory dbFactory,
+        ISubjectRepository subjects,
+        ITenantRepository tenants,
+        ITenantMembershipRepository members,
         IOptions<OidcOptions> oidcOptions,
         IOidcAuthService oidcAuthService,
         IOptions<OperatorConfiguration> operatorConfig,
         IHttpClientFactory httpClientFactory,
         PlatformAdminBootstrapService platformAdminBootstrap,
         IInstanceSetupState setupState,
-        ILogger<SetupController> logger,
-        IUsernameValidator? usernameValidator = null)
+        ILogger<SetupController> logger)
     {
         _tenantService = tenantService;
         _passkeyService = passkeyService;
         _recoveryCodeService = recoveryCodeService;
         _sessionService = sessionService;
         _subjectService = subjectService;
-        _dbFactory = dbFactory;
+        _subjects = subjects;
+        _tenants = tenants;
+        _members = members;
         _oidcOptions = oidcOptions.Value;
         _oidcAuthService = oidcAuthService;
         _operatorConfig = operatorConfig.Value;
@@ -82,9 +82,13 @@ public partial class SetupController : ControllerBase
         _platformAdminBootstrap = platformAdminBootstrap;
         _setupState = setupState;
         _logger = logger;
-        _usernameValidator = usernameValidator ?? new UsernameValidator(
-            dbFactory, _operatorConfig, httpClientFactory, logger);
     }
+
+    /// <summary>
+    /// Whether the username webhook's last attempt has already been reported. See
+    /// <see cref="AskUsernameWebhookAsync"/>.
+    /// </summary>
+    private static int _usernameWebhookOutageReported;
 
     /// <summary>
     /// Create the first tenant on a fresh install. Only succeeds when zero tenants exist.
@@ -127,8 +131,25 @@ public partial class SetupController : ControllerBase
     public async Task<IActionResult> ValidateUsername(
         [FromQuery] string username, CancellationToken ct)
     {
-        var result = await _usernameValidator.ValidateForSetupAsync(username, ct);
-        return Ok(result);
+        if (string.IsNullOrWhiteSpace(username))
+            return Ok(new SlugValidationResult(false, "Username is required"));
+
+        var normalized = UsernameRules.Normalize(username);
+
+        if (UsernameRules.Refusal(normalized) is { } formatRefusal)
+            return Ok(new SlugValidationResult(false, formatRefusal));
+
+        var tenant = (await _tenants.ListNonDemoAsync(1, ct)).FirstOrDefault();
+        if (tenant == null)
+            return Ok(new SlugValidationResult(false, "No tenant exists"));
+
+        if (await _members.UsernameExistsAsync(tenant.Id, normalized, ct))
+            return Ok(new SlugValidationResult(false, "This username is already taken"));
+
+        if (await AskUsernameWebhookAsync(normalized, ct) is { IsValid: false } refusal)
+            return Ok(refusal);
+
+        return Ok(new SlugValidationResult(true));
     }
 
     /// <summary>
@@ -154,11 +175,9 @@ public partial class SetupController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.DisplayName))
             return Problem(detail: "Username and display name are required", statusCode: 400, title: "Bad Request");
 
-        var format = _usernameValidator.ValidateFormat(request.Username);
-        if (!format.IsValid)
-            return Problem(detail: format.Message, statusCode: 400, title: "Bad Request");
-
-        var normalizedUsername = request.Username.Trim().ToLowerInvariant();
+        var normalizedUsername = UsernameRules.Normalize(request.Username);
+        if (UsernameRules.Refusal(normalizedUsername) is { } usernameRefusal)
+            return Problem(detail: usernameRefusal, statusCode: 400, title: "Bad Request");
 
         var subjectId = await EnsureOwnerSubjectAsync(
             tenant!, request.DisplayName.Trim(), normalizedUsername, ct);
@@ -261,11 +280,9 @@ public partial class SetupController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.DisplayName))
             return Problem(detail: "Username and display name are required", statusCode: 400, title: "Bad Request");
 
-        var format = _usernameValidator.ValidateFormat(request.Username);
-        if (!format.IsValid)
-            return Problem(detail: format.Message, statusCode: 400, title: "Bad Request");
-
-        var normalizedUsername = request.Username.Trim().ToLowerInvariant();
+        var normalizedUsername = UsernameRules.Normalize(request.Username);
+        if (UsernameRules.Refusal(normalizedUsername) is { } usernameRefusal)
+            return Problem(detail: usernameRefusal, statusCode: 400, title: "Bad Request");
 
         if (request.ProviderId == Guid.Empty)
             return Problem(detail: "Provider ID is required", statusCode: 400, title: "Bad Request");
@@ -369,23 +386,77 @@ public partial class SetupController : ControllerBase
 
     #region Private Helpers
 
+    /// <summary>
+    /// The operator's username-validation webhook's verdict, or <see langword="null"/> when no
+    /// webhook is configured or it could not answer.
+    /// </summary>
+    /// <remarks>
+    /// Fails open. The webhook is an operator's extra restriction layered on the checks above, and
+    /// only this advisory probe consults it — the owner-creation steps never do, so refusing here
+    /// would not keep the name from being taken. An outage that refused every username instead
+    /// would strand the operator on the one screen with no way past it, on an instance that has no
+    /// account yet to correct the configuration from.
+    /// <para>
+    /// The endpoint is anonymous, so a caller sets the request volume; one log line per outage
+    /// keeps that from being a log-volume lever. The latch reopens when the webhook next answers.
+    /// </para>
+    /// </remarks>
+    private async Task<SlugValidationResult?> AskUsernameWebhookAsync(string username, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(_operatorConfig.UsernameValidationWebhookUrl))
+            return null;
 
+        Exception? failure = null;
+        int? statusCode = null;
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient("username-validation");
+            var response = await client.PostAsJsonAsync(
+                _operatorConfig.UsernameValidationWebhookUrl,
+                new { username },
+                ct);
+
+            if (response.IsSuccessStatusCode)
+            {
+                Interlocked.Exchange(ref _usernameWebhookOutageReported, 0);
+                return await response.Content.ReadFromJsonAsync<SlugValidationResult>(ct);
+            }
+
+            statusCode = (int)response.StatusCode;
+        }
+        catch (Exception ex)
+        {
+            if (ct.IsCancellationRequested)
+                return null;
+
+            failure = ex;
+        }
+
+        if (Interlocked.Exchange(ref _usernameWebhookOutageReported, 1) == 0)
+        {
+            _logger.LogWarning(
+                failure,
+                "Username validation webhook did not answer ({Outcome}); usernames are being accepted without it",
+                statusCode?.ToString() ?? "unreachable");
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// Returns the sole tenant if exactly one exists and it has no non-system members,
     /// or an error result if the preconditions are not met.
     /// </summary>
     /// <remarks>
-    /// A demo tenant never trips the credentialed-member arm (<see cref="DemoExclusionFilter"/>),
+    /// A demo tenant never trips the credentialed-member arm (<see cref="Nocturne.Infrastructure.Data.Extensions.DemoExclusionFilter"/>),
     /// so a demo-only instance answers <c>no_tenant_exists</c>, from which a tenant can still be
     /// created, rather than <c>setup_already_complete</c>, which would strand the operator on a
     /// tenant nobody can adopt.
     /// </remarks>
-    private async Task<(TenantEntity? Tenant, IActionResult? Error)> GetSoleTenantWithoutOwnerAsync(CancellationToken ct)
+    private async Task<(TenantRecord? Tenant, IActionResult? Error)> GetSoleTenantWithoutOwnerAsync(CancellationToken ct)
     {
-        await using var context = await _dbFactory.CreatePlatformAsync(ct);
-
-        var tenants = await context.Tenants.ExcludeDemo().Take(2).ToListAsync(ct);
+        var tenants = await _tenants.ListNonDemoAsync(2, ct);
 
         if (tenants.Count == 0)
             return (null, Conflict(new { error = "no_tenant_exists" }));
@@ -407,31 +478,12 @@ public partial class SetupController : ControllerBase
     }
 
     /// <summary>
-    /// The first-run owner subject: the earliest active subject that is neither a system subject
-    /// nor the demo visitor (<see cref="DemoExclusionFilter"/>). Setup only runs while no member
-    /// of the tenant holds credentials, so this is the account the owner options step created or
-    /// reused. Ordered so the options and complete steps resolve the same row.
+    /// Returns the first-run owner subject's id
+    /// (<see cref="ISubjectRepository.FindSetupOwnerCandidateAsync"/>), or <see langword="null"/>
+    /// when the options step has not created it yet.
     /// </summary>
-    /// <remarks>
-    /// <c>subjects</c> is not tenant-scoped, so this sees every subject on the instance — the
-    /// demo visitor included, and it is older than the operator's.
-    /// </remarks>
-    private static IQueryable<SubjectEntity> SetupOwnerSubjects(NocturneDbContext context) =>
-        context.Subjects.ExcludeDemo().Where(s => !s.IsSystemSubject && s.IsActive).OrderBy(s => s.Id);
-
-    /// <summary>
-    /// Returns the first-run owner subject's id as resolved from the database, or
-    /// <see langword="null"/> when the options step has not created it yet.
-    /// </summary>
-    private async Task<Guid?> FindSetupOwnerSubjectIdAsync(TenantEntity tenant, CancellationToken ct)
-    {
-        await using var context = await _dbFactory.CreateForTenantAsync(tenant.Id, ct);
-
-        return await SetupOwnerSubjects(context)
-            .AsNoTracking()
-            .Select(s => (Guid?)s.Id)
-            .FirstOrDefaultAsync(ct);
-    }
+    private async Task<Guid?> FindSetupOwnerSubjectIdAsync(TenantRecord tenant, CancellationToken ct) =>
+        (await _subjects.FindSetupOwnerCandidateAsync(tenant.Id, ct))?.Id;
 
     /// <summary>
     /// Find or create the first non-system subject, ensure it is a member of the
@@ -440,32 +492,19 @@ public partial class SetupController : ControllerBase
     /// and when reusing a subject created for a previously deleted tenant.
     /// </summary>
     private async Task<Guid> EnsureOwnerSubjectAsync(
-        TenantEntity tenant, string displayName, string username, CancellationToken ct)
+        TenantRecord tenant, string displayName, string username, CancellationToken ct)
     {
-        await using var context = await _dbFactory.CreateForTenantAsync(tenant.Id, ct);
-
-        var existingSubject = await SetupOwnerSubjects(context).FirstOrDefaultAsync(ct);
+        var existingSubject = await _subjects.FindSetupOwnerCandidateAsync(tenant.Id, ct);
 
         Guid subjectId;
         if (existingSubject != null)
         {
             subjectId = existingSubject.Id;
-            existingSubject.Name = displayName;
-            existingSubject.Username = username;
-            await context.SaveChangesAsync(ct);
+            await _subjects.UpdateAsync(subjectId, new SubjectEdit(Name: displayName, Username: username), ct);
         }
         else
         {
-            subjectId = Guid.CreateVersion7();
-            context.Subjects.Add(new SubjectEntity
-            {
-                Id = subjectId,
-                Name = displayName,
-                Username = username,
-                IsActive = true,
-                IsSystemSubject = false,
-            });
-            await context.SaveChangesAsync(ct);
+            subjectId = await _subjects.CreateAsync(new NewSubject(displayName, Username: username), ct);
 
             _logger.LogInformation(
                 "Setup: created owner {SubjectId} ({Username}) for tenant {TenantId}",
@@ -474,25 +513,17 @@ public partial class SetupController : ControllerBase
 
         // Ensure tenant membership with owner role — required when reusing a
         // subject from a previously deleted tenant.
-        var ownerRole = await context.TenantRoles
-            .FirstOrDefaultAsync(r => r.TenantId == tenant.Id && r.Slug == "owner", ct);
-        if (ownerRole != null)
+        var ownerRoleId = await _members.FindRoleIdBySlugAsync(tenant.Id, RoleSeeds.Owner, ct);
+        if (ownerRoleId is { } roleId)
         {
-            var isMember = await context.TenantMembers
-                .AnyAsync(m => m.TenantId == tenant.Id && m.SubjectId == subjectId, ct);
-            if (!isMember)
-                await _tenantService.AddMemberAsync(tenant.Id, subjectId, [ownerRole.Id], ct: ct);
+            // Setup retries, so a subject that is already a member is the state it wants, and the
+            // result of the add is not read.
+            _ = await _tenantService.AddMemberAsync(tenant.Id, subjectId, [roleId], ct: ct);
         }
 
         // Set per-tenant username on the membership
-        await using var memberCtx = await _dbFactory.CreateForTenantAsync(tenant.Id, ct);
-        var membership = await memberCtx.TenantMembers
-            .FirstOrDefaultAsync(m => m.TenantId == tenant.Id && m.SubjectId == subjectId, ct);
-        if (membership != null)
-        {
-            membership.Username = username;
-            await memberCtx.SaveChangesAsync(ct);
-        }
+        if (await _members.FindMemberAsync(tenant.Id, subjectId, ct) is { } membership)
+            await _members.SetUsernameAsync(tenant.Id, membership.Id, username, ct);
 
         await _subjectService.AssignRoleAsync(subjectId, "admin");
 

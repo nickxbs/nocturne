@@ -10,6 +10,7 @@ using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Platform.InstanceKey;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Alerts.Native;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -154,6 +155,19 @@ public class MetadataController : ControllerBase
                 Description = "Actions a trackerUpdate realtime event can carry",
             }
         );
+    }
+
+    /// <summary>
+    /// The ceilings the V4 API puts on a read, so a client can keep its requests inside them.
+    /// </summary>
+    /// <returns>The V4 read limits</returns>
+    [HttpGet("v4-api-limits")]
+    [RemoteQuery]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(V4ApiLimitsMetadata), 200)]
+    public ActionResult<V4ApiLimitsMetadata> GetV4ApiLimits()
+    {
+        return Ok(new V4ApiLimitsMetadata { MaxDateSpanDays = V4ApiLimits.MaxDateSpanDays });
     }
 
     /// <summary>
@@ -433,6 +447,15 @@ public class TrackerRealtimeActionsMetadata
     /// Description of the tracker realtime actions
     /// </summary>
     public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// The ceilings the V4 API puts on a read
+/// </summary>
+public class V4ApiLimitsMetadata
+{
+    /// <inheritdoc cref="V4ApiLimits.MaxDateSpanDays"/>
+    public int MaxDateSpanDays { get; set; }
 }
 
 /// <summary>

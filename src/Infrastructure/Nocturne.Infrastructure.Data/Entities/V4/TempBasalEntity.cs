@@ -10,8 +10,18 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.TempBasal
 /// </summary>
 [Table("temp_basals")]
-public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4TimeSeriesEntity, ISyncDedupable, IDeviceAttributedEntity, ISystemTimestamped, IUpstreamFingerprinted
+public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4TimeSeriesEntity, ISyncDedupable, IDeviceAttributedEntity, ISystemTimestamped, IUpstreamFingerprinted, IDuplicateFlagged, IWriteBackTracked
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("is_duplicate")]
+    public bool IsDuplicate { get; set; }
+
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("written_live")]
+    public bool WrittenLive { get; set; }
+
     /// <inheritdoc />
     [AuditIgnored]
     [Column("upstream_fingerprint")]

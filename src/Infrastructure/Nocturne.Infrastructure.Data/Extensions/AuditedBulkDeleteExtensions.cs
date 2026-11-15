@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
 
@@ -118,7 +119,7 @@ public static class AuditedBulkDeleteExtensions
                 return (Count: deleted, FirstId: ids[0]);
             },
             async (attempt, token) => attempt.Count > 0
-                && !await InTenant(context, context.Set<T>().IgnoreQueryFilters())
+                && !await context.Set<T>().IncludingDeleted()
                     .AnyAsync(e => EF.Property<Guid>(e, "Id") == attempt.FirstId, token),
             ct: ct);
 
@@ -247,25 +248,18 @@ public static class AuditedBulkDeleteExtensions
     {
         if (count == 0)
             return false;
-        return await InTenant(context, context.Set<T>().IgnoreQueryFilters())
+        return await context.Set<T>().IncludingDeleted()
             .AnyAsync(e => e.DeletedAt == deletedAt, ct);
     }
-
-    /// <summary>
-    /// Narrows an unfiltered query to the context's tenant, so a check made under
-    /// <c>IgnoreQueryFilters()</c> does not rest on row level security alone.
-    /// </summary>
-    private static IQueryable<T> InTenant<T>(NocturneDbContext context, IQueryable<T> query) where T : class =>
-        context.Model.FindEntityType(typeof(T))?.FindProperty(nameof(ITenantScoped.TenantId)) is not null
-            ? query.Where(e => EF.Property<Guid>(e, nameof(ITenantScoped.TenantId)) == context.TenantId)
-            : query;
 
     /// <summary>
     /// Stamps <c>DeletedAt</c> and the dedup attribution flag: a user-initiated delete blocks resync
     /// re-creation, a system sweep leaves the row re-creatable (<see cref="SoftDeleteDedupExtensions"/>).
     /// Runs whether or not an audit row is written. Then, under
     /// <see cref="DuplicateDelete.PromoteSurvivor"/>, repoints the duplicate groups whose primary it
-    /// deleted, stamping each promoted copy after the deletes.
+    /// deleted, stamping each promoted copy after the deletes; their links are locked before the rows
+    /// are written (<see cref="DuplicateGroupPrimaries.LockGroupsOfAsync"/>), except for a glucose delete
+    /// that recomputes inline, whose lock order <see cref="GlucoseStreamFlags"/> states.
     /// </summary>
     /// <remarks>
     /// A delete is a write a v3 history client has to be told of, so it moves the row's update stamp
@@ -295,7 +289,7 @@ public static class AuditedBulkDeleteExtensions
             var updated = await query.ExecuteUpdateAsync(
                 s => s
                     .SetProperty(e => e.DeletedAt, deletedAt)
-                    .SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), isUserDelete), ct);
+                    .SetProperty(e => EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty), isUserDelete), ct);
             return (updated, []);
         }
 
@@ -303,6 +297,11 @@ public static class AuditedBulkDeleteExtensions
         // the filtered, ordered read for every group would rescan the remaining set each time.
         var live = query.Where(e => e.DeletedAt == null);
         var ids = await live.Select(e => EF.Property<Guid>(e, "Id")).OrderBy(id => id).ToListAsync(ct);
+        using var wide = typeof(T) == typeof(SensorGlucoseEntity)
+            ? await GlucoseStreamFlags.DeferIfWideAsync(context, ids.Count, ct)
+            : null;
+        if (recordType is { } linked && duplicates == DuplicateDelete.PromoteSurvivor)
+            await DuplicateGroupPrimaries.LockGroupsOfAsync(context, linked, ids, ct);
         var groups = ids.Chunk(NocturneDbContext.SystemTimestampGroupSize).ToList();
         var total = 0;
         foreach (var (group, index) in groups.Select((g, i) => (g, i)))
@@ -314,19 +313,19 @@ public static class AuditedBulkDeleteExtensions
                 nameof(ISystemTimestamped.SysUpdatedAt) => await rows.ExecuteUpdateAsync(
                     s => s
                         .SetProperty(e => e.DeletedAt, deletedAt)
-                        .SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), isUserDelete)
+                        .SetProperty(e => EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty), isUserDelete)
                         .SetProperty(e => EF.Property<DateTime>(e, nameof(ISystemTimestamped.SysUpdatedAt)), stamp),
                     ct),
                 nameof(IEntityTimestamped.UpdatedAt) => await rows.ExecuteUpdateAsync(
                     s => s
                         .SetProperty(e => e.DeletedAt, deletedAt)
-                        .SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), isUserDelete)
+                        .SetProperty(e => EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty), isUserDelete)
                         .SetProperty(e => EF.Property<DateTime>(e, nameof(IEntityTimestamped.UpdatedAt)), stamp),
                     ct),
                 _ => await rows.ExecuteUpdateAsync(
                     s => s
                         .SetProperty(e => e.DeletedAt, deletedAt)
-                        .SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), isUserDelete),
+                        .SetProperty(e => EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty), isUserDelete),
                     ct),
             };
         }
@@ -338,6 +337,8 @@ public static class AuditedBulkDeleteExtensions
             ? await DuplicateGroupPrimaries.RepointAwayFromAsync(
                 context, type, ids, deletedAt.AddMilliseconds(groups.Count), ct)
             : [];
+        if (typeof(T) == typeof(SensorGlucoseEntity))
+            await GlucoseStreamFlags.AfterRowsChangedAsync(context, ids, ct);
         return (total, promoted);
     }
 
@@ -367,8 +368,8 @@ public static class AuditedBulkDeleteExtensions
         CancellationToken ct = default) where T : class, ITenantScoped, ISoftDeletable
         => await context.ExecuteInTransactionAsync(async token =>
         {
-            var released = await query.UserTombstones(context).ExecuteUpdateAsync(
-                s => s.SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), false), token);
+            var released = await query.UserTombstones().ExecuteUpdateAsync(
+                s => s.SetProperty(e => EF.Property<bool>(e, NocturneDbContext.DeletedByUserProperty), false), token);
             await WriteBulkSummaryAsync<T>(context, "allow_reimport", released, scope, auditContext, token);
             return released;
         }, ct: ct);
