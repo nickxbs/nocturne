@@ -33,6 +33,7 @@ import Wrench from "@lucide/svelte/icons/wrench";
 import Users from "@lucide/svelte/icons/users";
 import PlayCircle from "@lucide/svelte/icons/circle-play";
 import HistoryIcon from "@lucide/svelte/icons/history";
+import Activity from "@lucide/svelte/icons/activity";
 import { satisfiesScope } from "#lib/authorization/scopes.js";
 import { getSidebarReportItems } from "#lib/navigation/report-navigation.svelte.js";
 import { filterTenantlessNav } from "#lib/navigation/tenantless-navigation.js";
@@ -52,6 +53,7 @@ export type NavItemId =
   | "food"
   | "meals"
   | "tools"
+  | "cgmsim"
   | "alerts"
   | "trackers"
   | "community"
@@ -182,6 +184,12 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
       strict: true,
     },
     {
+      id: "cgmsim",
+      title: "CGMSIM",
+      icon: Activity,
+      href: "/cgmsim/parameters",
+    },
+    {
       id: "calendar",
       title: "Calendar",
       href: "/calendar",
@@ -238,7 +246,10 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
       id: "tools",
       title: "Tools",
       icon: Wrench,
-      children: [{ title: "Packing", href: "/tools/packing", icon: Wrench }],
+      children: [
+        { title: "Careportal", href: "/careportal", icon: Syringe },
+        { title: "Packing", href: "/tools/packing", icon: Wrench },
+      ],
     }
   );
 

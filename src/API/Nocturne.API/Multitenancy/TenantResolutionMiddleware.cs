@@ -203,6 +203,8 @@ public class TenantResolutionMiddleware
         // one. With several tenants the bare domain resolves none, so these must be tenantless.
         new TenantlessPath("/api/v4/tenant-invites/", Prefix: true),
         new TenantlessPath("/api/auth/passkey/tenant-invite/", HttpMethods.Post, Prefix: true),
+        new TenantlessPath("/signup-invite", HttpMethods.Post),
+        new TenantlessPath("/api/v4/signup-invite", HttpMethods.Post),
         // Cross-tenant overview hub: authorizes a subject in-band and joins per-tenant groups
         // itself, so the connection is negotiated from the apex with no tenant. Prefix, not
         // exact path: SignalR appends /negotiate to the hub path.
