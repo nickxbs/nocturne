@@ -67,3 +67,4 @@ namespace Nocturne.Infrastructure.Data.Migrations
         }
     }
 }
+
