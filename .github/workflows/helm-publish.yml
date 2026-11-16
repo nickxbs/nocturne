@@ -25,7 +25,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  REGISTRY_NAMESPACE: nightscout/charts
+  REGISTRY_NAMESPACE: ${{ github.repository_owner }}/charts
   CHART_PATH: deploy/helm/nocturne
   CHART_NAME: nocturne
 
@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
         with:
           version: v3.16.4
 
