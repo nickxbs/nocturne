@@ -2,8 +2,9 @@ name: Tests
 
 on:
   pull_request:
+    branches: [cgmsim, invite-cgmsim]
   push:
-    branches: [main]
+    branches: [cgmsim, invite-cgmsim]
   workflow_dispatch:
 
 permissions:
@@ -417,6 +418,9 @@ jobs:
       - name: CMS unit tests
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: pnpm --filter @nocturne/cms exec vitest run --coverage
+      - name: CGMSIM unit tests
+        if: ${{ !cancelled() && steps.client.outcome == 'success' }}
+        run: pnpm --filter @nocturne/cgmsim exec vitest run --coverage
       # Renders pages through the translation transform. The build cannot see
       # what that transform does to code that only runs at render time, and the
       # E2E suite that would is opt-in, so this is the only gate on it.
@@ -538,16 +542,19 @@ jobs:
         with:
           name: api-client
           path: src/Web/packages/app/src/lib/api
-      - uses: ./.github/actions/setup-playwright
+      - id: playwright
+        uses: ./.github/actions/setup-playwright
         with:
           working-directory: src/Web/packages/app
-      - name: App unit tests
+      - name: Sync SvelteKit
+        id: sync
         run: |
           node tools/ensure-check-deps.mjs
           pnpm exec svelte-kit sync
-          pnpm exec vitest --config vitest.config.ts --run --coverage
+      - name: App unit tests
+        run: pnpm exec vitest --config vitest.config.ts --run --coverage
       - name: App browser component tests
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.playwright.outcome == 'success' && steps.sync.outcome == 'success' }}
         run: pnpm exec vitest --config vitest.browser.config.ts --run --coverage
       - uses: actions/upload-artifact@v6
         if: always()
@@ -771,12 +778,12 @@ jobs:
             -targetdir:coverage-merged \
             -reporttypes:"Cobertura;HtmlSummary" \
             -sourcedirs:"$GITHUB_WORKSPACE"
-      - name: Main's baseline
+      - name: Baseline
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          run_id=$(gh run list --workflow tests.yml --branch main --event push --status success \
+          run_id=$(gh run list --workflow tests.yml --branch cgmsim --event push --status success \
             --limit 1 --json databaseId --jq '.[0].databaseId // empty')
           if [ -n "$run_id" ]; then
             gh run download "$run_id" --name coverage-baseline --dir baseline || echo "No baseline in run $run_id"
@@ -810,7 +817,7 @@ jobs:
           path: coverage-report/
           retention-days: 7
       - uses: actions/upload-artifact@v6
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/cgmsim' || github.ref == 'refs/heads/invite-cgmsim')
         with:
           name: coverage-baseline
           path: coverage-summary.json

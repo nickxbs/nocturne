@@ -40,8 +40,14 @@ elif [[ "$GITHUB_REF" == refs/heads/main ]]; then
   extra="main-${GITHUB_SHA::7}"
   build_tag="$extra"
   promote="$version"
+elif [[ "$GITHUB_REF" == refs/heads/cgmsim || "$GITHUB_REF" == refs/heads/invite-cgmsim ]]; then
+  version="cgmsim"
+  app_version=""
+  extra="cgmsim-${GITHUB_SHA::7}"
+  build_tag="$extra"
+  promote="$version"
 else
-  echo "::error::images are published from main and v* tags only, not ${GITHUB_REF}"
+  echo "::error::images are published from main, cgmsim, invite-cgmsim, and v* tags only, not ${GITHUB_REF}"
   exit 1
 fi
 
@@ -51,11 +57,18 @@ for tag in $extra; do
   web_tags+=",${web}:${tag}"
 done
 
+cgmsim="${REGISTRY}/${IMAGE_REPOSITORY}/nocturne-cgmsim"
+cgmsim_tags="${cgmsim}:${version}"
+for tag in $extra; do
+  cgmsim_tags+=",${cgmsim}:${tag}"
+done
+
 {
   echo "version=${version}"
   echo "app_version=${app_version}"
   echo "extra_tags=${extra}"
   echo "web_tags=${web_tags}"
+  echo "cgmsim_tags=${cgmsim_tags}"
   echo "build_tag=${build_tag}"
   echo "promote_tags=${promote}"
 } >> "$GITHUB_OUTPUT"

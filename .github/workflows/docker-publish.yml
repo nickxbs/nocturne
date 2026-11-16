@@ -10,7 +10,7 @@ name: Build and Publish with Aspire
 # re-points :main-<sha7> at a rebuild of the same commit.
 on:
   push:
-    branches: [main]
+    branches: [cgmsim, invite-cgmsim]
     tags: ["v*"]
   schedule:
     - cron: "0 3 * * 1"
@@ -32,7 +32,7 @@ concurrency:
 # the dotnet images need only the native library. `report` checks and announces what both pushed.
 jobs:
   dotnet-images:
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    if: github.ref == 'refs/heads/cgmsim' || github.ref == 'refs/heads/invite-cgmsim' || startsWith(github.ref, 'refs/tags/v')
     # The native library is built on the runner and links against its glibc, which must be
     # no newer than the API base image's (mcr.microsoft.com/dotnet/aspnet:11.0, Ubuntu 26.04).
     runs-on: ubuntu-24.04
@@ -154,7 +154,7 @@ jobs:
           set -euo pipefail
           ref="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-api:${{ steps.tags.outputs.build_tag }}"
           probe="$RUNNER_TEMP/alerts-native-probe"
-          dotnet publish scripts/alerts-native-probe.cs -o "$probe"
+          dotnet publish scripts/alerts-native-probe.cs -f net10.0 -o "$probe"
           find "$probe" -name '*nocturne_alerts*' -delete
           for pair in "linux/amd64:linux-x64" "linux/arm64:linux-arm64"; do
             platform="${pair%%:*}"
@@ -182,7 +182,7 @@ jobs:
           done
 
   web-image:
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    if: github.ref == 'refs/heads/cgmsim' || github.ref == 'refs/heads/invite-cgmsim' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -308,7 +308,13 @@ jobs:
           done
           # Every publish reads and refreshes the shared layer cache.
           CACHE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:buildcache"
-          CACHE_ARGS=(--cache-from "type=registry,ref=${CACHE_REF}" --cache-to "type=registry,ref=${CACHE_REF},mode=max")
+          if docker manifest inspect "${CACHE_REF}" >/dev/null 2>&1; then
+            echo "Found existing buildcache at ${CACHE_REF}"
+            CACHE_ARGS=(--cache-from "type=registry,ref=${CACHE_REF}" --cache-to "type=registry,ref=${CACHE_REF},mode=max")
+          else
+            echo "No existing buildcache found at ${CACHE_REF}, initializing new cache"
+            CACHE_ARGS=(--cache-to "type=registry,ref=${CACHE_REF},mode=max")
+          fi
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             "${TAG_ARGS[@]}" \
@@ -317,9 +323,59 @@ jobs:
             --push \
             .
 
+  cgmsim-image:
+    if: github.ref == 'refs/heads/cgmsim' || github.ref == 'refs/heads/invite-cgmsim' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine image tags
+        id: tags
+        run: .github/scripts/image-tags.sh
+
+      - name: Build and push Nocturne.CgmSim container
+        run: |
+          IFS=',' read -ra TAGS <<< "${{ steps.tags.outputs.cgmsim_tags }}"
+          TAG_ARGS=()
+          for t in "${TAGS[@]}"; do
+            TAG_ARGS+=(--tag "${t}")
+          done
+          CACHE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-cgmsim:buildcache"
+          if docker manifest inspect "${CACHE_REF}" >/dev/null 2>&1; then
+            echo "Found existing buildcache at ${CACHE_REF}"
+            CACHE_ARGS=(--cache-from "type=registry,ref=${CACHE_REF}" --cache-to "type=registry,ref=${CACHE_REF},mode=max")
+          else
+            echo "No existing buildcache found at ${CACHE_REF}, initializing new cache"
+            CACHE_ARGS=(--cache-to "type=registry,ref=${CACHE_REF},mode=max")
+          fi
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            "${TAG_ARGS[@]}" \
+            "${CACHE_ARGS[@]}" \
+            --file src/Web/packages/cgmsim/Dockerfile \
+            --push \
+            .
+
   report:
-    needs: [dotnet-images, web-image]
-    if: ${{ !cancelled() && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+    needs: [dotnet-images, web-image, cgmsim-image]
+    if: ${{ !cancelled() && (github.ref == 'refs/heads/cgmsim' || github.ref == 'refs/heads/invite-cgmsim' || startsWith(github.ref, 'refs/tags/v')) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -343,13 +399,14 @@ jobs:
         run: .github/scripts/image-tags.sh
 
       - name: Verify published image manifests
-        if: needs.dotnet-images.result == 'success' && needs.web-image.result == 'success'
+        if: needs.dotnet-images.result == 'success' && needs.web-image.result == 'success' && needs.cgmsim-image.result == 'success'
         run: |
           set -euo pipefail
           images=(
             "nocturne-api"
             "nocturne-demo"
             "nocturne-web"
+            "nocturne-cgmsim"
           )
 
           for image in "${images[@]}"; do
@@ -373,6 +430,7 @@ jobs:
             echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-api:${{ steps.tags.outputs.version }}\`"
             echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-demo:${{ steps.tags.outputs.version }}\`"
             echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:${{ steps.tags.outputs.version }}\`"
+            echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-cgmsim:${{ steps.tags.outputs.version }}\`"
             for tag in ${{ steps.tags.outputs.extra_tags }}; do
               echo "- also tagged \`${tag}\`"
             done
@@ -412,7 +470,7 @@ jobs:
   #         fi
 
   create-release:
-    needs: [dotnet-images, web-image]
+    needs: [dotnet-images, web-image, cgmsim-image]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:

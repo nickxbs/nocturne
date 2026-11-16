@@ -2,9 +2,9 @@ name: "CodeQL Advanced"
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "cgmsim", "invite-cgmsim" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "cgmsim", "invite-cgmsim" ]
   schedule:
     - cron: '17 13 * * 6'
 
