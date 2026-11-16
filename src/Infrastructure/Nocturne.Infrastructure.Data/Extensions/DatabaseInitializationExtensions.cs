@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
@@ -81,6 +82,8 @@ public static class DatabaseInitializationExtensions
                 .CommandTimeout((int)TimeSpan.FromHours(1).TotalSeconds)
                 .UseNocturneMigrations());
         optionsBuilder.AddInterceptors(interceptor);
+        optionsBuilder.ConfigureWarnings(warnings =>
+            warnings.Ignore(RelationalEventId.PendingModelChangesWarning));
         optionsBuilder.ReplaceService<IMigrationsAssembly, CeilingMigrationsAssembly>();
         ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(new MigrationCeiling(ceiling));
 

@@ -915,6 +915,84 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("body_weights");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.CgmSimSettingsEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Age")
+                        .HasColumnType("integer")
+                        .HasColumnName("age");
+
+                    b.Property<int>("CarbsAbsTime")
+                        .HasColumnType("integer")
+                        .HasColumnName("carbs_abs_time");
+
+                    b.Property<double>("Cr")
+                        .HasColumnType("double precision")
+                        .HasColumnName("cr");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<double>("Dia")
+                        .HasColumnType("double precision")
+                        .HasColumnName("dia");
+
+                    b.Property<int>("InsulinPeak")
+                        .HasColumnType("integer")
+                        .HasColumnName("insulin_peak");
+
+                    b.Property<bool>("IsInitialized")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_initialized");
+
+                    b.Property<double>("Isf")
+                        .HasColumnType("double precision")
+                        .HasColumnName("isf");
+
+                    b.Property<DateTime?>("NoiseGeneratedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("noise_generated_at");
+
+                    b.Property<string>("NoisePointsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("noise_points");
+
+                    b.Property<string>("Sex")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("sex");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<double>("Weight")
+                        .HasColumnType("double precision")
+                        .HasColumnName("weight");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_cgmsim_settings_tenant_id_unique");
+
+                    b.ToTable("cgmsim_settings", (string)null);
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ChatIdentityDirectoryEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -10177,6 +10255,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.BodyWeightEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.CgmSimSettingsEntity", b =>
                 {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
                         .WithMany()
