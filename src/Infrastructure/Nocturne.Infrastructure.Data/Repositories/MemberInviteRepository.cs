@@ -40,7 +40,7 @@ public class MemberInviteRepository : IMemberInviteRepository
     /// <inheritdoc/>
     public virtual async Task<Guid> CreateAsync(NewMemberInvite invite, CancellationToken ct)
     {
-        await using var db = await Standalone.CreateAsync(ct);
+        await using var db = await Standalone.CreateForTenantAsync(invite.TenantId, ct);
         var entity = new MemberInviteEntity
         {
             Id = Guid.CreateVersion7(),
@@ -64,7 +64,7 @@ public class MemberInviteRepository : IMemberInviteRepository
     /// <inheritdoc/>
     public virtual async Task<MemberInviteRecord?> FindByTokenHashAsync(string tokenHash, Guid tenantId, CancellationToken ct)
     {
-        await using var db = await Standalone.CreateAsync(ct);
+        await using var db = await Standalone.CreateForTenantAsync(tenantId, ct);
         var entity = await db.MemberInvites
             .AsNoTracking()
             .Include(i => i.Tenant)
@@ -87,7 +87,7 @@ public class MemberInviteRepository : IMemberInviteRepository
     /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<MemberInviteRecord>> GetForTenantAsync(Guid tenantId, CancellationToken ct)
     {
-        await using var db = await Standalone.CreateAsync(ct);
+        await using var db = await Standalone.CreateForTenantAsync(tenantId, ct);
         var entities = await db.MemberInvites
             .AsNoTracking()
             .Include(i => i.Tenant)
@@ -104,7 +104,7 @@ public class MemberInviteRepository : IMemberInviteRepository
     public virtual async Task<MemberInviteRevocation> RevokeAsync(
         Guid inviteId, Guid tenantId, DateTime now, CancellationToken ct)
     {
-        await using var db = await Standalone.CreateAsync(ct);
+        await using var db = await Standalone.CreateForTenantAsync(tenantId, ct);
         var entity = await db.MemberInvites
             .Where(i => i.Id == inviteId && i.TenantId == tenantId)
             .FirstOrDefaultAsync(ct);
