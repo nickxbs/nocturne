@@ -15,6 +15,7 @@
   } from "./signup.remote.js";
 
   let email = $state("");
+  let slug = $state("");
   let isSubmitting = $state(false);
   let errorMessage = $state<string | null>(null);
   let result = $state<SignupInviteResult | null>(null);
@@ -28,7 +29,10 @@
     errorMessage = null;
 
     try {
-      const response = await requestSignupInvite({ email: email.trim() });
+      const response = await requestSignupInvite({
+        email: email.trim(),
+        slug: slug.trim() || undefined,
+      });
       result = response;
     } catch (err) {
       if (err instanceof Error) {
@@ -57,6 +61,7 @@
 
   function resetForm() {
     email = "";
+    slug = "";
     result = null;
     errorMessage = null;
     copied = false;
@@ -106,6 +111,27 @@
               autocomplete="email"
               class="h-10"
             />
+          </div>
+
+          <div class="space-y-2 text-left">
+            <div class="flex items-center justify-between">
+              <Label for="signup-slug">Nome dello spazio (slug)</Label>
+              <span class="text-xs text-muted-foreground">Facoltativo</span>
+            </div>
+            <Input
+              id="signup-slug"
+              type="text"
+              placeholder="es. mio-spazio"
+              bind:value={slug}
+              disabled={isSubmitting}
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck={false}
+              class="h-10 font-mono text-sm"
+            />
+            <p class="text-xs text-muted-foreground">
+              Se non specificato, verrà generato automaticamente un nome casuale.
+            </p>
           </div>
         </Card.Content>
 

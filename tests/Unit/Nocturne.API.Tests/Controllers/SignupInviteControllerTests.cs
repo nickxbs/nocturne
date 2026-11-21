@@ -139,5 +139,79 @@ public class SignupInviteControllerTests
             false,
             It.Is<string>(u => u != null && u.Contains("test.nocturne.local"))), Times.Once);
     }
+
+    [Fact]
+    public async Task CreateSignupInvite_WithCustomValidSlug_CreatesTenantWithSpecifiedSlug()
+    {
+        var controller = CreateController();
+        var email = "user@example.com";
+        var requestedSlug = "custom-space";
+        var request = new SignupInviteRequest { Email = email, Slug = requestedSlug };
+
+        var tenantId = Guid.NewGuid();
+        var ownerRoleId = Guid.NewGuid();
+        var publicSubjectId = Guid.NewGuid();
+        var expiresAt = DateTime.UtcNow.AddDays(7);
+        var expectedInviteUrl = "https://custom-space.test.nocturne.local/join?token=mocktoken123";
+
+        _tenantService
+            .Setup(s => s.ValidateSlugAsync(requestedSlug, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugValidationResult(true));
+
+        _tenantService
+            .Setup(s => s.CreateWithoutOwnerAsync(requestedSlug, "Custom Space", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantCreatedDto(tenantId, requestedSlug, "Custom Space", true, DateTime.UtcNow));
+
+        _members
+            .Setup(m => m.FindRoleIdBySlugAsync(tenantId, RoleSeeds.Owner, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ownerRoleId);
+
+        _subjects
+            .Setup(s => s.FindSystemSubjectAsync("Public", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SubjectRecord(publicSubjectId, "Public", null, null, null, false, null, false, true, false, "Active", DateTime.UtcNow, null));
+
+        _memberInviteService
+            .Setup(i => i.CreateInviteAsync(
+                tenantId,
+                publicSubjectId,
+                It.Is<IEnumerable<string>>(p => p.Contains(Scope.FullAccess)),
+                It.Is<List<Guid>>(r => r.Contains(ownerRoleId)),
+                null,
+                It.Is<string>(l => l.Contains(email)),
+                7,
+                1,
+                false,
+                It.IsAny<string>()))
+            .ReturnsAsync(new MemberInviteResult(Guid.NewGuid(), "mocktoken123", expectedInviteUrl, expiresAt, "Public"));
+
+        var result = await controller.CreateSignupInvite(request, CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        var okResult = (OkObjectResult)result.Result!;
+        var response = okResult.Value.Should().BeOfType<SignupInviteResponse>().Subject;
+
+        response.TenantSlug.Should().Be(requestedSlug);
+        response.TenantDisplayName.Should().Be("Custom Space");
+
+        _tenantService.Verify(s => s.CreateWithoutOwnerAsync(requestedSlug, "Custom Space", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateSignupInvite_WithInvalidCustomSlug_ReturnsBadRequest()
+    {
+        var controller = CreateController();
+        var email = "user@example.com";
+        var requestedSlug = "already-taken";
+        var request = new SignupInviteRequest { Email = email, Slug = requestedSlug };
+
+        _tenantService
+            .Setup(s => s.ValidateSlugAsync(requestedSlug, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugValidationResult(false, "This name is already taken"));
+
+        var result = await controller.CreateSignupInvite(request, CancellationToken.None);
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+    }
 }
 

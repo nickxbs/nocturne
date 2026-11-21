@@ -5,6 +5,7 @@ import { getApiBaseUrl } from "#lib/server/api-client-factory.js";
 
 const signupInviteSchema = z.object({
   email: z.string().email("Inserisci un indirizzo email valido."),
+  slug: z.string().optional(),
 });
 
 export interface SignupInviteResult {
@@ -18,7 +19,7 @@ export interface SignupInviteResult {
 
 export const requestSignupInvite = command(
   signupInviteSchema,
-  async ({ email }): Promise<SignupInviteResult> => {
+  async ({ email, slug }): Promise<SignupInviteResult> => {
     const event = getRequestEvent();
     if (!event) {
       throw error(500, "Request context unavailable");
@@ -37,6 +38,14 @@ export const requestSignupInvite = command(
       event.request.headers.get("x-forwarded-proto") ??
       (event.url.protocol.replace(":", ""));
 
+    const trimmedSlug = slug?.trim();
+    const payload: { email: string; slug?: string } = {
+      email: email.trim(),
+    };
+    if (trimmedSlug) {
+      payload.slug = trimmedSlug.toLowerCase();
+    }
+
     const response = await event.fetch(`${apiBaseUrl}/api/v4/signup-invite`, {
       method: "POST",
       headers: {
@@ -44,7 +53,7 @@ export const requestSignupInvite = command(
         "X-Forwarded-Host": host,
         "X-Forwarded-Proto": proto,
       },
-      body: JSON.stringify({ email: email.trim() }),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {

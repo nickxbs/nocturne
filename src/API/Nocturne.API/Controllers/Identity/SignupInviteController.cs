@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -76,29 +78,53 @@ public class SignupInviteController : ControllerBase
                 title: "Bad Request");
         }
 
-        // Generate a unique random English adjective-noun slug without numbers
+        // Resolve or generate slug and display name
         string? slug = null;
         string? displayName = null;
 
-        for (var attempt = 0; attempt < MaxSlugGenerationAttempts; attempt++)
+        if (!string.IsNullOrWhiteSpace(request?.Slug))
         {
-            var (candidateSlug, candidateDisplayName) = RandomSlugGenerator.Generate();
-            var check = await _tenantService.ValidateSlugAsync(candidateSlug, ct);
-            if (check.IsValid)
+            var requestedSlug = request.Slug.Trim().ToLowerInvariant();
+            var check = await _tenantService.ValidateSlugAsync(requestedSlug, ct);
+            if (!check.IsValid)
             {
-                slug = candidateSlug;
-                displayName = candidateDisplayName;
-                break;
+                return Problem(
+                    detail: check.ErrorMessage ?? "The requested slug is not available.",
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid Slug");
+            }
+
+            slug = requestedSlug;
+            displayName = string.Join(" ", requestedSlug.Split('-', StringSplitOptions.RemoveEmptyEntries)
+                .Select(w => char.ToUpperInvariant(w[0]) + (w.Length > 1 ? w[1..] : "")));
+            if (string.IsNullOrWhiteSpace(displayName))
+            {
+                displayName = requestedSlug;
             }
         }
-
-        if (slug == null || displayName == null)
+        else
         {
-            _logger.LogError("Failed to generate a unique slug after {Attempts} attempts", MaxSlugGenerationAttempts);
-            return Problem(
-                detail: "Unable to generate an available tenant name at this time. Please try again.",
-                statusCode: StatusCodes.Status500InternalServerError,
-                title: "Server Error");
+            // Generate a unique random English adjective-noun slug without numbers
+            for (var attempt = 0; attempt < MaxSlugGenerationAttempts; attempt++)
+            {
+                var (candidateSlug, candidateDisplayName) = RandomSlugGenerator.Generate();
+                var check = await _tenantService.ValidateSlugAsync(candidateSlug, ct);
+                if (check.IsValid)
+                {
+                    slug = candidateSlug;
+                    displayName = candidateDisplayName;
+                    break;
+                }
+            }
+
+            if (slug == null || displayName == null)
+            {
+                _logger.LogError("Failed to generate a unique slug after {Attempts} attempts", MaxSlugGenerationAttempts);
+                return Problem(
+                    detail: "Unable to generate an available tenant name at this time. Please try again.",
+                    statusCode: StatusCodes.Status500InternalServerError,
+                    title: "Server Error");
+            }
         }
 
         // 1. Create tenant without owner (seeds roles including Owner and public membership)
@@ -162,6 +188,7 @@ public class SignupInviteController : ControllerBase
 public class SignupInviteRequest
 {
     public string Email { get; set; } = string.Empty;
+    public string? Slug { get; set; }
 }
 
 public class SignupInviteResponse
