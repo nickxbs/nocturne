@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -114,7 +115,7 @@ public class CgmSimController : ControllerBase, IWriteScopedController
                 {
                     WeightKg = (decimal)model.Weight,
                     Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                    CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
                     EnteredBy = "cgmsim",
                 }
             }, ct);
@@ -246,7 +247,7 @@ public class CgmSimController : ControllerBase, IWriteScopedController
                 {
                     WeightKg = (decimal)request.Subject.Weight,
                     Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                    CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
                     EnteredBy = "cgmsim-init",
                 }
             }, ct);

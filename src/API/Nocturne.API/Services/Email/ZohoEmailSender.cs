@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using MailKit.Net.Smtp;
@@ -171,7 +172,7 @@ public class ZohoEmailSender : IEmailSender
 
     private static string BuildHtmlBody(string tenantDisplayName, string tenantSlug, string inviteUrl, DateTime expiresAt)
     {
-        var expiresFormatted = expiresAt.ToString("dd/MM/yyyy HH:mm");
+        var expiresFormatted = expiresAt.ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture);
         var spaceInfo = !string.IsNullOrWhiteSpace(tenantSlug)
             ? $"per lo spazio <strong>{tenantDisplayName}</strong> (<code>{tenantSlug}</code>)"
             : "per il tuo nuovo spazio Nocturne";
@@ -225,6 +226,7 @@ public class ZohoEmailSender : IEmailSender
 
     private static string BuildTextBody(string tenantDisplayName, string tenantSlug, string inviteUrl, DateTime expiresAt)
     {
+        var expiresFormatted = expiresAt.ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture);
         var spaceInfo = !string.IsNullOrWhiteSpace(tenantSlug)
             ? $"per lo spazio {tenantDisplayName} ({tenantSlug})"
             : "per il tuo nuovo spazio Nocturne";
@@ -236,7 +238,7 @@ Hai richiesto la creazione di un account {spaceInfo}.
 Per completare la registrazione e impostare le tue credenziali proprietario, visita il seguente link:
 {inviteUrl}
 
-Questo link scade il {expiresAt:dd/MM/yyyy HH:mm} UTC.
+Questo link scade il {expiresFormatted} UTC.
 
 Se non hai richiesto tu questo invito, puoi ignorare questo messaggio.
 ";

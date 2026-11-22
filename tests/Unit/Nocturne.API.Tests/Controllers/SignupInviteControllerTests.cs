@@ -206,5 +206,32 @@ public class SignupInviteControllerTests
         var response = okResult.Value.Should().BeOfType<SignupInviteResponse>().Subject;
         response.EmailSent.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task CreateSignupInvite_WhenInviteCreationRefused_ReturnsProblem()
+    {
+        var controller = CreateController();
+        var email = "user@example.com";
+        var request = new SignupInviteRequest { Email = email };
+
+        var publicSubjectId = Guid.NewGuid();
+
+        _subjects
+            .Setup(s => s.FindSystemSubjectAsync("Public", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SubjectRecord(publicSubjectId, "Public", null, null, null, false, null, false, true, false, "Active", DateTime.UtcNow, null));
+
+        _tenantCreationInvites
+            .Setup(i => i.CreateAsync(
+                publicSubjectId,
+                It.IsAny<CreateTenantCreationInviteRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(TenantInviteOutcome<TenantCreationInviteCreated>.Refused(
+                TenantInviteRefusalCode.BaseDomainRequired, "Base domain is required."));
+
+        var result = await controller.CreateSignupInvite(request, CancellationToken.None);
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
+    }
 }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -21,8 +22,13 @@ namespace Nocturne.API.Controllers.Identity;
 [Tags("Signup")]
 [AllowAnonymous]
 [DenyDemoSubject]
-public class SignupInviteController : ControllerBase
+public partial class SignupInviteController : ControllerBase
 {
+    private const int MaxEmailLength = 254;
+
+    [GeneratedRegex(@"^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+\z")]
+    private static partial Regex EmailPattern();
+
     private readonly ITenantCreationInviteService _tenantCreationInvites;
     private readonly ISubjectRepository _subjects;
     private readonly ISubjectService _subjectService;
@@ -54,8 +60,8 @@ public class SignupInviteController : ControllerBase
     {
         var email = request?.Email?.Trim();
         if (string.IsNullOrWhiteSpace(email)
-            || email.Length > ContributionValidation.MaxEmailLength
-            || !ContributionValidation.EmailPattern().IsMatch(email))
+            || email.Length > MaxEmailLength
+            || !EmailPattern().IsMatch(email))
         {
             return Problem(
                 detail: "A valid email address is required.",
@@ -86,11 +92,11 @@ public class SignupInviteController : ControllerBase
                 ConfirmSubdomainChange: true),
             ct);
 
-        if (!inviteResult.Ok || inviteResult.Value == null)
+        if (inviteResult.Refusal is { } refusal || inviteResult.Value == null)
         {
-            _logger.LogError("Failed to create tenant creation invite: {Refusal}", inviteResult.Refusal?.Code);
+            _logger.LogError("Failed to create tenant creation invite: {Refusal}", refusal?.Code);
             return Problem(
-                detail: inviteResult.Refusal?.Message ?? "Unable to generate invitation at this time.",
+                detail: refusal?.Message ?? "Unable to generate invitation at this time.",
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Server Error");
         }
