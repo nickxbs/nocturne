@@ -10,7 +10,7 @@ name: Build and Publish with Aspire
 # re-points :main-<sha7> at a rebuild of the same commit.
 on:
   push:
-    branches: [main]
+    branches: [main, invite-cgmsim]
     tags: ["v*"]
   schedule:
     - cron: "0 3 * * 1"
@@ -444,4 +444,3 @@ jobs:
             deploy/docker-compose/.env.example \
             deploy/install/install.sh \
             deploy/oracle-cloud/oracle-cloud-install.sh
-
