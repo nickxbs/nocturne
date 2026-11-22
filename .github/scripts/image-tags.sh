@@ -40,6 +40,13 @@ elif [[ "$GITHUB_REF" == refs/heads/main ]]; then
   extra="main-${GITHUB_SHA::7}"
   build_tag="$extra"
   promote="$version"
+elif [[ "$GITHUB_REF" == refs/heads/invite-cgmsim ]]; then
+  branch="${GITHUB_REF#refs/heads/}"
+  version="develop"
+  app_version=""
+  extra="${branch}-${GITHUB_SHA::7} ${branch}"
+  build_tag="${branch}-${GITHUB_SHA::7}"
+  promote="${version} ${branch}"
 else
   echo "::error::images are published from main and v* tags only, not ${GITHUB_REF}"
   exit 1
