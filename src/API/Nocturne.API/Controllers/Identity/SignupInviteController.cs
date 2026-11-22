@@ -92,11 +92,11 @@ public partial class SignupInviteController : ControllerBase
                 ConfirmSubdomainChange: true),
             ct);
 
-        if (inviteResult.Refusal is { } refusal || inviteResult.Value == null)
+        if (inviteResult.Refusal != null || inviteResult.Value == null)
         {
-            _logger.LogError("Failed to create tenant creation invite: {Refusal}", refusal?.Code);
+            _logger.LogError("Failed to create tenant creation invite: {Refusal}", inviteResult.Refusal?.Code);
             return Problem(
-                detail: refusal?.Message ?? "Unable to generate invitation at this time.",
+                detail: inviteResult.Refusal?.Message ?? "Unable to generate invitation at this time.",
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Server Error");
         }
