@@ -420,6 +420,11 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<TenantAlertSettingsEntity> TenantAlertSettings { get; set; }
 
     /// <summary>
+    /// One row per tenant: CGM simulation subject and physiological parameters.
+    /// </summary>
+    public DbSet<CgmSimSettingsEntity> CgmSimSettings { get; set; }
+
+    /// <summary>
     /// Scoped Do Not Disturb windows (ADR 0004): independent per-scope mutes with client-supplied ids.
     /// </summary>
     public DbSet<DndWindowEntity> DndWindows { get; set; }
@@ -742,6 +747,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             typeof(SubjectAvatarEntity),
             typeof(TenantAlertSettingsEntity),
             typeof(TenantDataRetentionConfigEntity),
+            typeof(CgmSimSettingsEntity),
         ]),
         (nameof(IEntityTimestamped.UpdatedAt),
         [
@@ -751,6 +757,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             typeof(ClockFaceEntity),
             typeof(TenantAlertSettingsEntity),
             typeof(TenantDataRetentionConfigEntity),
+            typeof(CgmSimSettingsEntity),
         ]),
         (nameof(SubjectRoleEntity.AssignedAt), [typeof(SubjectRoleEntity)]),
         (nameof(OAuthRefreshTokenEntity.IssuedAt), [typeof(OAuthRefreshTokenEntity)]),

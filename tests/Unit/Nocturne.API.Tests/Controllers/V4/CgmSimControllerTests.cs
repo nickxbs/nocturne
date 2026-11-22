@@ -1,0 +1,362 @@
+using FluentAssertions;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Moq;
+using Nocturne.API.Controllers.V4.CgmSim;
+using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.CgmSim;
+using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
+using Xunit;
+
+namespace Nocturne.API.Tests.Controllers.V4;
+
+public class CgmSimControllerTests
+{
+    private static readonly Guid Tenant = Guid.CreateVersion7();
+
+    [Fact]
+    public async Task GetSubject_CreatesDefaultSettingsOnFirstAccess()
+    {
+        var (controller, options) = NewController();
+
+        var result = await controller.GetSubject(CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var subject = ok.Value.Should().BeOfType<CgmSimSubject>().Subject;
+        subject.Sex.Should().Be("other");
+        subject.Weight.Should().Be(70.0);
+        subject.Age.Should().Be(30);
+
+        await using var db = new NocturneDbContext(options) { TenantId = Tenant };
+        (await db.CgmSimSettings.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task UpdateSubject_PersistsChangesAndReturnsUpdatedModel()
+    {
+        var (controller, options) = NewController();
+
+        var updateModel = new CgmSimSubject
+        {
+            Sex = "female",
+            Weight = 62.5,
+            Age = 28,
+        };
+
+        var result = await controller.UpdateSubject(updateModel, CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var subject = ok.Value.Should().BeOfType<CgmSimSubject>().Subject;
+        subject.Sex.Should().Be("female");
+        subject.Weight.Should().Be(62.5);
+        subject.Age.Should().Be(28);
+
+        await using var db = new NocturneDbContext(options) { TenantId = Tenant };
+        var stored = await db.CgmSimSettings.FirstOrDefaultAsync();
+        stored.Should().NotBeNull();
+        stored!.Sex.Should().Be("female");
+        stored.Weight.Should().Be(62.5);
+        stored.Age.Should().Be(28);
+    }
+
+    [Fact]
+    public async Task GetParameters_CreatesDefaultSettingsOnFirstAccess()
+    {
+        var (controller, options) = NewController();
+
+        var result = await controller.GetParameters(CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var parameters = ok.Value.Should().BeOfType<CgmSimParameters>().Subject;
+        parameters.Isf.Should().Be(50.0);
+        parameters.Dia.Should().Be(4.0);
+        parameters.CarbsAbsTime.Should().Be(180);
+        parameters.InsulinPeak.Should().Be(75);
+        parameters.Cr.Should().Be(10.0);
+
+        await using var db = new NocturneDbContext(options) { TenantId = Tenant };
+        (await db.CgmSimSettings.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task UpdateParameters_PersistsChangesAndReturnsUpdatedModel()
+    {
+        var (controller, options) = NewController();
+
+        var updateModel = new CgmSimParameters
+        {
+            Isf = 45.0,
+            Dia = 4.5,
+            CarbsAbsTime = 180,
+            InsulinPeak = 75,
+            Cr = 10.5,
+        };
+
+        var result = await controller.UpdateParameters(updateModel, CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var parameters = ok.Value.Should().BeOfType<CgmSimParameters>().Subject;
+        parameters.Isf.Should().Be(45.0);
+        parameters.Dia.Should().Be(4.5);
+        parameters.CarbsAbsTime.Should().Be(180);
+        parameters.InsulinPeak.Should().Be(75);
+        parameters.Cr.Should().Be(10.5);
+
+        await using var db = new NocturneDbContext(options) { TenantId = Tenant };
+        var stored = await db.CgmSimSettings.FirstOrDefaultAsync();
+        stored.Should().NotBeNull();
+        stored!.Isf.Should().Be(45.0);
+        stored.Dia.Should().Be(4.5);
+        stored.CarbsAbsTime.Should().Be(180);
+        stored.InsulinPeak.Should().Be(75);
+        stored.Cr.Should().Be(10.5);
+    }
+
+    [Fact]
+    public async Task Parameters_AreIndependentFromProfile_AndEditableAutonomously()
+    {
+        var (controller, _) = NewController();
+
+        // Update CGMSIM parameters with custom kinetic & metabolic values
+        var customParameters = new CgmSimParameters
+        {
+            Isf = 42.0,
+            Dia = 5.5,
+            Cr = 8.5,
+            CarbsAbsTime = 200,
+            InsulinPeak = 65,
+        };
+
+        var updateResult = await controller.UpdateParameters(customParameters, CancellationToken.None);
+        var updated = updateResult.Result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<CgmSimParameters>().Subject;
+        updated.Isf.Should().Be(42.0);
+        updated.Dia.Should().Be(5.5);
+        updated.Cr.Should().Be(8.5);
+        updated.CarbsAbsTime.Should().Be(200);
+        updated.InsulinPeak.Should().Be(65);
+
+        // Verify GetParameters returns the exact custom parameters
+        var getResult = await controller.GetParameters(CancellationToken.None);
+        var retrieved = getResult.Result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<CgmSimParameters>().Subject;
+        retrieved.Isf.Should().Be(42.0);
+        retrieved.Dia.Should().Be(5.5);
+        retrieved.Cr.Should().Be(8.5);
+        retrieved.CarbsAbsTime.Should().Be(200);
+        retrieved.InsulinPeak.Should().Be(65);
+
+        // Verify GetSettings includes the independent parameters
+        var settingsResult = await controller.GetSettings(CancellationToken.None);
+        var settings = settingsResult.Result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<CgmSimSettings>().Subject;
+        settings.Parameters.Isf.Should().Be(42.0);
+        settings.Parameters.Dia.Should().Be(5.5);
+        settings.Parameters.Cr.Should().Be(8.5);
+        settings.Parameters.CarbsAbsTime.Should().Be(200);
+        settings.Parameters.InsulinPeak.Should().Be(65);
+    }
+
+    [Fact]
+    public async Task GetSettings_ReturnsBothSubjectAndParameters()
+    {
+        var (controller, _) = NewController();
+
+        await controller.UpdateSubject(new CgmSimSubject { Sex = "male", Weight = 80.0 }, CancellationToken.None);
+        await controller.UpdateParameters(new CgmSimParameters { Isf = 50.0, Cr = 12.0 }, CancellationToken.None);
+
+        var result = await controller.GetSettings(CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var settings = ok.Value.Should().BeOfType<CgmSimSettings>().Subject;
+        settings.Subject.Sex.Should().Be("male");
+        settings.Subject.Weight.Should().Be(80.0);
+        settings.Parameters.Isf.Should().Be(50.0);
+        settings.Parameters.Cr.Should().Be(12.0);
+        settings.IsInitialized.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Initialize_PersistsBothSubjectAndParametersAndSetsIsInitializedTrue()
+    {
+        var (controller, options) = NewController();
+
+        var request = new CgmSimInitializeRequest
+        {
+            Subject = new CgmSimSubject
+            {
+                Sex = "female",
+                Weight = 65.0,
+                Age = 25,
+            },
+            Parameters = new CgmSimParameters
+            {
+                Isf = 40.0,
+                Dia = 3.5,
+                CarbsAbsTime = 150,
+                InsulinPeak = 60,
+                Cr = 9.0,
+            },
+        };
+
+        var result = await controller.Initialize(request, CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var settings = ok.Value.Should().BeOfType<CgmSimSettings>().Subject;
+        settings.IsInitialized.Should().BeTrue();
+        settings.Subject.Sex.Should().Be("female");
+        settings.Subject.Weight.Should().Be(65.0);
+        settings.Parameters.Isf.Should().Be(40.0);
+        settings.Parameters.Dia.Should().Be(3.5);
+
+        await using var db = new NocturneDbContext(options) { TenantId = Tenant };
+        var stored = await db.CgmSimSettings.FirstOrDefaultAsync();
+        stored.Should().NotBeNull();
+        stored!.IsInitialized.Should().BeTrue();
+        stored.Sex.Should().Be("female");
+        stored.Weight.Should().Be(65.0);
+        stored.Isf.Should().Be(40.0);
+        stored.Dia.Should().Be(3.5);
+    }
+
+    [Fact]
+    public async Task GetWizardPreview_CalculatesRecommendationsCorrectly()
+    {
+        var entryMock = new Mock<IEntryService>();
+        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        entryMock
+            .Setup(s => s.GetEntriesAsync("sgv", 1, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new Entry
+                {
+                    Mills = nowMills,
+                    Sgv = 150,
+                }
+            });
+
+        var iobCalcMock = new Mock<IIobCalculator>();
+        iobCalcMock
+            .Setup(c => c.CalculateTotalAsync(It.IsAny<List<Bolus>>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<long?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IobResult { Iob = 1.0 });
+
+        var cobCalcMock = new Mock<ICobCalculator>();
+        cobCalcMock
+            .Setup(c => c.CalculateTotalAsync(It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CobResult { Cob = 20.0 });
+
+        var (controller, options) = NewController(
+            entryService: entryMock.Object,
+            iobCalculator: iobCalcMock.Object,
+            cobCalculator: cobCalcMock.Object);
+
+        await using (var db = new NocturneDbContext(options) { TenantId = Tenant })
+        {
+            db.CgmSimSettings.Add(new CgmSimSettingsEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = Tenant,
+                Isf = 50.0,
+                Cr = 10.0,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await controller.GetWizardPreview(carbs: 30, adjustment: 0.5, CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var preview = ok.Value.Should().BeOfType<CgmSimWizardPreview>().Subject;
+        preview.Carbs.Should().Be(30);
+        preview.CurrentBg.Should().Be(150);
+        preview.TargetBg.Should().Be(100);
+        preview.BgUnits.Should().Be(1.0);
+        preview.ChoUnits.Should().Be(3.0);
+        preview.CobUnits.Should().Be(2.0);
+        preview.IobUnits.Should().Be(-1.0);
+        preview.AdjustmentUnits.Should().Be(0.5);
+        preview.RecommendedBolus.Should().Be(5.5);
+    }
+
+    private static (CgmSimController Controller, DbContextOptions<NocturneDbContext> Options) NewController(
+        IEntryService? entryService = null,
+        IIobCalculator? iobCalculator = null,
+        ICobCalculator? cobCalculator = null,
+        IBolusRepository? bolusRepository = null,
+        ITempBasalRepository? tempBasalRepository = null,
+        ICarbIntakeRepository? carbIntakeRepository = null,
+        ITargetRangeResolver? targetRangeResolver = null,
+        IPatientRecordRepository? patientRecordRepository = null,
+        IBodyWeightService? bodyWeightService = null)
+    {
+        var options = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        var seed = new NocturneDbContext(options) { TenantId = Tenant };
+        var factory = new TestNocturneDbContextFactory(seed);
+
+        var entryServiceMock = new Mock<IEntryService>();
+        entryServiceMock
+            .Setup(s => s.GetEntriesAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Entry>());
+
+        var bolusRepoMock = new Mock<IBolusRepository>();
+        bolusRepoMock
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Bolus>());
+
+        var tempBasalRepoMock = new Mock<ITempBasalRepository>();
+        tempBasalRepoMock
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<TempBasal>());
+
+        var carbIntakeRepoMock = new Mock<ICarbIntakeRepository>();
+        carbIntakeRepoMock
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<CarbIntake>());
+
+        var iobCalcMock = new Mock<IIobCalculator>();
+        iobCalcMock
+            .Setup(c => c.CalculateTotalAsync(It.IsAny<List<Bolus>>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<long?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IobResult { Iob = 0 });
+
+        var cobCalcMock = new Mock<ICobCalculator>();
+        cobCalcMock
+            .Setup(c => c.CalculateTotalAsync(It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CobResult { Cob = 0 });
+
+        var targetRangeMock = new Mock<ITargetRangeResolver>();
+        targetRangeMock
+            .Setup(r => r.GetBGTargetRangeAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Low: 70.0, High: 130.0));
+
+        var patientRecordMock = new Mock<IPatientRecordRepository>();
+        patientRecordMock
+            .Setup(r => r.GetAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PatientRecord?)null);
+        patientRecordMock
+            .Setup(r => r.GetOrCreateAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PatientRecord());
+
+        var bodyWeightMock = new Mock<IBodyWeightService>();
+
+        var controller = new CgmSimController(
+            factory,
+            entryService ?? entryServiceMock.Object,
+            iobCalculator ?? iobCalcMock.Object,
+            cobCalculator ?? cobCalcMock.Object,
+            bolusRepository ?? bolusRepoMock.Object,
+            tempBasalRepository ?? tempBasalRepoMock.Object,
+            carbIntakeRepository ?? carbIntakeRepoMock.Object,
+            targetRangeResolver ?? targetRangeMock.Object,
+            patientRecordRepository ?? patientRecordMock.Object,
+            bodyWeightService ?? bodyWeightMock.Object);
+
+        return (controller, options);
+    }
+}
