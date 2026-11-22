@@ -96,6 +96,8 @@
     <PackageVersion Include="Spectre.Console" Version="0.57.2" />
     <PackageVersion Include="Spectre.Console.Cli" Version="0.57.2" />
     <PackageVersion Include="HtmlSanitizer" Version="9.2.1039" />
+    <PackageVersion Include="MailKit" Version="4.11.0" />
+    <PackageVersion Include="MimeKit" Version="4.11.0" />
     <PackageVersion Include="EfToMermaid" Version="1.1.0" />
     <PackageVersion Include="Alexa.NET" Version="1.22.0" />
     <PackageVersion Include="dotAPNS" Version="4.6.0" />

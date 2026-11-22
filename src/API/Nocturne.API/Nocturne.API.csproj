@@ -53,6 +53,8 @@
     <PackageReference Include="Fido2.AspNet" />
     <PackageReference Include="FluentValidation.AspNetCore" />
     <PackageReference Include="HtmlSanitizer" />
+    <PackageReference Include="MailKit" />
+    <PackageReference Include="MimeKit" />
     <PackageReference Include="Konscious.Security.Cryptography.Argon2" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />

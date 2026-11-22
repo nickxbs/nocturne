@@ -322,6 +322,13 @@ class Program
         var resendFromName = builder.AddParameter("resend-from-name", "", secret: false);
         var resendWebhookSecret = builder.AddParameter("resend-webhook-secret", "", secret: true);
 
+        var zohoSmtpHost = builder.AddParameter("zoho-smtp-host", "smtp.zoho.com", secret: false);
+        var zohoSmtpPort = builder.AddParameter("zoho-smtp-port", "465", secret: false);
+        var zohoSmtpUser = builder.AddParameter("zoho-smtp-user", "", secret: false);
+        var zohoSmtpPassword = builder.AddParameter("zoho-smtp-password", "", secret: true);
+        var zohoFromAddress = builder.AddParameter("zoho-from-address", "", secret: false);
+        var zohoFromName = builder.AddParameter("zoho-from-name", "Nocturne", secret: false);
+
         // OpenTelemetry export. Optional and off by default: the OTLP exporters
         // (API .NET SDK and web Node SDK) only start when the endpoint is set, so
         // an empty default means telemetry is collected in-process and dropped
@@ -405,7 +412,13 @@ class Program
         }
 
         var apiEnvironment = (IResourceBuilder<IResourceWithEnvironment>)api;
-        apiEnvironment.WithEnvironment(ServiceNames.ConfigKeys.InstanceKey, instanceKey);
+        apiEnvironment.WithEnvironment(ServiceNames.ConfigKeys.InstanceKey, instanceKey)
+            .WithEnvironment("ZOHO_SMTP_HOST", zohoSmtpHost)
+            .WithEnvironment("ZOHO_SMTP_PORT", zohoSmtpPort)
+            .WithEnvironment("ZOHO_SMTP_USER", zohoSmtpUser)
+            .WithEnvironment("ZOHO_SMTP_PASSWORD", zohoSmtpPassword)
+            .WithEnvironment("ZOHO_FROM_ADDRESS", zohoFromAddress)
+            .WithEnvironment("ZOHO_FROM_NAME", zohoFromName);
 
         // Operator-supplied OTLP export (publish mode only — run mode uses
         // Aspire's auto-injected dashboard endpoint). Empty endpoint = disabled.
