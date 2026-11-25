@@ -472,4 +472,41 @@ public class CgmSimController : ControllerBase, IWriteScopedController
             GeneratedAt = entity.NoiseGeneratedAt,
         });
     }
+
+    [HttpPost("kickstart")]
+    [RequireDeclaredWriteScope]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(Entry[]), StatusCodes.Status200OK)]
+    public async Task<ActionResult<Entry[]>> Kickstart(CancellationToken ct)
+    {
+        var existing = (await _entryService.GetEntriesAsync("sgv", 1, 0, ct)).ToList();
+        if (existing.Count > 0)
+        {
+            return Ok(existing.ToArray());
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var offsetsMinutes = new[] { -15, -10, -5 };
+        var kickstartEntries = offsetsMinutes.Select(offset =>
+        {
+            var timestamp = now.AddMinutes(offset);
+            var mills = timestamp.ToUnixTimeMilliseconds();
+            return new Entry
+            {
+                Type = "sgv",
+                Sgv = 100,
+                Mgdl = 100,
+                Direction = "Flat",
+                Mills = mills,
+                DateString = timestamp.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
+                Device = "cgmsim-node",
+                App = "cgmsim",
+                DataSource = "cgmsim",
+            };
+        }).ToArray();
+
+        await _entryService.CreateEntriesAsync(kickstartEntries, Nocturne.Core.Contracts.V4.WriteOrigin.Live, ct);
+
+        return Ok(kickstartEntries);
+    }
 }

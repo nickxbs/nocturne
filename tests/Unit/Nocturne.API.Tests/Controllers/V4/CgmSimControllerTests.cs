@@ -267,6 +267,41 @@ public class CgmSimControllerTests
     }
 
     [Fact]
+    public async Task Kickstart_WhenNoEntriesExist_CreatesThreeReadingsAt100MgdlOver15Minutes()
+    {
+        var entryMock = new Mock<IEntryService>();
+        entryMock
+            .Setup(s => s.GetEntriesAsync("sgv", 1, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Entry>());
+
+        List<Entry>? createdEntries = null;
+        entryMock
+            .Setup(s => s.CreateEntriesAsync(
+                It.IsAny<IEnumerable<Entry>>(),
+                It.IsAny<Nocturne.Core.Contracts.V4.WriteOrigin>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<Entry>, Nocturne.Core.Contracts.V4.WriteOrigin, CancellationToken>((entries, _, _) =>
+            {
+                createdEntries = entries.ToList();
+            })
+            .ReturnsAsync(new BulkWrite<Entry>([], 0));
+
+        var (controller, _) = NewController(entryService: entryMock.Object);
+
+        var result = await controller.Kickstart(CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var returned = ok.Value.Should().BeOfType<Entry[]>().Subject;
+        returned.Should().HaveCount(3);
+        returned.Should().OnlyContain(e => e.Sgv == 100 && e.Direction == "Flat" && e.Device == "cgmsim-node");
+
+        createdEntries.Should().NotBeNull();
+        createdEntries.Should().HaveCount(3);
+        (createdEntries![1].Mills - createdEntries[0].Mills).Should().Be(5 * 60 * 1000L);
+        (createdEntries[2].Mills - createdEntries[1].Mills).Should().Be(5 * 60 * 1000L);
+    }
+
+    [Fact]
     public async Task GetWizardPreview_CalculatesRecommendationsCorrectly()
     {
         var entryMock = new Mock<IEntryService>();

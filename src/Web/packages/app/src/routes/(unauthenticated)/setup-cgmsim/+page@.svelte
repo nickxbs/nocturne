@@ -30,6 +30,7 @@
   } from "#lib/api/generated/tenantSettings.generated.remote.js";
   import {
     initialize,
+    kickstart,
   } from "#lib/api/generated/cgmSims.generated.remote.js";
   import type { CgmSimSettings } from "#lib/api/generated/schemas.js";
   import { PatientRelationship } from "#lib/api/index.js";
@@ -224,6 +225,7 @@
     finishing = true;
     finishFailed = false;
     try {
+      await kickstart().catch(() => undefined);
       const result = await markSetupComplete().catch(() => undefined);
       if (!result?.completed) {
         finishFailed = true;
@@ -239,6 +241,7 @@
     if (finishing) return;
     finishing = true;
     try {
+      await kickstart().catch(() => undefined);
       await markSetupComplete();
       // eslint-disable-next-line svelte/no-navigation-without-resolve
       await goto(`${resolve("")}?coach=quick-tour`, { refreshAll: true });
