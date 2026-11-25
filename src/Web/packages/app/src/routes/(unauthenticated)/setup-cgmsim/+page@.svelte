@@ -32,7 +32,7 @@
     initialize,
     kickstart,
   } from "#lib/api/generated/cgmSims.generated.remote.js";
-  import type { CgmSimSettings } from "#lib/api/generated/schemas.js";
+  import type { CgmSimSettings } from "#lib/api/index.js";
   import { PatientRelationship } from "#lib/api/index.js";
   import { applyPreferences, type GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import { isGlucoseUnits } from "#lib/utils/formatting.js";
