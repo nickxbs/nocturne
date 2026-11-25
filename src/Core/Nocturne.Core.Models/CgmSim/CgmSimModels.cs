@@ -15,9 +15,15 @@ public class CgmSimSubject
     [Range(1.0, 500.0)]
     public double Weight { get; set; } = 70.0;
 
+    [Range(30.0, 300.0)]
+    public double Height { get; set; } = 170.0;
+
     [Required]
     [Range(1, 150)]
     public int Age { get; set; } = 30;
+
+    [MaxLength(32)]
+    public string ActivityLevel { get; set; } = "moderate";
 }
 
 /// <summary>
@@ -31,11 +37,11 @@ public class CgmSimParameters
 
     [Required]
     [Range(0.5, 24.0)]
-    public double Dia { get; set; } = 4.0;
+    public double Dia { get; set; } = 6.0;
 
     [Required]
     [Range(5, 1440)]
-    public int CarbsAbsTime { get; set; } = 180;
+    public int CarbsAbsTime { get; set; } = 360;
 
     [Required]
     [Range(5, 360)]
@@ -83,8 +89,7 @@ public class CgmSimInitializeRequest
     [Required]
     public CgmSimSubject Subject { get; set; } = new();
 
-    [Required]
-    public CgmSimParameters Parameters { get; set; } = new();
+    public CgmSimParameters? Parameters { get; set; }
 }
 
 /// <summary>

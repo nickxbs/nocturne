@@ -124,7 +124,12 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         // Entity fallback storage
         entity.Sex = model.Sex;
         entity.Weight = model.Weight;
+        if (model.Height > 0) entity.Height = model.Height;
         entity.Age = model.Age;
+        if (!string.IsNullOrWhiteSpace(model.ActivityLevel))
+        {
+            entity.ActivityLevel = model.ActivityLevel.Trim().ToLowerInvariant();
+        }
 
         await db.SaveChangesAsync(ct);
 
@@ -144,9 +149,9 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         return Ok(new CgmSimParameters
         {
             Isf = entity.Isf > 0 ? entity.Isf : 50.0,
-            Dia = entity.Dia > 0 ? entity.Dia : 4.0,
-            CarbsAbsTime = entity.CarbsAbsTime,
-            InsulinPeak = entity.InsulinPeak,
+            Dia = entity.Dia > 0 ? entity.Dia : 6.0,
+            CarbsAbsTime = entity.CarbsAbsTime > 0 ? entity.CarbsAbsTime : 360,
+            InsulinPeak = entity.InsulinPeak > 0 ? entity.InsulinPeak : 75,
             Cr = entity.Cr > 0 ? entity.Cr : 10.0,
         });
     }
@@ -198,9 +203,9 @@ public class CgmSimController : ControllerBase, IWriteScopedController
             Parameters = new CgmSimParameters
             {
                 Isf = entity.Isf > 0 ? entity.Isf : 50.0,
-                Dia = entity.Dia > 0 ? entity.Dia : 4.0,
-                CarbsAbsTime = entity.CarbsAbsTime,
-                InsulinPeak = entity.InsulinPeak,
+                Dia = entity.Dia > 0 ? entity.Dia : 6.0,
+                CarbsAbsTime = entity.CarbsAbsTime > 0 ? entity.CarbsAbsTime : 360,
+                InsulinPeak = entity.InsulinPeak > 0 ? entity.InsulinPeak : 75,
                 Cr = entity.Cr > 0 ? entity.Cr : 10.0,
             },
             IsInitialized = entity.IsInitialized,
@@ -255,13 +260,20 @@ public class CgmSimController : ControllerBase, IWriteScopedController
 
         entity.Sex = request.Subject.Sex;
         entity.Weight = request.Subject.Weight;
+        entity.Height = request.Subject.Height > 0 ? request.Subject.Height : 170.0;
         entity.Age = request.Subject.Age;
+        entity.ActivityLevel = !string.IsNullOrWhiteSpace(request.Subject.ActivityLevel)
+            ? request.Subject.ActivityLevel.Trim().ToLowerInvariant()
+            : "moderate";
 
-        entity.Isf = request.Parameters.Isf;
-        entity.Dia = request.Parameters.Dia;
-        entity.CarbsAbsTime = request.Parameters.CarbsAbsTime;
-        entity.InsulinPeak = request.Parameters.InsulinPeak;
-        entity.Cr = request.Parameters.Cr;
+        var calculated = CalculateParametersFromSubject(request.Subject);
+        var parameters = request.Parameters;
+
+        entity.Isf = parameters is { Isf: > 0 } ? parameters.Isf : calculated.Isf;
+        entity.Dia = parameters is { Dia: > 0 } ? parameters.Dia : calculated.Dia;
+        entity.CarbsAbsTime = parameters is { CarbsAbsTime: > 0 } ? parameters.CarbsAbsTime : calculated.CarbsAbsTime;
+        entity.InsulinPeak = parameters is { InsulinPeak: > 0 } ? parameters.InsulinPeak : calculated.InsulinPeak;
+        entity.Cr = parameters is { Cr: > 0 } ? parameters.Cr : calculated.Cr;
 
         entity.IsInitialized = true;
 
@@ -283,6 +295,56 @@ public class CgmSimController : ControllerBase, IWriteScopedController
             IsInitialized = entity.IsInitialized,
             UpdatedAt = entity.UpdatedAt,
         });
+    }
+
+    internal static CgmSimParameters CalculateParametersFromSubject(CgmSimSubject subject)
+    {
+        var weight = subject.Weight > 0 ? subject.Weight : 70.0;
+        var heightM = (subject.Height > 0 ? subject.Height : 170.0) / 100.0;
+        var bmi = heightM > 0 ? weight / (heightM * heightM) : 22.0;
+
+        var activityFactor = subject.ActivityLevel?.Trim().ToLowerInvariant() switch
+        {
+            "sedentary" => 0.65,
+            "active" => 0.48,
+            "athlete" => 0.40,
+            _ => 0.55, // moderate
+        };
+
+        var sexFactor = subject.Sex?.Trim().ToLowerInvariant() switch
+        {
+            "female" => 0.96,
+            "male" => 1.0,
+            _ => 0.98,
+        };
+
+        var ageFactor = subject.Age switch
+        {
+            < 18 => 1.05,
+            > 65 => 0.92,
+            _ => 1.0,
+        };
+
+        var bmiFactor = bmi switch
+        {
+            > 30 => 1.15,
+            > 25 => 1.07,
+            < 18.5 => 0.92,
+            _ => 1.0,
+        };
+
+        var tdd = Math.Max(10.0, weight * activityFactor * sexFactor * ageFactor * bmiFactor);
+        var isf = Math.Round((1800.0 / tdd) * 2.0, MidpointRounding.AwayFromZero) / 2.0;
+        var cr = Math.Round((500.0 / tdd) * 10.0, MidpointRounding.AwayFromZero) / 10.0;
+
+        return new CgmSimParameters
+        {
+            Isf = Math.Clamp(isf, 5.0, 500.0),
+            Cr = Math.Clamp(cr, 1.0, 100.0),
+            Dia = 6.0,
+            CarbsAbsTime = 360,
+            InsulinPeak = 75,
+        };
     }
 
     [HttpGet("wizard-preview")]
@@ -391,7 +453,9 @@ public class CgmSimController : ControllerBase, IWriteScopedController
         {
             Sex = sex,
             Weight = weight,
+            Height = entity.Height > 0 ? entity.Height : 170.0,
             Age = Math.Max(1, Math.Min(150, age)),
+            ActivityLevel = !string.IsNullOrWhiteSpace(entity.ActivityLevel) ? entity.ActivityLevel : "moderate",
         };
     }
 

@@ -23,17 +23,25 @@ public class CgmSimSettingsEntity : ITenantScoped, IEntityTimestamped
     [Column("weight")]
     public double Weight { get; set; } = 70.0;
 
+    [Column("height")]
+    public double Height { get; set; } = 170.0;
+
     [Column("age")]
     public int Age { get; set; } = 30;
+
+    [Required]
+    [MaxLength(32)]
+    [Column("activity_level")]
+    public string ActivityLevel { get; set; } = "moderate";
 
     [Column("isf")]
     public double Isf { get; set; } = 50.0;
 
     [Column("dia")]
-    public double Dia { get; set; } = 4.0;
+    public double Dia { get; set; } = 6.0;
 
     [Column("carbs_abs_time")]
-    public int CarbsAbsTime { get; set; } = 180;
+    public int CarbsAbsTime { get; set; } = 360;
 
     [Column("insulin_peak")]
     public int InsulinPeak { get; set; } = 75;
