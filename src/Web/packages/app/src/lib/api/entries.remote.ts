@@ -1,5 +1,19 @@
-import { getRequestEvent, query } from "$app/server";
+import { getRequestEvent, query, command } from "$app/server";
 import { z } from "zod";
+import {
+  CreateBolusRequestSchema,
+  UpdateBolusRequestSchema,
+  CreateCarbIntakeRequestSchema,
+  UpdateCarbIntakeRequestSchema,
+  CreateMealRequestSchema,
+  CreateTempBasalRequestSchema,
+  UpsertBGCheckRequestSchema,
+  UpsertNoteRequestSchema,
+  UpsertDeviceEventRequestSchema,
+  CreateBasalInjectionRequestSchema,
+  UpdateBasalInjectionRequestSchema,
+  BasalScheduleSchema,
+} from "#lib/api/generated/schemas.js";
 
 const entriesSchema = z.object({
   dateRange: z.object({
@@ -85,5 +99,76 @@ export const getEntryByTreatmentId = query(
     }
 
     return null;
+  }
+);
+
+/**
+ * Create a single entry (v4: dispatches to the correct endpoint by kind).
+ */
+export const createEntry = command(
+  z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("bolus"), data: CreateBolusRequestSchema }),
+    z.object({ kind: z.literal("carbs"), data: CreateCarbIntakeRequestSchema }),
+    z.object({ kind: z.literal("meal"), data: CreateMealRequestSchema }),
+    z.object({ kind: z.literal("tempBasal"), data: CreateTempBasalRequestSchema }),
+    z.object({ kind: z.literal("bgCheck"), data: UpsertBGCheckRequestSchema }),
+    z.object({ kind: z.literal("note"), data: UpsertNoteRequestSchema }),
+    z.object({ kind: z.literal("deviceEvent"), data: UpsertDeviceEventRequestSchema }),
+    z.object({ kind: z.literal("basalInjection"), data: CreateBasalInjectionRequestSchema }),
+    z.object({ kind: z.literal("basalSchedule"), data: BasalScheduleSchema }),
+  ]),
+  async (input) => {
+    const { apiClient } = getRequestEvent().locals;
+    switch (input.kind) {
+      case "bolus":
+        return await apiClient.bolus.create(input.data);
+      case "carbs":
+        return await apiClient.carbIntake.create(input.data);
+      case "meal":
+        return await apiClient.nutrition.createMeal(input.data);
+      case "tempBasal":
+        return await apiClient.tempBasal.createTempBasals([input.data]);
+      case "bgCheck":
+        return await apiClient.bGCheck.create(input.data);
+      case "note":
+        return await apiClient.note.create(input.data);
+      case "deviceEvent":
+        return await apiClient.deviceEvent.create(input.data);
+      case "basalInjection":
+        return await apiClient.basalInjection.create(input.data);
+      case "basalSchedule":
+        return await apiClient.profile.createBasalSchedule(input.data);
+    }
+  }
+);
+
+/**
+ * Update a single entry (v4: dispatches to the correct endpoint by kind).
+ */
+export const updateEntry = command(
+  z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("bolus"), id: z.string().min(1), data: UpdateBolusRequestSchema }),
+    z.object({ kind: z.literal("carbs"), id: z.string().min(1), data: UpdateCarbIntakeRequestSchema }),
+    z.object({ kind: z.literal("bgCheck"), id: z.string().min(1), data: UpsertBGCheckRequestSchema }),
+    z.object({ kind: z.literal("note"), id: z.string().min(1), data: UpsertNoteRequestSchema }),
+    z.object({ kind: z.literal("deviceEvent"), id: z.string().min(1), data: UpsertDeviceEventRequestSchema }),
+    z.object({ kind: z.literal("basalInjection"), id: z.string().min(1), data: UpdateBasalInjectionRequestSchema }),
+  ]),
+  async (input) => {
+    const { apiClient } = getRequestEvent().locals;
+    switch (input.kind) {
+      case "bolus":
+        return await apiClient.bolus.update(input.id, input.data);
+      case "carbs":
+        return await apiClient.carbIntake.update(input.id, input.data);
+      case "bgCheck":
+        return await apiClient.bGCheck.update(input.id, input.data);
+      case "note":
+        return await apiClient.note.update(input.id, input.data);
+      case "deviceEvent":
+        return await apiClient.deviceEvent.update(input.id, input.data);
+      case "basalInjection":
+        return await apiClient.basalInjection.update(input.id, input.data);
+    }
   }
 );
