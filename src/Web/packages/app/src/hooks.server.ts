@@ -212,7 +212,7 @@ function cacheReadyStatus(host: string | null, body: App.TenantStatus): void {
  * cannot follow HTML redirects and will treat any non-2xx as a hard failure.
  */
 function skipsStatusProbe(pathname: string): boolean {
-  return STATIC_ASSET_PREFIXES.some((p) => pathname.startsWith(p)) || pathname.startsWith(SHARE_UNAVAILABLE_PATH) || pathname.startsWith(TENANT_INACTIVE_PATH) || pathname.startsWith("/setup") || pathname.startsWith("/auth") || pathname.startsWith("/api/v4/webhooks") || pathname.startsWith("/api/v4/bot") || pathname.startsWith("/api/otel");
+  return STATIC_ASSET_PREFIXES.some((p) => pathname.startsWith(p)) || pathname.startsWith(SHARE_UNAVAILABLE_PATH) || pathname.startsWith(TENANT_INACTIVE_PATH) || pathname.startsWith("/setup") || pathname.startsWith("/signup") || pathname.startsWith("/start") || pathname.startsWith("/auth") || pathname.startsWith("/api/v4/webhooks") || pathname.startsWith("/api/v4/bot") || pathname.startsWith("/api/otel");
 }
 
 /**

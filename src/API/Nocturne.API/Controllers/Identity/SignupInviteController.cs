@@ -21,6 +21,7 @@ namespace Nocturne.API.Controllers.Identity;
 [ApiController]
 [Tags("Signup")]
 [AllowAnonymous]
+[AllowDuringSetup]
 [DenyDemoSubject]
 public partial class SignupInviteController : ControllerBase
 {
