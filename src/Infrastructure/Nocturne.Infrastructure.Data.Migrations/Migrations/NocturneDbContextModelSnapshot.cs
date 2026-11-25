@@ -1019,6 +1019,12 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("ActivityLevel")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("activity_level");
+
                     b.Property<int>("Age")
                         .HasColumnType("integer")
                         .HasColumnName("age");
@@ -1040,6 +1046,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<double>("Dia")
                         .HasColumnType("double precision")
                         .HasColumnName("dia");
+
+                    b.Property<double>("Height")
+                        .HasColumnType("double precision")
+                        .HasColumnName("height");
 
                     b.Property<int>("InsulinPeak")
                         .HasColumnType("integer")

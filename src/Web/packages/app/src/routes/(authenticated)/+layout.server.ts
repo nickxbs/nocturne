@@ -125,7 +125,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
       protocol === "https:",
     );
     if (!onboarding.isComplete) {
-      throw redirect(303, "/setup");
+      throw redirect(303, status?.status === "setup_required" ? "/setup" : "/setup-cgmsim");
     }
     onboardingComplete = true;
   }

@@ -79,8 +79,8 @@ public class CgmSimControllerTests
         var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         var parameters = ok.Value.Should().BeOfType<CgmSimParameters>().Subject;
         parameters.Isf.Should().Be(50.0);
-        parameters.Dia.Should().Be(4.0);
-        parameters.CarbsAbsTime.Should().Be(180);
+        parameters.Dia.Should().Be(6.0);
+        parameters.CarbsAbsTime.Should().Be(360);
         parameters.InsulinPeak.Should().Be(75);
         parameters.Cr.Should().Be(10.0);
 
@@ -224,6 +224,46 @@ public class CgmSimControllerTests
         stored.Weight.Should().Be(65.0);
         stored.Isf.Should().Be(40.0);
         stored.Dia.Should().Be(3.5);
+    }
+
+    [Fact]
+    public async Task Initialize_WithoutExplicitParameters_CalculatesIsfAndCrFromSubject()
+    {
+        var (controller, options) = NewController();
+
+        var request = new CgmSimInitializeRequest
+        {
+            Subject = new CgmSimSubject
+            {
+                Sex = "male",
+                Weight = 70.0,
+                Height = 175.0,
+                Age = 30,
+                ActivityLevel = "moderate",
+            },
+        };
+
+        var result = await controller.Initialize(request, CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var settings = ok.Value.Should().BeOfType<CgmSimSettings>().Subject;
+        settings.IsInitialized.Should().BeTrue();
+        settings.Subject.Height.Should().Be(175.0);
+        settings.Subject.ActivityLevel.Should().Be("moderate");
+        settings.Parameters.Dia.Should().Be(6.0);
+        settings.Parameters.CarbsAbsTime.Should().Be(360);
+        settings.Parameters.InsulinPeak.Should().Be(75);
+        settings.Parameters.Isf.Should().BeGreaterThan(0);
+        settings.Parameters.Cr.Should().BeGreaterThan(0);
+
+        await using var db = new NocturneDbContext(options) { TenantId = Tenant };
+        var stored = await db.CgmSimSettings.FirstOrDefaultAsync();
+        stored.Should().NotBeNull();
+        stored!.Height.Should().Be(175.0);
+        stored.ActivityLevel.Should().Be("moderate");
+        stored.Dia.Should().Be(6.0);
+        stored.CarbsAbsTime.Should().Be(360);
+        stored.InsulinPeak.Should().Be(75);
     }
 
     [Fact]

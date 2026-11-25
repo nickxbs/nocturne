@@ -201,7 +201,7 @@
     if (step === "welcome") step = "address";
     else if (step === "address" && addressReady) step = "account";
     else if (step === "done" && siteAddress)
-      window.location.assign(`${siteAddress}/join/recovery-email?next=${encodeURIComponent("/setup")}`);
+      window.location.assign(`${siteAddress}/join/recovery-email?next=${encodeURIComponent("/setup-cgmsim")}`);
   }
 
   function afterCodes() {
