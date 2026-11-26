@@ -12,7 +12,6 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -47,19 +46,11 @@ public class HeldNoticePostgresTests(HeldNoticePostgresTests.Database database)
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
-    }
-
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     /// <summary>A repository on connections of its own, as one instance of the API has.</summary>
-    private AlertRepository Instance(Guid tenant) => new(new Factory(() => Context(tenant)));
+    private AlertRepository Instance(Guid tenant) => new(new SuppliedContextFactory(() => Context(tenant)));
 
     /// <summary>
     /// A tenant with one enabled rule whose stored tracker state holds since
@@ -257,7 +248,7 @@ public class HeldNoticePostgresTests(HeldNoticePostgresTests.Database database)
     }
 
     /// <summary>A repository whose record of one rule's notice fails, as a broken write does.</summary>
-    private sealed class FailingFor(Guid failing, Func<NocturneDbContext> create) : AlertRepository(new Factory(create))
+    private sealed class FailingFor(Guid failing, Func<NocturneDbContext> create) : AlertRepository(new SuppliedContextFactory(create))
     {
         public override Task<NoticeRecorded?> RecordHeldNoticeAsync(
             Guid ruleId, DateTime heldSince, DateTime at, CancellationToken ct) =>

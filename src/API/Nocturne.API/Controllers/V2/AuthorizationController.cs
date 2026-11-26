@@ -178,6 +178,11 @@ public class AuthorizationController : ControllerBase
     {
         _logger.LogDebug("Create subject requested: {Name}", subject.Name);
 
+        if (await HttpContext.IsCallerInactiveAsync(HttpContext.RequestAborted))
+        {
+            return Challenge();
+        }
+
         if (!ModelState.IsValid)
         {
             return BadRequest(ModelState);
@@ -223,6 +228,11 @@ public class AuthorizationController : ControllerBase
     public async Task<ActionResult<Subject>> UpdateSubject([FromBody] Subject subject)
     {
         _logger.LogDebug("Update subject requested: {Id}", subject.Id);
+
+        if (await HttpContext.IsCallerInactiveAsync(HttpContext.RequestAborted))
+        {
+            return Challenge();
+        }
 
         if (!ModelState.IsValid)
         {
@@ -362,6 +372,11 @@ public class AuthorizationController : ControllerBase
     [ErrorEnvelope]
     public async Task<ActionResult<Role>> UpdateRole([FromBody] Role role)
     {
+        if (await HttpContext.IsCallerInactiveAsync(HttpContext.RequestAborted))
+        {
+            return Challenge();
+        }
+
         _logger.LogDebug("Update role requested: {Id}", role.Id);
 
         if (ReservedRoleName(role) is { } refused)

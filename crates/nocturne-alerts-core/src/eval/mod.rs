@@ -4,21 +4,25 @@
 //! evaluated as written (§1.4).
 
 pub(crate) mod clock;
+pub(crate) mod determination;
 mod device;
 pub(crate) mod elapsed;
 pub(crate) mod glucose;
 mod insulin;
+#[cfg(test)]
+mod limit_tests;
 mod signal;
 mod spans;
 
 use chrono::{DateTime, TimeDelta, Utc};
+use rust_decimal::Decimal;
 use uuid::Uuid;
 
 use crate::clock_anomaly::ClockAnomalies;
 use crate::context::SensorContext;
-use crate::enums::CompositeOp;
+use crate::enums::{CompositeOp, ForecastCurve, LimitFact};
 use crate::facts::ContextFact;
-use crate::model::{Node, Payload};
+use crate::model::{LiteralLimit, Node, Payload};
 use crate::paths::node_child_path;
 use crate::sustained::{TimerStore, eval_sustained};
 use crate::truth::Truth;
@@ -39,6 +43,12 @@ pub struct Env<'a> {
     /// state: the rule's `enabled_at` on its first evaluation, else `now`
     /// (`None`).
     pub(crate) first_evaluation_bound: Option<DateTime<Utc>>,
+    /// Whether the rule's excursion is open (engine-semantics.md §3, clear
+    /// margin), so a margined leaf compares against its widened limit.
+    pub(crate) excursion_open: bool,
+    /// Whether the node being evaluated is under an odd number of `not`s, so
+    /// a margin moves its limit toward the leaf's false side.
+    pub(crate) negated: bool,
     pub(crate) ctx: &'a SensorContext,
     pub(crate) timers: &'a mut TimerStore,
     clock_anomaly: ClockAnomalies,
@@ -59,6 +69,8 @@ impl<'a> Env<'a> {
             glucose_freshness: DEFAULT_GLUCOSE_FRESHNESS,
             enabled_at: None,
             first_evaluation_bound: None,
+            excursion_open: false,
+            negated: false,
             ctx,
             timers,
             clock_anomaly: ClockAnomalies::default(),
@@ -85,6 +97,20 @@ impl<'a> Env<'a> {
             first_evaluation_bound: bound,
             ..self
         }
+    }
+
+    /// See [`Env::excursion_open`].
+    #[must_use]
+    pub(crate) fn with_excursion_open(self, excursion_open: bool) -> Self {
+        Self {
+            excursion_open,
+            ..self
+        }
+    }
+
+    /// The limit `p` compares against in this environment.
+    pub(crate) fn limit(&self, p: &impl LiteralLimit) -> Decimal {
+        p.widened(p.literal(), self.excursion_open, self.negated)
     }
 
     /// Every anchor the evaluations in this environment read beyond the
@@ -143,6 +169,116 @@ impl Held {
     }
 }
 
+/// What a true `predicted`, `eventual_glucose` or `carbs_required` leaf, or
+/// a true `threshold` whose limit names a fact, met its comparison with
+/// (engine-semantics.md §3): for `predicted`, the curve and the offset of
+/// the point; for a limit from a fact, the limit compared against, the
+/// fact and the rule's offset to it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MetPoint {
+    pub curve: Option<ForecastCurve>,
+    pub offset_minutes: Option<i32>,
+    pub value: Decimal,
+    pub limit: Option<Decimal>,
+    pub limit_fact: Option<LimitFact>,
+    /// `None` for an offset of zero.
+    pub limit_offset: Option<Decimal>,
+}
+
+impl MetPoint {
+    pub(crate) fn on_curve(curve: ForecastCurve, offset_minutes: i32, value: Decimal) -> Self {
+        Self {
+            curve: Some(curve),
+            offset_minutes: Some(offset_minutes),
+            ..Self::value(value)
+        }
+    }
+
+    pub(crate) fn value(value: Decimal) -> Self {
+        Self {
+            curve: None,
+            offset_minutes: None,
+            value,
+            limit: None,
+            limit_fact: None,
+            limit_offset: None,
+        }
+    }
+
+    /// With `limit`, its fact and the offset to it when it came from one; a
+    /// literal limit is the rule's own and is not repeated.
+    pub(crate) fn against(self, limit: glucose::Effective) -> Self {
+        match limit.fact {
+            Some(fact) => Self {
+                limit: Some(limit.value),
+                limit_fact: Some(fact),
+                limit_offset: (!limit.offset.is_zero()).then_some(limit.offset),
+                ..self
+            },
+            None => self,
+        }
+    }
+
+    /// `{"leaf_id", "kind", "curve"?, "offset_minutes"?, "value", "limit"?,
+    /// "limit_fact"?, "limit_offset"?}`, each decimal as the exact number it
+    /// prints as.
+    #[must_use]
+    pub fn to_json(&self, leaf_id: usize, kind: crate::model::ConditionKind) -> serde_json::Value {
+        let number = |d: Decimal| {
+            d.to_string()
+                .parse::<serde_json::Number>()
+                .map_or(serde_json::Value::Null, serde_json::Value::Number)
+        };
+        let mut o = serde_json::Map::new();
+        o.insert("leaf_id".into(), leaf_id.into());
+        o.insert("kind".into(), crate::enums::WireEnum::name(kind).into());
+        if let Some(curve) = self.curve {
+            o.insert("curve".into(), crate::enums::WireEnum::name(curve).into());
+        }
+        if let Some(offset) = self.offset_minutes {
+            o.insert("offset_minutes".into(), offset.into());
+        }
+        o.insert("value".into(), number(self.value));
+        if let Some(limit) = self.limit {
+            o.insert("limit".into(), number(limit));
+        }
+        if let Some(fact) = self.limit_fact {
+            o.insert(
+                "limit_fact".into(),
+                crate::enums::WireEnum::name(fact).into(),
+            );
+        }
+        if let Some(offset) = self.limit_offset {
+            o.insert("limit_offset".into(), number(offset));
+        }
+        serde_json::Value::Object(o)
+    }
+}
+
+/// Whether `kind` reads the loop's determination only while it is fresh
+/// (engine-semantics.md §3).
+#[must_use]
+pub(crate) fn judges_determination_freshness(kind: crate::model::ConditionKind) -> bool {
+    use crate::model::ConditionKind;
+    matches!(
+        kind,
+        ConditionKind::EventualGlucose | ConditionKind::CarbsRequired
+    )
+}
+
+/// The point a leaf met its comparison with, when it is a true leaf of a kind
+/// that names one; `None` for every other leaf.
+pub(crate) fn met_point(payload: &Payload, env: &mut Env) -> Option<MetPoint> {
+    match payload {
+        Payload::Threshold(p) => glucose::threshold_met(p, env).1,
+        Payload::Predicted(p) => glucose::predicted_met(p, env).1,
+        Payload::EventualGlucose(_) | Payload::CarbsRequired(_) => {
+            determination::determined(payload, env).1
+        }
+        _ => None,
+    }
+}
+
 impl From<Truth> for Held {
     fn from(truth: Truth) -> Self {
         Held::since(truth, None)
@@ -196,6 +332,9 @@ fn eval_payload_held(payload: &Payload, path: &str, env: &mut Env) -> Held {
         Payload::GlucoseBucket(p) => glucose::glucose_bucket(p, env),
         Payload::DayOfWeek(p) => clock::day_of_week(p, env).into(),
         Payload::SleepSessionActive(p) => spans::sleep_session_active(p, env).into(),
+        Payload::EventualGlucose(_) | Payload::CarbsRequired(_) => {
+            determination::determined(payload, env).0
+        }
         Payload::SignalLoss(_)
         | Payload::Staleness(_)
         | Payload::SiteAge(_)
@@ -210,9 +349,9 @@ fn eval_payload_held(payload: &Payload, path: &str, env: &mut Env) -> Held {
         | Payload::TimeSinceLastBolus(_)
         | Payload::PumpState(_)
         | Payload::StateSpanActive(_)
-        | Payload::TrackerAge(_) => elapsed::clock_leaf(payload, env.ctx, env.enabled_at).map_or(
-            Truth::False.into(),
-            |leaf| {
+        | Payload::SensorState(_)
+        | Payload::TrackerAge(_) => elapsed::clock_leaf(payload, env.ctx, env.enabled_at, env.now)
+            .map_or(Truth::False.into(), |leaf| {
                 if let Some(e) = leaf.elapsed() {
                     env.measure(e);
                 }
@@ -226,8 +365,7 @@ fn eval_payload_held(payload: &Payload, path: &str, env: &mut Env) -> Held {
                     },
                     _ => held,
                 }
-            },
-        ),
+            }),
     }
 }
 
@@ -269,8 +407,11 @@ fn composite(p: &crate::model::CompositePayload, path: &str, env: &mut Env) -> H
 
 /// The child inverted; unknown stays unknown, by the child's facts. The
 /// child's instant is when it began to hold, not when it stopped, so `not`
-/// knows none.
+/// knows none. The child is evaluated with its polarity turned, so a margin
+/// under it still widens the rule's truth.
 fn not(p: &crate::model::NotPayload, path: &str, env: &mut Env) -> Held {
+    env.negated = !env.negated;
     let child = eval_held(&p.child, &node_child_path(path, 0, &p.child), env);
+    env.negated = !env.negated;
     Held::from(!child.truth).because(child.unknown)
 }

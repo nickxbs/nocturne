@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -84,12 +85,32 @@ public class SubjectRepositoryTests : IDisposable
         Subjects().AddOidcIdentityAsync(new NewSubjectOidcIdentity(subject, provider, sub, issuer, "a@b.example", Now), CancellationToken.None);
 
     [Fact]
+    public async Task RolesThatDifferOnlyByCaseAreTwoRolesAndASubjectGivenBothHoldsBoth()
+    {
+        using (var db = _db.CreateContext())
+        {
+            db.Roles.Add(new RoleEntity { Id = Guid.CreateVersion7(), Name = "Admin", Permissions = ["treatments:read"] });
+            db.SaveChanges();
+        }
+
+        var both = await CreateAsync(new NewSubject("Both", RoleNames: ["Admin", "admin"]));
+        var upper = await CreateAsync(new NewSubject("Upper", RoleNames: ["Admin"]));
+        var lower = await CreateAsync(new NewSubject("Lower", RoleNames: ["admin"]));
+        var neither = await CreateAsync(new NewSubject("Neither", RoleNames: ["ADMIN"]));
+
+        (await GetAsync(both)).Roles.Select(r => r.Name).Should().BeEquivalentTo("Admin", "admin");
+        (await GetAsync(upper)).Roles.Select(r => r.Name).Should().Equal("Admin");
+        (await GetAsync(lower)).Roles.Select(r => r.Name).Should().Equal("admin");
+        (await GetAsync(neither)).Roles.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task ACreatedSubjectReadsBackWithItsRolesAndTheIdItAsked()
     {
         var wanted = Guid.CreateVersion7();
         var id = await CreateAsync(new NewSubject(
             "Rhys", Username: "rhys", Email: "r@x.example", Notes: "n", Id: wanted,
-            RoleNames: [" admin", "ADMIN", "public", "missing"]));
+            RoleNames: [" admin", "admin", "public", "missing"]));
 
         id.Should().Be(wanted);
         var subject = await GetAsync(id);
@@ -196,62 +217,437 @@ public class SubjectRepositoryTests : IDisposable
             .Select(s => s.Id).Should().Equal(kate);
     }
 
-    [Fact]
-    public async Task TheSetupOwnerCandidateIsTheOldestActivePersonAndNeverTheDemoVisitor()
+    /// <summary>A membership of <paramref name="tenant"/> holding the role <paramref name="slug"/>, created for the tenant on first use.</summary>
+    private void AddMemberWithRole(Guid tenant, Guid subject, string slug)
     {
-        // Explicit ids: the candidate is the first by id, and v7 ids minted in one millisecond do not order.
-        await CreateAsync(new NewSubject("Demo", IsDemoSubject: true, Id: Ordered(1)));
-        await CreateAsync(new NewSubject("System", IsSystemSubject: true, Id: Ordered(2)));
-        await CreateAsync(new NewSubject("Gone", IsActive: false, Id: Ordered(3)));
-        var owner = await CreateAsync(new NewSubject("Owner", Id: Ordered(4)));
-        await CreateAsync(new NewSubject("Later", Id: Ordered(5)));
+        using var db = _db.CreateContext();
+        var role = db.TenantRoles.SingleOrDefault(r => r.TenantId == tenant && r.Slug == slug);
+        if (role is null)
+        {
+            role = new TenantRoleEntity { Id = Guid.CreateVersion7(), TenantId = tenant, Name = slug, Slug = slug };
+            db.TenantRoles.Add(role);
+        }
 
-        (await Subjects().FindSetupOwnerCandidateAsync(_tenant, CancellationToken.None))!.Id.Should().Be(owner);
+        var member = new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = tenant, SubjectId = subject };
+        db.TenantMembers.Add(member);
+        db.TenantMemberRoles.Add(new TenantMemberRoleEntity { Id = Guid.CreateVersion7(), TenantMemberId = member.Id, TenantRoleId = role.Id });
+        db.SaveChanges();
+    }
+
+    /// <summary>
+    /// What the setup owner step leaves for <paramref name="tenant"/>: the subject, recorded for the
+    /// tenant, with the owner membership and the global admin role.
+    /// </summary>
+    private async Task<Guid> CreateSetupOwnerAsync(NewSubject subject, Guid? tenant = null)
+    {
+        var id = await Subjects().CreateSetupOwnerAsync(
+            tenant ?? _tenant, subject with { RoleNames = ["admin"] }, CancellationToken.None);
+        AddMemberWithRole(tenant ?? _tenant, id, RoleSeeds.Owner);
+        return id;
+    }
+
+    /// <summary>A subject of the same shape as <see cref="CreateSetupOwnerAsync"/>'s that no owner step recorded.</summary>
+    private async Task<Guid> CreateUnrecordedOwnerAsync(NewSubject subject)
+    {
+        var id = await CreateAsync(subject with { RoleNames = ["admin"] });
+        AddMemberWithRole(_tenant, id, RoleSeeds.Owner);
+        return id;
+    }
+
+    private async Task<Guid?> CandidateAsync(Guid? tenant = null, bool linkRoute = false) =>
+        (await new SubjectRepository(
+                new TestNocturneDbContextFactory(_db.CreateContext(tenant ?? _tenant)), AccountLinkRoutes.Of(linkRoute))
+            .FindSetupOwnerCandidateAsync(tenant ?? _tenant, CancellationToken.None))?.Id;
+
+    private void AddRefreshToken(Guid subject, DateTime expiresAt)
+    {
+        using var db = _db.CreateContext();
+        db.RefreshTokens.Add(new RefreshTokenEntity
+        {
+            Id = Guid.CreateVersion7(), TokenHash = Guid.NewGuid().ToString("N"), SubjectId = subject,
+            IssuedAt = expiresAt.AddDays(-7), ExpiresAt = expiresAt,
+        });
+        db.SaveChanges();
+    }
+
+    private void AddLoginCode(Guid subject, LoginCodePurpose purpose, DateTime expiresAt, DateTime? consumedAt = null)
+    {
+        using var db = _db.CreateContext(_tenant);
+        db.LoginCodes.Add(new LoginCodeEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = _tenant, SubjectId = subject, CodeHash = Guid.NewGuid().ToString("N"),
+            Purpose = purpose, ExpiresAt = expiresAt, ConsumedAt = consumedAt,
+        });
+        db.SaveChanges();
+    }
+
+    private void EditSubject(Guid subject, Action<SubjectEntity> edit)
+    {
+        using var db = _db.CreateContext();
+        edit(db.Subjects.Single(s => s.Id == subject));
+        db.SaveChanges();
+    }
+
+    private Guid? RecordOf(Guid tenant)
+    {
+        using var db = _db.CreateContext();
+        return db.Tenants.Single(t => t.Id == tenant).SetupOwnerSubjectId;
     }
 
     [Fact]
-    public async Task TheSetupOwnerCandidateHoldsNoSignInFactor()
+    public async Task TheSetupOwnerCandidateIsTheSubjectTheOwnerStepRecordedForTheTenant()
     {
-        var withPasskey = await CreateAsync(new NewSubject("Passkey", Id: Ordered(1)));
-        AddPasskey(withPasskey);
-        var linked = await CreateAsync(new NewSubject("Linked", Id: Ordered(2)));
-        await LinkAsync(linked, _provider, "ext");
-        var linkedToDisabled = await CreateAsync(new NewSubject("Linked elsewhere", Id: Ordered(3)));
-        await LinkAsync(linkedToDisabled, _disabledProvider, "ext2", "https://old.example");
-        var owner = await CreateAsync(new NewSubject("Owner", Id: Ordered(4)));
+        await CreateUnrecordedOwnerAsync(new NewSubject("Unrecorded", Id: Ordered(1)));
+        (await CandidateAsync()).Should().BeNull("a factor-less owner no owner step recorded is not resumed");
 
-        (await Subjects().FindSetupOwnerCandidateAsync(_tenant, CancellationToken.None))!.Id.Should().Be(owner);
+        var first = await CreateSetupOwnerAsync(new NewSubject("First", Id: Ordered(2)));
+        (await CandidateAsync()).Should().Be(first);
+
+        var second = await CreateSetupOwnerAsync(new NewSubject("Second", Id: Ordered(3)));
+        (await CandidateAsync()).Should().Be(second, "a new record replaces the earlier one");
+
+        var elsewhere = await CreateSetupOwnerAsync(new NewSubject("Elsewhere", Id: Ordered(4)), _otherTenant);
+        (await CandidateAsync(_otherTenant)).Should().Be(elsewhere);
+        (await CandidateAsync()).Should().Be(second, "each tenant has its own record");
     }
 
     [Fact]
-    public async Task AccessRequestsAreListedNewestFirstAndEnrolmentCandidatesHoldNoFactor()
+    public async Task CreatingTheSetupOwnerRecordsItInTheSameSave()
     {
-        // Explicit ids: the candidate order is by id, and v7 ids minted in one millisecond do not order.
-        var older = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending", AccessRequestMessage: "hi", Id: Ordered(1)));
-        var newer = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending", Id: Ordered(2)));
-        await CreateAsync(new NewSubject("Bot", IsSystemSubject: true, IsActive: false, ApprovalStatus: "Pending", Id: Ordered(3)));
-        var withPasskey = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending", Id: Ordered(4)));
-        AddPasskey(withPasskey);
-        var invitee = await CreateAsync(new NewSubject("Inv", Username: "inv", Id: Ordered(5)));
-        var linked = await CreateAsync(new NewSubject("Inv2", Username: "inv", Id: Ordered(6)));
-        await LinkAsync(linked, _provider, "ext");
-        var linkedToDisabled = await CreateAsync(new NewSubject("Inv3", Username: "inv", Id: Ordered(7)));
-        await LinkAsync(linkedToDisabled, _disabledProvider, "ext2", "https://old.example");
+        Guid created;
+        await using (var unit = DbUnitOfWork.Own(_db.CreateContext()))
+        {
+            created = await new SubjectRepository(unit, AccountLinkRoutes.Off)
+                .CreateSetupOwnerAsync(_tenant, new NewSubject("Owner", Username: "owner"), CancellationToken.None);
+
+            (await Subjects().GetAsync(created, CancellationToken.None)).Should().BeNull();
+            RecordOf(_tenant).Should().BeNull("the subject and its record are saved together");
+
+            await unit.CommitAsync(token => unit.Context.SaveChangesAsync(token), CancellationToken.None);
+        }
+
+        (await GetAsync(created)).Username.Should().Be("owner");
+        RecordOf(_tenant).Should().Be(created);
+        (await CandidateAsync()).Should().Be(created, "a subject recorded before its membership was written is still resumed");
+    }
+
+    private PasskeyCredentialRepository Passkeys() => new(new TestNocturneDbContextFactory(_db.CreateContext()));
+
+    private static NewPasskeyCredential PasskeyOf(Guid subject) =>
+        new(subject, Guid.NewGuid().ToByteArray(), [1], 0, [], null, null, Now);
+
+    private static NewSubjectOidcIdentity IdentityOf(Guid subject, Guid provider, string sub) =>
+        new(subject, provider, sub, "https://issuer.example", null, Now);
+
+    /// <summary>The first credential stores, each storing for <paramref name="subject"/> on <see cref="_tenant"/>.</summary>
+    private Task<Guid?> StoreFirstCredentialAsync(string store, Guid subject, string sub = "sub-1") => store switch
+    {
+        "passkey" => Passkeys().CreateForSetupOwnerAsync(_tenant, PasskeyOf(subject), CancellationToken.None),
+        "provider identity" => Subjects().AddSetupOwnerOidcIdentityAsync(
+            _tenant, IdentityOf(subject, _provider, sub), CancellationToken.None),
+        _ => throw new ArgumentOutOfRangeException(nameof(store), store, null),
+    };
+
+    private int CredentialsOf(Guid subject)
+    {
+        using var db = _db.CreateContext();
+        return db.PasskeyCredentials.Count(c => c.SubjectId == subject)
+            + db.SubjectOidcIdentities.Count(o => o.SubjectId == subject);
+    }
+
+    [Theory]
+    [InlineData("passkey")]
+    [InlineData("provider identity")]
+    public async Task TheFirstCredentialStoreClaimsTheSetupOfTheRecordedSubjectAndEndsOnlyItsTenantsRecord(string store)
+    {
+        var owner = await CreateSetupOwnerAsync(new NewSubject("Owner"));
+        var elsewhere = await CreateSetupOwnerAsync(new NewSubject("Elsewhere"), _otherTenant);
+
+        var stored = await StoreFirstCredentialAsync(store, owner);
+
+        stored.Should().NotBeNull();
+        CredentialsOf(owner).Should().Be(1);
+        RecordOf(_tenant).Should().BeNull();
+        RecordOf(_otherTenant).Should().Be(elsewhere);
+        (await Subjects().GetAsync(owner, CancellationToken.None)).Should().NotBeNull("ending the record leaves the subject");
+    }
+
+    [Theory]
+    [InlineData("passkey")]
+    [InlineData("provider identity")]
+    public async Task ACredentialStoreForASubjectTheRecordDoesNotNameStoresNothing(string store)
+    {
+        var owner = await CreateSetupOwnerAsync(new NewSubject("Owner"));
+        var stranger = await CreateAsync(new NewSubject("Stranger"));
+
+        var stored = await StoreFirstCredentialAsync(store, stranger);
+
+        stored.Should().BeNull();
+        CredentialsOf(stranger).Should().Be(0);
+        RecordOf(_tenant).Should().Be(owner);
+    }
+
+    [Theory]
+    [InlineData("passkey", "passkey")]
+    [InlineData("passkey", "provider identity")]
+    [InlineData("provider identity", "passkey")]
+    [InlineData("provider identity", "provider identity")]
+    public async Task OnceTheSetupIsClaimedASecondCredentialStoreStoresNothing(string first, string second)
+    {
+        var owner = await CreateSetupOwnerAsync(new NewSubject("Owner"));
+
+        (await StoreFirstCredentialAsync(first, owner, "sub-1")).Should().NotBeNull();
+        var again = await StoreFirstCredentialAsync(second, owner, "sub-2");
+
+        again.Should().BeNull();
+        CredentialsOf(owner).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ACredentialStoreForATenantThatDoesNotExistStoresNothing()
+    {
+        var owner = await CreateSetupOwnerAsync(new NewSubject("Owner"));
+
+        (await Passkeys().CreateForSetupOwnerAsync(Guid.CreateVersion7(), PasskeyOf(owner), CancellationToken.None))
+            .Should().BeNull();
+        CredentialsOf(owner).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task TheFirstCredentialStoreRunsOnlyOnARepositoryThatOpensItsOwnTransaction()
+    {
+        await using var unit = DbUnitOfWork.Own(_db.CreateContext());
+
+        var passkey = () => new PasskeyCredentialRepository(unit)
+            .CreateForSetupOwnerAsync(_tenant, PasskeyOf(Guid.CreateVersion7()), CancellationToken.None);
+        var identity = () => new SubjectRepository(unit, AccountLinkRoutes.Off)
+            .AddSetupOwnerOidcIdentityAsync(_tenant, IdentityOf(Guid.CreateVersion7(), _provider, "sub-1"), CancellationToken.None);
+
+        await passkey.Should().ThrowAsync<InvalidOperationException>();
+        await identity.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task TheSetupIsClaimedOnlyInsideATransaction()
+    {
+        var owner = await CreateSetupOwnerAsync(new NewSubject("Owner"));
+        await using var db = _db.CreateContext();
+
+        var claim = () => db.ClaimSetupAsync(_tenant, owner, CancellationToken.None);
+
+        await claim.Should().ThrowAsync<InvalidOperationException>();
+        RecordOf(_tenant).Should().Be(owner);
+    }
+
+    [Fact]
+    public async Task DeletingTheRecordedSubjectEndsTheRecord()
+    {
+        var owner = await CreateSetupOwnerAsync(new NewSubject("Owner"));
+
+        using (var db = _db.CreateContext())
+        {
+            db.Subjects.Remove(db.Subjects.Single(s => s.Id == owner));
+            db.SaveChanges();
+        }
+
+        RecordOf(_tenant).Should().BeNull();
+    }
+
+    public static TheoryData<string> RefusedSetupOwnerHoldings() => new(
+        "demo", "system", "inactive", "passkey", "provider link", "disabled provider link", "authenticator",
+        "live session", "live Recovery code", "live OperatorRecovery code", "live EmailRecovery code",
+        "live RecoverySession code", "live Login code", "confirmed address a link can reach");
+
+    [Theory]
+    [MemberData(nameof(RefusedSetupOwnerHoldings))]
+    public async Task TheRecordedSetupOwnerIsNotResumedWhenItHolds(string held)
+    {
+        var owner = await CreateSetupOwnerAsync(new NewSubject("Owner"));
+        var linkRoute = false;
+        switch (held)
+        {
+            case "demo":
+                EditSubject(owner, s => s.IsDemoSubject = true);
+                break;
+            case "system":
+                EditSubject(owner, s => s.IsSystemSubject = true);
+                break;
+            case "inactive":
+                EditSubject(owner, s => s.IsActive = false);
+                break;
+            case "passkey":
+                AddPasskey(owner);
+                break;
+            case "provider link":
+                await LinkAsync(owner, _provider, "ext");
+                break;
+            case "disabled provider link":
+                await LinkAsync(owner, _disabledProvider, "ext", "https://old.example");
+                break;
+            case "authenticator":
+                using (var db = _db.CreateContext())
+                {
+                    db.TotpCredentials.Add(new TotpCredentialEntity { Id = Guid.CreateVersion7(), SubjectId = owner, SecretKey = [0] });
+                    db.SaveChanges();
+                }
+                break;
+            case "live session":
+                AddRefreshToken(owner, DateTime.UtcNow.AddDays(7));
+                break;
+            case "confirmed address a link can reach":
+                EditSubject(owner, s =>
+                {
+                    s.SetEmail("owner@example.test");
+                    s.ConfirmEmail("owner@example.test", DateTime.UtcNow);
+                });
+                linkRoute = true;
+                break;
+            default:
+                AddLoginCode(owner, Enum.Parse<LoginCodePurpose>(held.Split(' ')[1]), DateTime.UtcNow.AddHours(1));
+                break;
+        }
+
+        (await CandidateAsync(linkRoute: linkRoute)).Should().BeNull();
+    }
+
+    public static TheoryData<string> AdmittedSetupOwnerHoldings() => new(
+        "expired session", "spent recovery code", "expired operator code", "live address confirmation",
+        "unconfirmed address a link can reach", "confirmed address no link can reach", "platform admin",
+        "membership of another tenant", "another global role", "no membership");
+
+    [Theory]
+    [MemberData(nameof(AdmittedSetupOwnerHoldings))]
+    public async Task TheRecordedSetupOwnerIsResumedWhenItHolds(string held)
+    {
+        var owner = held == "no membership"
+            ? await Subjects().CreateSetupOwnerAsync(_tenant, new NewSubject("Owner"), CancellationToken.None)
+            : await CreateSetupOwnerAsync(new NewSubject("Owner"));
+        var linkRoute = false;
+        switch (held)
+        {
+            case "expired session":
+                AddRefreshToken(owner, DateTime.UtcNow.AddDays(-1));
+                break;
+            case "spent recovery code":
+                AddLoginCode(owner, LoginCodePurpose.Recovery, DateTime.UtcNow.AddHours(1), consumedAt: DateTime.UtcNow.AddMinutes(-1));
+                break;
+            case "expired operator code":
+                AddLoginCode(owner, LoginCodePurpose.OperatorRecovery, DateTime.UtcNow.AddMinutes(-1));
+                break;
+            case "live address confirmation":
+                AddLoginCode(owner, LoginCodePurpose.EmailConfirm, DateTime.UtcNow.AddHours(1));
+                break;
+            case "unconfirmed address a link can reach":
+                EditSubject(owner, s => s.SetEmail("owner@example.test"));
+                linkRoute = true;
+                break;
+            case "confirmed address no link can reach":
+                EditSubject(owner, s =>
+                {
+                    s.SetEmail("owner@example.test");
+                    s.ConfirmEmail("owner@example.test", DateTime.UtcNow);
+                });
+                break;
+            case "platform admin":
+                EditSubject(owner, s => s.IsPlatformAdmin = true);
+                break;
+            case "membership of another tenant":
+                AddMember(_otherTenant, owner);
+                break;
+            case "another global role":
+                using (var db = _db.CreateContext())
+                {
+                    db.SubjectRoles.Add(new SubjectRoleEntity
+                    {
+                        SubjectId = owner, RoleId = db.Roles.Single(r => r.Name == "public").Id, AssignedAt = Now,
+                    });
+                    db.SaveChanges();
+                }
+                break;
+        }
+
+        (await CandidateAsync(linkRoute: linkRoute)).Should().Be(owner);
+    }
+
+    [Fact]
+    public async Task AccessRequestsAreListedNewestFirstAndOnlyOnceTheyHoldAPasskey()
+    {
+        var older = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending", AccessRequestMessage: "hi"));
+        var newer = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending"));
+        var bot = await CreateAsync(new NewSubject("Bot", IsSystemSubject: true, IsActive: false, ApprovalStatus: "Pending"));
+        await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending"));
+        AddPasskey(older);
+        AddPasskey(newer);
+        AddPasskey(bot);
 
         // The pending list orders by CreatedAt, which the context stamps at save; spread them out.
         SetCreatedAt(older, Now.AddMinutes(-2));
         SetCreatedAt(newer, Now.AddMinutes(-1));
-        SetCreatedAt(withPasskey, Now);
 
         var pending = await Subjects().ListPendingAccessRequestsAsync(CancellationToken.None);
-        pending.Select(s => s.Id).Should().Equal(withPasskey, newer, older);
+        pending.Select(s => s.Id).Should().Equal(newer, older);
         pending.Should().OnlyContain(s => s.Roles.Count == 0);
-        pending.Should().Contain(s => s.Name == "Ann").And.NotContain(s => s.Name == "Bot");
+    }
 
-        (await Subjects().FindCredentiallessSubjectIdsAsync(new EnrolmentMatch.AccessRequest("Ann"), CancellationToken.None))
-            .Should().Equal(newer, older);
-        (await Subjects().FindCredentiallessSubjectIdsAsync(new EnrolmentMatch.Invite("inv"), CancellationToken.None))
-            .Should().Equal(invitee);
+    [Fact]
+    public async Task AnEnrollingSubjectIsOneOfTheKindUnderTheNameItsOptionsStepCreatedHoldingNoWayToSignIn()
+    {
+        var requester = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending"));
+        var requesterWithPasskey = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending"));
+        AddPasskey(requesterWithPasskey);
+        var system = await CreateAsync(new NewSubject("Ann", IsSystemSubject: true, IsActive: false, ApprovalStatus: "Pending"));
+        var invitee = await CreateAsync(new NewSubject("Inv", Username: "inv"));
+        var linked = await CreateAsync(new NewSubject("Inv2", Username: "inv"));
+        await LinkAsync(linked, _provider, "ext");
+        var linkedToDisabled = await CreateAsync(new NewSubject("Inv3", Username: "inv"));
+        await LinkAsync(linkedToDisabled, _disabledProvider, "ext2", "https://old.example");
+        var deactivated = await CreateAsync(new NewSubject("Inv4", Username: "inv", IsActive: false));
+        var withAuthenticator = await CreateAsync(new NewSubject("Inv5", Username: "inv"));
+        using (var db = _db.CreateContext())
+        {
+            db.TotpCredentials.Add(new TotpCredentialEntity { Id = Guid.CreateVersion7(), SubjectId = withAuthenticator, SecretKey = [0] });
+            db.SaveChanges();
+        }
+
+        var withLiveSession = await CreateAsync(new NewSubject("Inv6", Username: "inv"));
+        AddRefreshToken(withLiveSession, DateTime.UtcNow.AddDays(1));
+        var withEndedSession = await CreateAsync(new NewSubject("Inv7", Username: "inv"));
+        AddRefreshToken(withEndedSession, DateTime.UtcNow.AddDays(-1));
+
+        async Task<bool> Enrolling(Guid id, EnrolmentMatch match) =>
+            await Subjects().IsEnrollingSubjectAsync(id, match, CancellationToken.None);
+
+        (await Enrolling(requester, new EnrolmentMatch.AccessRequest("Ann"))).Should().BeTrue();
+        (await Enrolling(requester, new EnrolmentMatch.AccessRequest("Bea"))).Should().BeFalse("another name");
+        (await Enrolling(requester, new EnrolmentMatch.Invite("ann"))).Should().BeFalse("an access request is not an invite's subject");
+        (await Enrolling(requesterWithPasskey, new EnrolmentMatch.AccessRequest("Ann"))).Should().BeFalse("it holds a passkey");
+        (await Enrolling(system, new EnrolmentMatch.AccessRequest("Ann"))).Should().BeFalse("a system subject");
+        (await Enrolling(invitee, new EnrolmentMatch.Invite("inv"))).Should().BeTrue();
+        (await Enrolling(invitee, new EnrolmentMatch.Invite("other"))).Should().BeFalse("another username");
+        (await Enrolling(invitee, new EnrolmentMatch.AccessRequest("Inv"))).Should().BeFalse("an invite's subject is not an access request");
+        (await Enrolling(linked, new EnrolmentMatch.Invite("inv"))).Should().BeFalse("it holds a provider link");
+        (await Enrolling(linkedToDisabled, new EnrolmentMatch.Invite("inv"))).Should().BeFalse("a disabled provider can be enabled again");
+        (await Enrolling(deactivated, new EnrolmentMatch.Invite("inv"))).Should().BeFalse("an invite's subject is active");
+        (await Enrolling(withAuthenticator, new EnrolmentMatch.Invite("inv"))).Should().BeFalse("it holds an authenticator");
+        (await Enrolling(withLiveSession, new EnrolmentMatch.Invite("inv"))).Should().BeFalse("it holds a live session");
+        (await Enrolling(withEndedSession, new EnrolmentMatch.Invite("inv"))).Should().BeTrue("an ended session signs no one in");
+        (await Enrolling(Guid.CreateVersion7(), new EnrolmentMatch.Invite("inv"))).Should().BeFalse("no such subject");
+    }
+
+    /// <summary>
+    /// An enrolment that was abandoned leaves a subject with the username and no membership, so a
+    /// member lookup by that username still finds only the member.
+    /// </summary>
+    [Fact]
+    public async Task AnAbandonedEnrolmentUnderAMembersUsernameIsNotFoundAsAMember()
+    {
+        await CreateAsync(new NewSubject("Abandoned", Username: "sam", Id: Ordered(1)));
+        var member = await CreateAsync(new NewSubject("Sam", Username: "sam", Id: Ordered(2)));
+        AddMember(_tenant, member);
+        await CreateAsync(new NewSubject("Abandoned again", Username: "sam", Id: Ordered(3)));
+
+        (await Subjects().FindMemberByUsernameAsync(_tenant, "sam", activeOnly: true, Now, CancellationToken.None))!
+            .Id.Should().Be(member);
     }
 
     [Fact]
@@ -275,15 +671,9 @@ public class SubjectRepositoryTests : IDisposable
         profile.Should().BeEquivalentTo(new { Name = "P", Email = (string?)null, Notes = (string?)null, IsActive = false },
             "a profile edit does not change whether the subject is active");
 
-        (await Subjects().SetAccessRequestMessageAsync(id, "please", CancellationToken.None)).Should().BeTrue();
-        (await GetAsync(id)).AccessRequestMessage.Should().Be("please");
-        await Subjects().SetAccessRequestMessageAsync(id, null, CancellationToken.None);
-        (await GetAsync(id)).AccessRequestMessage.Should().BeNull();
-
         (await Subjects().UpdateAsync(Guid.CreateVersion7(), new SubjectEdit(Name: "x"), CancellationToken.None)).Should().BeOfType<SubjectChange.NotFound>();
         (await Subjects().UpdateAsync(Guid.CreateVersion7(), new SubjectEdit(IsActive: false), CancellationToken.None)).Should().BeOfType<SubjectChange.NotFound>();
         (await Subjects().UpdateProfileAsync(Guid.CreateVersion7(), new SubjectProfile("x", null, null), CancellationToken.None)).Should().BeNull();
-        (await Subjects().SetAccessRequestMessageAsync(Guid.CreateVersion7(), null, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]

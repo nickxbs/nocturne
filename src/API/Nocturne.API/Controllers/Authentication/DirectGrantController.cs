@@ -75,17 +75,22 @@ public class DirectGrantController : ControllerBase
             return Problem(detail: "Authentication required", statusCode: 401, title: "Unauthorized");
         }
 
+        if (await HttpContext.IsCallerInactiveAsync(HttpContext.RequestAborted))
+        {
+            return Challenge();
+        }
+
         if (Scope.ValidateDelegation(request.Scopes, HttpContext.GetGrantedScopes()) is { } violation)
         {
             return Problem(detail: violation.Description, statusCode: 403, title: violation.Code);
         }
 
-        var limitTo24Hours = HttpContext.InheritHistoryClamp(request.LimitTo24Hours);
+        var limitTo24Hours = HttpContext.InheritOwnCredentialHistoryClamp(request.LimitTo24Hours);
 
         var result = await _directGrantService.CreateAsync(
             pinnedTenantId: null, auth.SubjectId.Value, request.Label, request.Scopes, request.ExpiresAt,
             limitTo24Hours,
-            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            HttpContext.GetClientAddress(),
             Request.Headers.UserAgent.ToString(),
             createdBySubjectId: null,
             ct: HttpContext.RequestAborted);
@@ -156,7 +161,7 @@ public class DirectGrantController : ControllerBase
 
         var found = await _directGrantService.RevokeAsync(
             pinnedTenantId: null, id, auth.SubjectId.Value,
-            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            HttpContext.GetClientAddress(),
             Request.Headers.UserAgent.ToString(),
             ct: HttpContext.RequestAborted);
 
@@ -169,7 +174,7 @@ public class DirectGrantController : ControllerBase
 
             found = await _directGrantService.RevokeAsync(
                 pinnedTenantId: null, id, holderId,
-                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                HttpContext.GetClientAddress(),
                 Request.Headers.UserAgent.ToString(),
                 ct: HttpContext.RequestAborted);
         }
@@ -202,9 +207,19 @@ public class DirectGrantController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Keep(Guid id)
     {
+        if (await HttpContext.IsCallerInactiveAsync(HttpContext.RequestAborted))
+        {
+            return Challenge();
+        }
+
+        if (HttpContext.CallerGrantCeiling() is not { } ceiling)
+        {
+            return this.CallerAccessFromTeamProblem();
+        }
+
         if (!HttpContext.MayKeepDeviceCredentials())
         {
-            return HttpContext.CallerAccessEndsAt() is null
+            return ceiling.AccessEndsAt is null
                 ? Forbid()
                 : Problem(detail: HttpContextExtensions.KeepDeviceCredentialEndDateDetail, statusCode: 403, title: "Forbidden");
         }

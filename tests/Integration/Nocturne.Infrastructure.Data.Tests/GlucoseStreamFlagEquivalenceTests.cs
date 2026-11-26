@@ -34,6 +34,9 @@ namespace Nocturne.Infrastructure.Data.Tests;
 public class GlucoseStreamFlagEquivalenceTests(GlucoseStreamFlagEquivalenceTests.Database database)
     : IClassFixture<GlucoseStreamFlagEquivalenceTests.Database>
 {
+    // A writer that must stay blocked is watched this long; it is part of the assertion, not a hang guard.
+    private static readonly TimeSpan StaysBlockedFor = TimeSpan.FromSeconds(1);
+
     public sealed class Database : IAsyncLifetime
     {
         public string AppConnectionString { get; private set; } = string.Empty;
@@ -102,7 +105,7 @@ public class GlucoseStreamFlagEquivalenceTests(GlucoseStreamFlagEquivalenceTests
             await GlucoseStreamFlags.RecomputeAsync(b, [second.Timestamp], default);
             await bTransaction.CommitAsync();
         });
-        (await Task.WhenAny(writer, Task.Delay(TimeSpan.FromSeconds(1)))).Should().NotBe(writer,
+        (await Task.WhenAny(writer, Task.Delay(StaysBlockedFor))).Should().NotBe(writer,
             "the first writer holds the tenant's stream lock until it commits");
 
         await aTransaction.CommitAsync();
@@ -263,7 +266,7 @@ public class GlucoseStreamFlagEquivalenceTests(GlucoseStreamFlagEquivalenceTests
         (await LinksFreeAsync(tenant, first.Id, second.Id)).Should().BeTrue("the merge has written no link yet");
 
         await held.CommitAsync();
-        (await merge.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(1);
+        (await merge.WaitAsync(Eventually.DefaultPatience)).Should().Be(1);
         (await MismatchesAsync(tenant)).Should().BeEmpty();
     }
 
@@ -809,8 +812,7 @@ public class GlucoseStreamFlagEquivalenceTests(GlucoseStreamFlagEquivalenceTests
         await conn.OpenAsync();
         await using var transaction = await conn.BeginTransactionAsync();
         await SetTenantAsync(conn, tenant);
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return (long)(await cmd.ExecuteScalarAsync())!;
+        return await conn.ScalarAsync<long>(sql);
     }
 
     private async Task ExecuteAsync(Guid tenant, string sql)
@@ -819,8 +821,7 @@ public class GlucoseStreamFlagEquivalenceTests(GlucoseStreamFlagEquivalenceTests
         await conn.OpenAsync();
         await using var transaction = await conn.BeginTransactionAsync();
         await SetTenantAsync(conn, tenant);
-        await using (var cmd = new NpgsqlCommand(sql, conn))
-            await cmd.ExecuteNonQueryAsync();
+        await conn.ExecuteAsync(sql);
         await transaction.CommitAsync();
     }
 
@@ -832,10 +833,7 @@ public class GlucoseStreamFlagEquivalenceTests(GlucoseStreamFlagEquivalenceTests
     }
 
     private NocturneDbContext Context(Guid tenant, params IInterceptor[] interceptors) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors([new TenantConnectionInterceptor(), .. interceptors])
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, interceptors);
 
     private AsyncServiceScope Scope(Guid tenant)
     {

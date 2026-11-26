@@ -3,6 +3,7 @@
   import { page } from "$app/state";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
   import { describeSubmitError } from "#lib/forms/index.js";
+  import { describeRemoteError, errorStatus, type ProblemCodeMessages } from "#lib/forms/submit-error.js";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
   import * as Card from "#lib/components/ui/card/index.js";
@@ -27,6 +28,8 @@
     setMemberPermissions,
     setMemberLimitTo24Hours,
     setMemberAccessEnd,
+    getTeamAccess,
+    stopTeamAccess,
   } from "#lib/api/generated/memberInvites.generated.remote.js";
   import {
     getPendingRequests,
@@ -37,6 +40,7 @@
   import PendingInvitesList from "#lib/components/members/PendingInvitesList.svelte";
   import PendingRequestsList from "#lib/components/members/PendingRequestsList.svelte";
   import MemberCard, { type MemberChanges } from "#lib/components/members/MemberCard.svelte";
+  import TeamAccessList from "#lib/components/members/TeamAccessList.svelte";
   import GuestLinksSection from "#lib/components/members/GuestLinksSection.svelte";
   import PublicAccessCard from "#lib/components/members/PublicAccessCard.svelte";
   import MembershipRequestsCard from "#lib/components/members/MembershipRequestsCard.svelte";
@@ -45,6 +49,7 @@
   import SettingsLinkCard from "#lib/components/settings/SettingsLinkCard.svelte";
   import SignInGate from "#lib/components/auth/SignInGate.svelte";
   import { retainQuery } from "#lib/api/retain-query.svelte.js";
+  import { MemberReasonKind } from "@nocturne/api-client";
 
   const granted = $derived(page.data.effectivePermissions ?? []);
   const canInvite = $derived(satisfiesScope(granted, "members.invite"));
@@ -79,11 +84,13 @@
   const membersQuery = $derived(canListMembers ? getMembers() : null);
   const invitesQuery = $derived(canInvite ? listInvites() : null);
   const rolesQuery = $derived(canListRoles ? getRoles() : null);
+  const teamAccessQuery = $derived(canListMembers ? getTeamAccess() : null);
   const pendingRequestsQuery = $derived(canReviewRequests ? getPendingRequests() : null);
   const shareQuery = $derived(canManageSharing ? getShareLink() : null);
   retainQuery(() => membersQuery);
   retainQuery(() => invitesQuery);
   retainQuery(() => rolesQuery);
+  retainQuery(() => teamAccessQuery);
   retainQuery(() => pendingRequestsQuery);
   retainQuery(() => shareQuery);
 
@@ -92,12 +99,20 @@
   const invites = $derived(invitesQuery?.current ?? []);
   const activeInvites = $derived(invites.filter((i) => i.isValid));
   const allRoles = $derived(rolesQuery?.current ?? []);
+  const teamsWithAccess = $derived(teamAccessQuery?.current ?? []);
   const pendingRequests = $derived(pendingRequestsQuery?.current ?? []);
   const share = $derived(shareQuery?.current ?? null);
 
-  const callerAccessEndsAt = $derived(
-    allMembers.find((m) => m.subjectId === page.data.user?.subjectId)?.accessEndsAt,
+  const callerRow = $derived(allMembers.find((m) => m.subjectId === page.data.user?.subjectId));
+  const callerAccessEndsAt = $derived(callerRow?.accessEndsAt);
+
+  const callerDirect = $derived(
+    (callerRow?.reasons ?? []).find((r) => r.kind === MemberReasonKind.Direct && !r.hasEnded),
   );
+  /** The owner role is held only directly; the server checks it again on every decision. */
+  const callerIsOwner = $derived((callerDirect?.roles ?? []).some((role) => role.slug === "owner"));
+  /** A team's access is bounded by the caller's direct reason alone, not by their summed end. */
+  const callerDirectEndsAt = $derived(callerDirect?.accessEndsAt ?? undefined);
 
   // Header status chips
   const memberCount = $derived(allMembers.filter((m) => !m.isSystemSubject).length);
@@ -109,7 +124,16 @@
         : "Public · last 24h",
   );
 
+  const memberProblemMessages: ProblemCodeMessages = {
+    member_access_from_team:
+      "This member has access only through a team. To change it, stop the team's access to this site.",
+    caller_access_from_team:
+      "You have access to this site only through a team, so you cannot give access to anyone.",
+    membership_request_own: "You cannot approve your own request. Ask another member to approve it.",
+  };
+
   // --- UI state ---
+
   let showCreateInvite = $state(false);
   let errorMessage = $state<string | null>(null);
   let successMessage = $state<{ text: string; wash: boolean } | null>(null);
@@ -119,6 +143,7 @@
   let isSavingMember = $state(false);
   let memberSaveError = $state<string | null>(null);
   let isRevokingInvite = $state<string | null>(null);
+  let stoppingTeamId = $state<string | null>(null);
 
   // Visible members — system subjects (e.g. Public) are managed via the
   // public access card above, not as removable/editable cards.
@@ -171,9 +196,29 @@
       expandedMember = null;
       clearMessages();
     } catch (e) {
-      memberSaveError = describeSubmitError(e, "Failed to update member. Try again.");
+      memberSaveError = describeSubmitError(e, "Failed to update member. Try again.", memberProblemMessages);
     } finally {
       isSavingMember = false;
+    }
+  }
+
+  async function handleStopTeamAccess(teamId: string) {
+    stoppingTeamId = teamId;
+    errorMessage = null;
+    try {
+      await stopTeamAccess(teamId);
+      successMessage = { text: "Access of the team stopped.", wash: false };
+      clearMessages();
+    } catch (err) {
+      errorMessage = describeRemoteError(err, "Failed to stop the access of the team. Try again.", {
+        missing: () => "This team no longer has access.",
+        forbiddenReason: true,
+        serverError: false,
+      });
+      if (errorStatus(err) === 404) void teamAccessQuery?.refresh();
+      clearMessages();
+    } finally {
+      stoppingTeamId = null;
     }
   }
 
@@ -184,7 +229,7 @@
       successMessage = { text: "Membership request approved.", wash: true };
       clearMessages();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to approve request. Try again.");
+      errorMessage = describeSubmitError(err, "Failed to approve request. Try again.", memberProblemMessages);
       clearMessages();
     }
   }
@@ -312,7 +357,7 @@
                   successMessage = { text: "Member removed successfully.", wash: false };
                   clearMessages();
                 } catch (e) {
-                  errorMessage = describeSubmitError(e, "Failed to remove member. Try again.");
+                  errorMessage = describeSubmitError(e, "Failed to remove member. Try again.", memberProblemMessages);
                   clearMessages();
                 }
               }}
@@ -371,6 +416,27 @@
       {/if}
 
     </div>
+  {/if}
+
+  {#if canListMembers}
+    <TeamAccessList
+      teams={teamsWithAccess}
+      canStop={canEditMemberRoles}
+      canDecide={canEditMemberRoles && callerIsOwner}
+      roles={rolesQuery?.current}
+      rolesFailed={rolesQuery?.current == null && !!rolesQuery?.error}
+      onRetryRoles={() => void rolesQuery?.refresh()}
+      limitForced={page.data.limitTo24Hours === true}
+      callerAccessEndsAt={callerDirectEndsAt}
+      linkedTeamId={page.url.searchParams.get("team")}
+      stoppingId={stoppingTeamId}
+      onStop={handleStopTeamAccess}
+      onStale={() => void teamAccessQuery?.refresh()}
+      onSuccess={(text) => {
+        successMessage = { text, wash: false };
+        clearMessages();
+      }}
+    />
   {/if}
 
   <!-- Temporary Guest Links (self-gates on sharing.guest) -->

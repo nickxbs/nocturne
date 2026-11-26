@@ -8,6 +8,7 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Models.OAuth;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Docs;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Models.Authorization;
 using OpenApi.Remote.Attributes;
 
@@ -177,6 +178,18 @@ public class OAuthController : ControllerBase
         }
 
         // Check if user is authenticated
+        // The login page counts a caller with a live session as signed in and sends it straight
+        // back here, so an inactive caller is answered as a refused consent rather than sent there.
+        if (HttpContext.IsAuthenticated() && await HttpContext.IsCallerInactiveAsync(HttpContext.RequestAborted))
+        {
+            return RedirectWithError(
+                redirect_uri,
+                "access_denied",
+                "The user denied the authorization request.",
+                state
+            );
+        }
+
         if (!HttpContext.IsAuthenticated())
         {
             // Redirect to login, preserving the OAuth params to return to after login
@@ -210,7 +223,7 @@ public class OAuthController : ControllerBase
                     redirect_uri,
                     code_challenge,
                     state,
-                    HttpContext.InheritHistoryClamp(existingGrant.LimitTo24Hours)
+                    HttpContext.InheritOwnCredentialHistoryClamp(existingGrant.LimitTo24Hours)
                 );
             }
         }
@@ -237,6 +250,11 @@ public class OAuthController : ControllerBase
         if (!TryGetSubject(out var subjectId, out var subjectError))
         {
             return subjectError;
+        }
+
+        if (await HttpContext.IsCallerInactiveAsync(HttpContext.RequestAborted))
+        {
+            return Challenge();
         }
 
         // Find the client. Resolved before the approval decision is read: every exit from this
@@ -306,7 +324,7 @@ public class OAuthController : ControllerBase
             request.RedirectUri,
             request.CodeChallenge,
             request.State,
-            HttpContext.InheritHistoryClamp(request.LimitTo24Hours)
+            HttpContext.InheritOwnCredentialHistoryClamp(request.LimitTo24Hours)
         );
     }
 
@@ -560,6 +578,11 @@ public class OAuthController : ControllerBase
         if (!TryGetSubject(out var subjectId, out var subjectError))
         {
             return subjectError;
+        }
+
+        if (await HttpContext.IsCallerInactiveAsync(HttpContext.RequestAborted))
+        {
+            return Challenge();
         }
 
         if (string.IsNullOrEmpty(request.UserCode))
@@ -826,6 +849,10 @@ public class OAuthController : ControllerBase
     /// <param name="grantId">The ID of the grant to update.</param>
     /// <param name="request">Partial update request containing the new label and/or scopes.</param>
     /// <returns>The updated <see cref="OAuthGrantDto"/>, or <c>404</c> / <c>400</c> if the grant is not found or the scopes are invalid.</returns>
+    /// <remarks>
+    /// New scopes are bounded by <see cref="HttpContextExtensions.GrantScopeBounds"/>; 409
+    /// <c>caller_access_from_team</c> on a guest link when the caller may give nothing.
+    /// </remarks>
     [HttpPatch("grants/{grantId}")]
     [RequireInteractiveSession]
     [Consumes("application/json")]
@@ -842,13 +869,9 @@ public class OAuthController : ControllerBase
             return subjectError;
         }
 
-        if (Scope.ValidateDelegation(request.Scopes, HttpContext.GetGrantedScopes()) is { } violation)
+        if (await HttpContext.IsCallerInactiveAsync(HttpContext.RequestAborted))
         {
-            return BadRequest(new OAuthError
-            {
-                Error = "invalid_scope",
-                ErrorDescription = violation.Description,
-            });
+            return Challenge();
         }
 
         try
@@ -856,6 +879,7 @@ public class OAuthController : ControllerBase
             var updated = await _grantService.UpdateGrantAsync(
                 grantId,
                 subjectId,
+                HttpContext.GrantScopeBounds(),
                 request.Label,
                 request.Scopes
             );
@@ -879,6 +903,18 @@ public class OAuthController : ControllerBase
             {
                 Error = "invalid_scope",
                 ErrorDescription = ex.Message,
+            });
+        }
+        catch (GrantCeilingViolationException ex) when (ex.Violation.Code == CallerAccessFromTeam.Code)
+        {
+            return this.CallerAccessFromTeamProblem();
+        }
+        catch (GrantCeilingViolationException ex)
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_scope",
+                ErrorDescription = ex.Violation.Description,
             });
         }
     }
@@ -1045,7 +1081,7 @@ public class OAuthController : ControllerBase
             });
         }
 
-        var createdFromIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var createdFromIp = HttpContext.GetClientAddress();
 
         var client = await _clientService.RegisterClientAsync(
             request.SoftwareId,

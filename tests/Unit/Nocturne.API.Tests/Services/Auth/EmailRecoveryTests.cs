@@ -70,7 +70,7 @@ public class EmailRecoveryTests : IDisposable
         _tenant = new TenantContext(_tenantId, "alpha", "Alpha household", true, false);
         var jwt = new Mock<IJwtService>();
         jwt.Setup(j => j.GenerateRefreshToken()).Returns(() => Guid.NewGuid().ToString("N"));
-        _loginCodes = new LoginCodeService(jwt.Object, new Mock<IAuthAuditService>().Object);
+        _loginCodes = new LoginCodeService(jwt.Object, new Mock<IAuthAuditService>().Object, TimeProvider.System);
 
         using var seed = _db.CreateContext(Guid.Empty);
         seed.Tenants.Add(new TenantEntity { Id = _tenantId, Slug = "alpha", DisplayName = "Alpha household" });
@@ -398,11 +398,10 @@ public class EmailRecoveryTests : IDisposable
         var contexts = Contexts(tenant);
         var controller = new PasskeyController(
             new Mock<IPasskeyService>().Object,
-            new Mock<ITotpService>().Object,
+            new SignInCompletion(new Mock<ITotpService>().Object, new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System), new Mock<ISessionService>().Object, new Mock<ISubjectService>().Object, new Mock<IAuthAuditService>().Object),
             new Mock<ITrustedDeviceService>().Object,
             new Mock<IRecoveryCodeService>().Object,
-            new RecoverySession(contexts, _loginCodes, Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
-            new Mock<ISessionService>().Object,
+            new RecoverySession(contexts, _loginCodes, new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System), Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
             new Mock<ISubjectService>().Object,
             new Mock<IAuthAuditService>().Object,
             MockTenantAccessor.Create(tenant).Object,
@@ -661,10 +660,12 @@ public class EmailRecoveryTests : IDisposable
             .ThrowsAsync(new InvalidOperationException("database unavailable"));
         var contexts = Contexts(_tenantId);
         var controller = new PasskeyController(
-            new Mock<IPasskeyService>().Object, new Mock<ITotpService>().Object, new Mock<ITrustedDeviceService>().Object,
+            new Mock<IPasskeyService>().Object,
+            new SignInCompletion(new Mock<ITotpService>().Object, new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System), new Mock<ISessionService>().Object, new Mock<ISubjectService>().Object, new Mock<IAuthAuditService>().Object),
+            new Mock<ITrustedDeviceService>().Object,
             new Mock<IRecoveryCodeService>().Object,
-            new RecoverySession(failing.Object, _loginCodes, Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
-            new Mock<ISessionService>().Object, new Mock<ISubjectService>().Object, new Mock<IAuthAuditService>().Object,
+            new RecoverySession(failing.Object, _loginCodes, Mock.Of<ITenantMemberService>(), Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
+            new Mock<ISubjectService>().Object, new Mock<IAuthAuditService>().Object,
             MockTenantAccessor.Create(_tenantId).Object, new Mock<ITenantService>().Object,
             new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System), new SubjectRepository(contexts, AccountLinkRoutes.Off),
             new TenantRepository(contexts), new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), contexts,
@@ -688,10 +689,12 @@ public class EmailRecoveryTests : IDisposable
         var recoveryCodes = new Mock<IRecoveryCodeService>();
         var contexts = Contexts(_tenantId);
         var controller = new PasskeyController(
-            new Mock<IPasskeyService>().Object, new Mock<ITotpService>().Object, new Mock<ITrustedDeviceService>().Object,
+            new Mock<IPasskeyService>().Object,
+            new SignInCompletion(new Mock<ITotpService>().Object, new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System), new Mock<ISessionService>().Object, new Mock<ISubjectService>().Object, new Mock<IAuthAuditService>().Object),
+            new Mock<ITrustedDeviceService>().Object,
             recoveryCodes.Object,
-            new RecoverySession(contexts, _loginCodes, Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
-            new Mock<ISessionService>().Object, new Mock<ISubjectService>().Object, new Mock<IAuthAuditService>().Object,
+            new RecoverySession(contexts, _loginCodes, new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System), Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
+            new Mock<ISubjectService>().Object, new Mock<IAuthAuditService>().Object,
             MockTenantAccessor.Create(_tenantId).Object, new Mock<ITenantService>().Object,
             new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System), new SubjectRepository(contexts, AccountLinkRoutes.Off),
             new TenantRepository(contexts), new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), contexts,

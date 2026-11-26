@@ -54,7 +54,8 @@
   import RuleBuilder from "#lib/components/alerts/RuleBuilder.svelte";
   import AutoResolveSection from "#lib/components/alerts/AutoResolveSection.svelte";
   import ChannelsSection from "#lib/components/alerts/ChannelsSection.svelte";
-  import { isNotSending } from "#lib/components/alerts/channelState.svelte.js";
+  import ChannelsNotSent from "#lib/components/alerts/ChannelsNotSent.svelte";
+  import { channelNotSentMessage } from "#lib/components/alerts/channelState.svelte.js";
   import AdvancedSection from "#lib/components/alerts/AdvancedSection.svelte";
   import ReplayPanel from "#lib/components/alerts/ReplayPanel.svelte";
   import HistoryCheck from "#lib/components/alerts/HistoryCheck.svelte";
@@ -82,6 +83,7 @@
   let deleting = $state(false);
   let testingSaved = $state(false);
   let testSent = $state(false);
+  let testNotSent = $state<string[]>([]);
   let error = $state<string | null>(null);
   let confirmingDisable = $state(false);
   let confirmingDelete = $state(false);
@@ -188,9 +190,12 @@
   async function fireSaved(): Promise<void> {
     testingSaved = true;
     testSent = false;
+    testNotSent = [];
     error = null;
     try {
-      await testFire(ruleId);
+      const answer = await testFire(ruleId);
+      const channels = ruleQuery.current?.channels ?? [];
+      testNotSent = (answer.notSent ?? []).map((entry) => channelNotSentMessage(entry, channels));
       testSent = true;
     } catch (e) {
       error = describeSubmitError(e, "Failed to send a test alert. Try again.");
@@ -358,7 +363,7 @@
     >
       <Hourglass class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
       <div>
-        <p>{holdSinceText(hold)} This rule cannot open an alert until the data comes back. After 24 hours of missing data, Nocturne closes an open alert.</p>
+        <p>{holdSinceText(hold)} This rule cannot open an alert until usable data comes back. After 24 hours with no usable data, Nocturne closes an open alert.</p>
         {#each holdFactLines(hold) as line (line)}
           <p>{line}</p>
         {/each}
@@ -619,13 +624,12 @@
             {/if}
             Send a test alert
           </Button>
-          {#if testSent}
+          {#if testSent && testNotSent.length > 0}
+            <ChannelsNotSent messages={testNotSent} />
+          {:else if testSent}
             <p class="flex items-center gap-1.5 text-sm text-success" role="status">
               <Check class="size-4" aria-hidden="true" />
               Test alert sent. Make sure that it arrived.
-              {#if editor.channels.some(isNotSending)}
-                Channels that do not send did not get it.
-              {/if}
             </p>
           {:else if isDirty && !loading}
             <p class="text-sm text-muted-foreground">

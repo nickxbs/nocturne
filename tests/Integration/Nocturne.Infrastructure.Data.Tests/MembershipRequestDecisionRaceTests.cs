@@ -31,7 +31,7 @@ public class MembershipRequestDecisionRaceTests
     public async Task A_deny_made_while_an_approval_holds_the_request_is_refused_and_the_approval_stands()
     {
         var seed = await SeedAsync();
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
         await using var approving = await ContextAsync(provider, seed.Tenant);
         await using var denying = await ContextAsync(provider, seed.Tenant);
         var approvingUnit = DbUnitOfWork.Own(approving);
@@ -47,16 +47,16 @@ public class MembershipRequestDecisionRaceTests
             locked.SetResult();
             await release.Task;
         });
-        await locked.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await locked.Task.WaitAsync(Eventually.DefaultPatience);
 
         var deny = new TenantMembershipRepository(DbUnitOfWork.Own(denying), AccountLinkRoutes.Off)
             .DecideRequestAsync(seed.Tenant, seed.Request, Decision(MembershipRequestRecord.Denied, null), CancellationToken.None);
         await PostgresLockWaits.UntilBlockedAsync(_fx.AppConnectionString, deny);
 
         release.SetResult();
-        await approval.WaitAsync(TimeSpan.FromSeconds(30));
+        await approval.WaitAsync(Eventually.DefaultPatience);
 
-        (await deny.WaitAsync(TimeSpan.FromSeconds(30))).Should().BeFalse("the approval committed first, so the request is no longer pending");
+        (await deny.WaitAsync(Eventually.DefaultPatience)).Should().BeFalse("the approval committed first, so the request is no longer pending");
         await using var read = await ContextAsync(provider, seed.Tenant);
         (await read.MembershipRequests.SingleAsync(r => r.Id == seed.Request)).Status.Should().Be(MembershipRequestRecord.Approved);
         (await read.TenantMembers.AnyAsync(m => m.SubjectId == seed.Subject)).Should().BeTrue();
@@ -66,7 +66,7 @@ public class MembershipRequestDecisionRaceTests
     public async Task An_approval_made_while_a_deny_holds_the_request_adds_no_member_and_the_deny_stands()
     {
         var seed = await SeedAsync();
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
         await using var denying = await ContextAsync(provider, seed.Tenant);
         await using var approving = await ContextAsync(provider, seed.Tenant);
         var denyingUnit = DbUnitOfWork.Own(denying);
@@ -81,7 +81,7 @@ public class MembershipRequestDecisionRaceTests
             locked.SetResult();
             await release.Task;
         });
-        await locked.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await locked.Task.WaitAsync(Eventually.DefaultPatience);
 
         var members = new TenantMembershipRepository(approvingUnit, AccountLinkRoutes.Off);
         var approval = approvingUnit.CommitAsync(async token =>
@@ -96,9 +96,9 @@ public class MembershipRequestDecisionRaceTests
         await PostgresLockWaits.UntilBlockedAsync(_fx.AppConnectionString, approval);
 
         release.SetResult();
-        await deny.WaitAsync(TimeSpan.FromSeconds(30));
+        await deny.WaitAsync(Eventually.DefaultPatience);
 
-        (await approval.WaitAsync(TimeSpan.FromSeconds(30))).Should().BeFalse("the deny committed first, so the request is no longer pending");
+        (await approval.WaitAsync(Eventually.DefaultPatience)).Should().BeFalse("the deny committed first, so the request is no longer pending");
         await using var read = await ContextAsync(provider, seed.Tenant);
         (await read.MembershipRequests.SingleAsync(r => r.Id == seed.Request)).Status.Should().Be(MembershipRequestRecord.Denied);
         (await read.TenantMembers.AnyAsync(m => m.SubjectId == seed.Subject)).Should().BeFalse();
@@ -108,15 +108,6 @@ public class MembershipRequestDecisionRaceTests
         new(status, Guid.CreateVersion7(), Now, role is { } id ? [id] : null);
 
     private sealed record Seed(Guid Tenant, Guid Subject, Guid Role, Guid Request);
-
-    private ServiceProvider BuildProvider()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddHttpContextAccessor();
-        services.AddPostgreSqlInfrastructure(_fx.AppConnectionString, configuration: null);
-        return services.BuildServiceProvider();
-    }
 
     private static async Task<NocturneDbContext> ContextAsync(ServiceProvider provider, Guid tenantId)
     {
@@ -140,7 +131,7 @@ public class MembershipRequestDecisionRaceTests
             await cmd.ExecuteNonQueryAsync();
         }
 
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
         await using var db = await ContextAsync(provider, tenant);
         var subject = new SubjectEntity { Id = Guid.CreateVersion7(), Name = "Asker" };
         var role = new TenantRoleEntity

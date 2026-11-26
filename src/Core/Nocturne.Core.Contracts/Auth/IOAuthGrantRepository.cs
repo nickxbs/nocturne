@@ -22,7 +22,8 @@ public interface IOAuthGrantRepository
     /// and that authenticates at <paramref name="now"/>, with its subject's membership of that
     /// tenant read in the same statement; null when there is none. A grant is live when it is not
     /// revoked and either open-ended or short of its expiry; the expiry instant itself does not
-    /// authenticate.
+    /// authenticate. It authenticates only while its subject is active, so a deactivated subject's
+    /// grant is refused as a revoked one is.
     /// </summary>
     /// <remarks>
     /// The grant's own tenant is matched as well as pinned, so the tenant a grant authorizes is
@@ -52,7 +53,10 @@ public interface IOAuthGrantRepository
     /// <summary>The grant with <paramref name="grantId"/>, in any state.</summary>
     Task<OAuthGrantRecord?> GetAsync(Guid grantId, CancellationToken ct);
 
-    /// <summary>The unrevoked grant of <paramref name="subjectId"/> for client <paramref name="clientEntityId"/>.</summary>
+    /// <summary>
+    /// The unrevoked app grant of <paramref name="subjectId"/> for client <paramref name="clientEntityId"/>:
+    /// the one grant a consent merges into, which a unique index allows a subject at most one of.
+    /// </summary>
     Task<OAuthGrantRecord?> FindActiveAsync(Guid clientEntityId, Guid subjectId, CancellationToken ct);
 
     /// <summary>The unrevoked grants of <paramref name="subjectId"/>, of every type, newest first.</summary>
@@ -111,18 +115,6 @@ public interface IOAuthGrantRepository
         Guid createdBySubjectId, DateTime now, CancellationToken ct);
 
     /// <summary>
-    /// Lowers to <paramref name="notAfter"/> the expiry of every guest link and device credential
-    /// <paramref name="createdBySubjectId"/> made that is live at <paramref name="now"/> and expires
-    /// later or never, and stages a <c>guest_link_capped</c> or <c>device_credential_capped</c> audit row
-    /// for each. A grant that expires sooner is left alone, and so is one whose revocation is already
-    /// staged on the unit. Stages on the caller's unit of work and does not save.
-    /// </summary>
-    /// <returns>The grants it lowered, for the caller to evict their sessions once the unit commits.</returns>
-    /// <exception cref="InvalidOperationException">The repository is not over a unit of work.</exception>
-    Task<IReadOnlyList<OAuthGrantRecord>> CapGrantsCreatedByAsync(
-        Guid createdBySubjectId, DateTime notAfter, DateTime now, CancellationToken ct);
-
-    /// <summary>
     /// Removes the expiry and the maker's stamp of device credential <paramref name="grantId"/>, an
     /// unrevoked direct grant a member made for the tenant's device subject, and stages a
     /// <c>device_credential_kept</c> audit row naming that member. With the stamp gone no later end
@@ -168,6 +160,44 @@ public interface IOAuthGrantRepository
     Task<OAuthGrantRecord?> UpdateAsync(Guid grantId, OAuthGrantEdit edit, CancellationToken ct);
 
     /// <summary>
+    /// Takes the transaction-scoped lock that serialises the consents of <paramref name="subjectId"/> to
+    /// client <paramref name="clientEntityId"/> on this tenant, so a consent that waits on it finds the
+    /// grant the one ahead of it wrote. Then it holds the subject's row <c>FOR KEY SHARE</c> and takes
+    /// the subject's membership lock, which the removal of the membership holds while it reads the
+    /// grants it revokes. All three are held to the commit of the caller's unit of work.
+    /// </summary>
+    /// <returns>
+    /// Whether the subject holds a membership of this tenant, read under the membership lock: a
+    /// removal that committed first leaves none, and one that follows waits for this unit's commit and
+    /// revokes the grant it writes, so a subject with no membership of a tenant holds no grant on it.
+    /// </returns>
+    /// <remarks>
+    /// The subject row comes before the membership lock because account deletion and
+    /// <c>RemoveMembershipsOfSubjectAsync</c> lock that row <c>FOR UPDATE</c> and then wait for the
+    /// membership locks, while the grant's insert needs the row <c>FOR KEY SHARE</c> through its
+    /// foreign key: taking it later would let a consent and a deletion each wait for what the other
+    /// holds.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">The repository is not over a unit of work, or the unit has no transaction open.</exception>
+    Task<bool> LockConsentAsync(Guid clientEntityId, Guid subjectId, CancellationToken ct);
+
+    /// <summary>
+    /// Merges a consent into grant <paramref name="grantId"/> while it is unrevoked: the grant's row is
+    /// held against a revocation and an edit of its scopes until the unit commits, and the scopes of
+    /// <paramref name="scopes"/> join the ones the row holds once it is held. Writes nothing when the
+    /// grant is revoked or gone.
+    /// </summary>
+    /// <param name="grantId">The grant to merge into.</param>
+    /// <param name="scopes">The scopes consented to, added to the grant's.</param>
+    /// <param name="limitTo24Hours">The latest consent sets whether tokens read only the last 24 hours.</param>
+    /// <param name="approvedByDeviceCode">Whether a device-code approval is consenting. Once set it stays set.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The grant as merged; null when it was revoked or is not there, so nothing was written.</returns>
+    /// <exception cref="InvalidOperationException">The repository is not over a unit of work, or the unit has no transaction open.</exception>
+    Task<OAuthGrantRecord?> MergeConsentAsync(
+        Guid grantId, IEnumerable<string> scopes, bool limitTo24Hours, bool approvedByDeviceCode, CancellationToken ct);
+
+    /// <summary>
     /// Activates the guest link whose code hashes to <paramref name="codeHash"/> if it is
     /// redeemable at <paramref name="now"/>, recording where from, and returns it activated; null
     /// when no such code is redeemable.
@@ -192,5 +222,6 @@ public sealed record AuthenticatedDirectGrant(DirectGrantCredential Grant, Direc
 /// <summary>A membership as read beside the grant it bounds.</summary>
 /// <param name="Id">The membership row.</param>
 /// <param name="Access">What the membership grants on its tenant.</param>
+/// <param name="Direct">What its direct reason grants (<see cref="TenantMembershipFacts.Direct"/>).</param>
 /// <param name="LastUsedAt">When the membership was last stamped as used.</param>
-public sealed record DirectGrantMembership(Guid Id, TenantMemberAccess Access, DateTime? LastUsedAt);
+public sealed record DirectGrantMembership(Guid Id, TenantMemberAccess Access, TenantMemberAccess? Direct, DateTime? LastUsedAt);

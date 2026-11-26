@@ -343,6 +343,7 @@ public class TotalIobAgreementTests
             Mock.Of<ISleepService>(),
             Mock.Of<ITrackerRepository>(),
             Mock.Of<IReservoirEstimationService>(),
+            Mock.Of<Nocturne.Core.Contracts.V4.Repositories.ISensorStateReportRepository>(),
             Options.Create(new AlertEvaluationOptions()));
         var enricher = new SensorContextEnricher(
             deps, new ServiceCollection().BuildServiceProvider(), new FakeTimeProvider(Reading),

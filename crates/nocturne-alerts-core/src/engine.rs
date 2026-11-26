@@ -10,13 +10,14 @@ use crate::clock_anomaly::ClockAnomalies;
 use crate::context::{SensorContext, opt_ts};
 use crate::enums::{WireEnum, wire_enum};
 use crate::eval::{
-    DEFAULT_GLUCOSE_FRESHNESS, Env, MAX_GLUCOSE_FRESHNESS_MINUTES, eval_node, eval_payload_unknown,
+    DEFAULT_GLUCOSE_FRESHNESS, Env, MAX_GLUCOSE_FRESHNESS_MINUTES, MetPoint, eval_node,
+    eval_payload_unknown, met_point,
 };
 use crate::excursion::{
     CloseReason, ExcursionTracker, TrackerRuleConfig, TrackerState, TrackerStateKind, Transition,
     TransitionType, hysteresis_window,
 };
-use crate::leaf_identity::collect_leaves;
+use crate::leaf_identity::collect_leaves_with_polarity;
 use crate::model::{ConditionKind, Node, ParseResult, parse_payload};
 use crate::next_change::next_change_at;
 use crate::paths::AUTO_RESOLVE_ROOT;
@@ -191,6 +192,11 @@ pub struct Evaluation {
     pub unknown: UnknownFacts,
     /// Each leaf evaluated alone, indexed by leaf id, when requested.
     pub leaves: Option<Vec<Truth>>,
+    /// What each true `predicted`, `eventual_glucose` and `carbs_required`
+    /// leaf of the body under an even number of `not`s met its comparison
+    /// with, by leaf id, whether or not leaves are logged
+    /// (engine-semantics.md §3).
+    pub met_by: Vec<(usize, ConditionKind, MetPoint)>,
     pub transition: Transition,
     /// This evaluation's hold reached [`HOLD_BOUND`](crate::excursion::HOLD_BOUND):
     /// once per hold (engine-semantics.md §6.4).
@@ -250,6 +256,15 @@ impl RuleOutcome {
                         value.write(&mut leaf, "value");
                         Value::Object(leaf)
                     })
+                    .collect(),
+            );
+        }
+        if !e.met_by.is_empty() {
+            o.insert(
+                "met_by".into(),
+                e.met_by
+                    .iter()
+                    .map(|&(leaf_id, kind, point)| point.to_json(leaf_id, kind))
                     .collect(),
             );
         }
@@ -338,6 +353,7 @@ pub fn evaluate_parsed_rule(
             .tracker
             .state(rule.id)
             .is_none_or(TrackerState::holds_only_a_hold);
+    let excursion_open = state.tracker.excursion_open(rule.id);
     let outcome = evaluate_body(
         rule,
         body,
@@ -345,6 +361,7 @@ pub fn evaluate_parsed_rule(
         now,
         &mut state.timers,
         first_evaluation.then_some(rule.enabled_at).flatten(),
+        excursion_open,
         log_leaves,
     );
     let mut clock_anomaly = outcome.clock_anomaly;
@@ -400,7 +417,7 @@ pub fn evaluate_parsed_rule(
     let auto_resolved = !awaiting
         && rule.auto_resolve_enabled
         && try_auto_resolve(rule, ctx, now, state, &mut clock_anomaly);
-    let next_change_at = next_change_at(rule, body, ctx, now, state);
+    let next_change_at = next_change_at(rule, body, ctx, now, state, excursion_open);
 
     RuleOutcome {
         rule_id: rule.id,
@@ -408,6 +425,7 @@ pub fn evaluate_parsed_rule(
             root: outcome.root,
             unknown: outcome.unknown,
             leaves: outcome.leaves,
+            met_by: outcome.met_by,
             transition,
             held_too_long,
             tracker: state.tracker.state(rule.id).copied(),
@@ -425,12 +443,18 @@ pub(crate) struct BodyOutcome {
     /// The facts that leave the root unknown.
     pub(crate) unknown: UnknownFacts,
     pub(crate) leaves: Option<Vec<Truth>>,
+    pub(crate) met_by: Vec<(usize, ConditionKind, MetPoint)>,
     pub(crate) clock_anomaly: ClockAnomalies,
 }
 
 /// The root truth of a body read by [`Rule::parse_body`] and, when
 /// `log_leaves`, each leaf alone. `first_evaluation_bound` is
-/// [`Env::first_evaluation_bound`].
+/// [`Env::first_evaluation_bound`] and `excursion_open`
+/// [`Env::excursion_open`].
+#[expect(
+    clippy::too_many_arguments,
+    reason = "each is one input of the evaluation the driver composes"
+)]
 pub(crate) fn evaluate_body(
     rule: &Rule,
     body: &Node,
@@ -438,25 +462,44 @@ pub(crate) fn evaluate_body(
     now: DateTime<Utc>,
     timers: &mut TimerStore,
     first_evaluation_bound: Option<DateTime<Utc>>,
+    excursion_open: bool,
     log_leaves: bool,
 ) -> BodyOutcome {
     let wire = rule.condition_type.name();
-    let mut env =
-        rule_env(rule, ctx, now, timers).with_first_evaluation_bound(first_evaluation_bound);
+    let mut env = rule_env(rule, ctx, now, timers)
+        .with_first_evaluation_bound(first_evaluation_bound)
+        .with_excursion_open(excursion_open);
     let (root, unknown) = eval_payload_unknown(body.payload(), wire, &mut env);
 
-    // Leaves evaluate alone, at the rule's root path;
+    // Leaves evaluate alone, at the rule's root path, each with its polarity
+    // in the tree so a margined leaf logs the limit the root read;
     // a leaf touches no timers.
+    let polarized = collect_leaves_with_polarity(body);
     let leaves = log_leaves.then(|| {
-        collect_leaves(body)
-            .into_iter()
-            .map(|leaf| eval_node(leaf, wire, &mut env))
+        polarized
+            .iter()
+            .map(|&(leaf, negated)| {
+                env.negated = negated;
+                eval_node(leaf, wire, &mut env)
+            })
             .collect()
     });
+    // A leaf under an odd number of `not`s that is true argues against the
+    // rule, so it never names what the rule met.
+    env.negated = false;
+    let met_by = polarized
+        .iter()
+        .enumerate()
+        .filter(|&(_, &(_, negated))| !negated)
+        .filter_map(|(leaf_id, &(leaf, _))| {
+            met_point(leaf.payload(), &mut env).map(|point| (leaf_id, leaf.kind(), point))
+        })
+        .collect();
     BodyOutcome {
         root,
         unknown,
         leaves,
+        met_by,
         clock_anomaly: env.into_clock_anomaly(),
     }
 }

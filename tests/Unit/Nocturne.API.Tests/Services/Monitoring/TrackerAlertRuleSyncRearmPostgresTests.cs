@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Contracts.Alerts;
@@ -14,7 +15,6 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -73,11 +73,6 @@ public class TrackerAlertRuleSyncRearmPostgresTests(TrackerAlertRuleSyncRearmPos
         }
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
-    }
-
     private sealed record Setup(
         TrackerAlertRuleSyncService Sync,
         Mock<IAlertReferenceService> References,
@@ -87,11 +82,7 @@ public class TrackerAlertRuleSyncRearmPostgresTests(TrackerAlertRuleSyncRearmPos
         Failure Failure);
 
     private NocturneDbContext Context(Guid tenant, Failure failure) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString, npgsql => npgsql.EnableRetryOnFailure(
-                maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(1), errorCodesToAdd: null))
-            .AddInterceptors(new TenantConnectionInterceptor(), failure)
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, npgsql: TestContexts.RetryingBriefly, interceptors: [failure]);
 
     /// <summary>A definition with one 24h threshold, synced to its managed rule, which holds re-arm.</summary>
     private async Task<Setup> CreateAsync()
@@ -144,10 +135,10 @@ public class TrackerAlertRuleSyncRearmPostgresTests(TrackerAlertRuleSyncRearmPos
             .Setup(r => r.FindReferencingRulesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<Guid>());
         var sync = new TrackerAlertRuleSyncService(
-            new Factory(() => Context(tenant, failure)),
+            new SuppliedContextFactory(() => Context(tenant, failure)),
             classifier.Object,
             references.Object,
-            new AlertRuleRearm(new AlertRuleEvaluationGate()),
+            Rearms.Unannounced(),
             new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>(), Mock.Of<IUnevaluableRuleNotice>()),
             TimeProvider.System,
             NullLogger<TrackerAlertRuleSyncService>.Instance, AccountLinkRoutes.Off);

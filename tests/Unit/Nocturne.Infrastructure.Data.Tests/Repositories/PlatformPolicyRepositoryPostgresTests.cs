@@ -26,16 +26,10 @@ public class PlatformPolicyRepositoryPostgresTests(PlatformPolicyRepositoryPostg
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(string connectionString) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(connectionString)
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options));
-    }
+    private NocturneDbContext Context() =>
+        TestContexts.Context(database.AppConnectionString);
 
-    private PlatformPolicyRepository Policies() => new(new Factory(database.AppConnectionString), TimeProvider.System);
+    private PlatformPolicyRepository Policies() => new(new SuppliedContextFactory(Context), TimeProvider.System);
 
     [Theory]
     [InlineData(false, false)]

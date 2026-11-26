@@ -27,14 +27,23 @@ public class MemberInviteService : IMemberInviteService
     /// <summary>Longest lifetime an invite token may be minted with.</summary>
     private const int MaxExpiresInDays = 90;
 
+    private static readonly AcceptMemberInviteResult Revoked =
+        new(false, "revoked", "This invite has been revoked.");
+
     private static readonly AcceptMemberInviteResult Exhausted =
         new(false, "exhausted", "This invite has reached its maximum uses.");
 
     private static readonly AcceptMemberInviteResult AlreadyMember =
         new(false, "already_member", "You are already a member of this tenant.");
 
+    private static readonly AcceptMemberInviteResult OwnInvite =
+        new(false, SelfAdmission.OwnInviteCode, SelfAdmission.OwnInviteDetail);
+
     private static readonly AcceptMemberInviteResult AccessEnded =
         new(false, "access_ended", "The access this invite gives has already ended.");
+
+    private static readonly AcceptMemberInviteResult AccepterGone =
+        new(false, "not_found", "Your account no longer exists.");
 
     private readonly ITenantMembershipRepository _members;
     private readonly IMemberInviteRepository _invites;
@@ -47,6 +56,7 @@ public class MemberInviteService : IMemberInviteService
     private readonly ILogger<MemberInviteService> _logger;
     private readonly IAccountLinkRoute _linkRoute;
     private readonly GrantRevocationService _grantRevocation;
+    private readonly TeamStaffAnnouncer _teamStaff;
 
     /// <param name="members">For the roles and memberships an invite names.</param>
     /// <param name="invites">The stored invites.</param>
@@ -58,6 +68,7 @@ public class MemberInviteService : IMemberInviteService
     /// <param name="timeProvider">The clock for an invite's creation, expiry and revocation.</param>
     /// <param name="logger">Logs the audit line for each invite created, accepted and revoked.</param>
     /// <param name="grantRevocation">Revokes the grants of an ended membership an accepted invite replaces.</param>
+    /// <param name="teamStaff">Recounts the team staff who wait at the site once an accepted invite makes its owner.</param>
     public MemberInviteService(
         ITenantMembershipRepository members,
         IMemberInviteRepository invites,
@@ -69,7 +80,8 @@ public class MemberInviteService : IMemberInviteService
         TimeProvider timeProvider,
         ILogger<MemberInviteService> logger,
         IAccountLinkRoute linkRoute,
-        GrantRevocationService grantRevocation)
+        GrantRevocationService grantRevocation,
+        TeamStaffAnnouncer teamStaff)
     {
         _members = members ?? throw new ArgumentNullException(nameof(members));
         _invites = invites ?? throw new ArgumentNullException(nameof(invites));
@@ -82,6 +94,7 @@ public class MemberInviteService : IMemberInviteService
         _logger = logger;
         _linkRoute = linkRoute;
         _grantRevocation = grantRevocation ?? throw new ArgumentNullException(nameof(grantRevocation));
+        _teamStaff = teamStaff;
     }
 
     /// <inheritdoc />
@@ -176,7 +189,12 @@ public class MemberInviteService : IMemberInviteService
         if (invite == null)
             return null;
 
-        return MapToInfo(invite, _time.GetUtcNow().UtcDateTime, await LoadRolesAsync(tenantId, invite.RoleIds));
+        var now = _time.GetUtcNow().UtcDateTime;
+        return MapToInfo(
+            invite,
+            now,
+            await LoadRolesAsync(tenantId, invite.RoleIds),
+            await _members.IsMemberAsync(tenantId, invite.CreatedBySubjectId, now, CancellationToken.None));
     }
 
     /// <inheritdoc />
@@ -200,13 +218,14 @@ public class MemberInviteService : IMemberInviteService
         if (invite.IsExpiredAt(now))
             return new AcceptMemberInviteResult(false, "expired", "This invite has expired.");
 
-        if (invite.IsRevoked)
-            return new AcceptMemberInviteResult(false, "revoked", "This invite has been revoked.");
+        if (invite.IsRevoked
+            || !await _members.IsMemberAsync(invite.TenantId, invite.CreatedBySubjectId, now, CancellationToken.None))
+            return Revoked;
 
         if (invite.IsExhausted)
             return Exhausted;
 
-        if (await _members.IsMemberAsync(invite.TenantId, acceptingSubjectId, now, CancellationToken.None))
+        if (await _members.IsDirectMemberAsync(invite.TenantId, acceptingSubjectId, now, CancellationToken.None))
             return AlreadyMember;
 
         if (invite.AccessEndsAt is { } accessEndsAt && MembershipLiveness.HasEnded(accessEndsAt, now))
@@ -223,10 +242,9 @@ public class MemberInviteService : IMemberInviteService
         if (validRoleIds.Count == 0 && (invite.DirectPermissions == null || invite.DirectPermissions.Count == 0))
             return new AcceptMemberInviteResult(false, "no_permissions", "All roles from this invite have been deleted and no direct permissions are assigned.");
 
-        // The IsExhausted check above is a fast path on a value read earlier in the request; two
-        // concurrent accepts of a single-use invite would both pass it and both join. Only a row
-        // still under its cap matches the claim, so the loser claims nothing and is refused. The
-        // claim shares the membership's transaction, so a membership that fails to save gives the use back.
+        // The checks above read earlier in the request; the claim decides, see
+        // IMemberInviteRepository.TryClaimUseAsync. It shares the membership's transaction, so a
+        // membership that fails to save gives the use back.
         AcceptMemberInviteResult? refusal = null;
         IReadOnlyList<OAuthGrantRecord> revoked = [];
         await using (var unit = await DbUnitOfWork.OpenForTenantAsync(_contexts, invite.TenantId))
@@ -237,11 +255,19 @@ public class MemberInviteService : IMemberInviteService
             {
                 await unit.CommitAsync(async token =>
                 {
+                    await TenantMembershipRepository.LockOwnerChangeAsync(unit, invite.TenantId, acceptingSubjectId, token);
+                    if (await new SubjectRepository(unit, _linkRoute, _time).GetAsync(acceptingSubjectId, token) is null)
+                        throw new RefusedCommitException<AcceptMemberInviteResult>(AccepterGone);
+
                     revoked = await MembershipRemoval.ReplaceEndedAsync(
                             unit, members, _grantRevocation, invite.TenantId, acceptingSubjectId, now, token)
                         ?? throw new RefusedCommitException<AcceptMemberInviteResult>(AlreadyMember);
 
-                    if (!await members.AddMemberAsync(
+                    if (invite.CreatedBySubjectId == acceptingSubjectId
+                        && await members.FindMemberAsync(invite.TenantId, acceptingSubjectId, token) is { DirectReason: null })
+                        throw new RefusedCommitException<AcceptMemberInviteResult>(OwnInvite);
+
+                    if (!await members.AddDirectMemberAsync(
                             new NewTenantMember(
                                 invite.TenantId,
                                 acceptingSubjectId,
@@ -252,13 +278,18 @@ public class MemberInviteService : IMemberInviteService
                                 CreatedFromInviteId: invite.Id,
                                 MadeBy: MembershipMadeBy.Member,
                                 AccessEndsAt: invite.AccessEndsAt) { How = MembershipJoinHow.Invite, By = invite.CreatedBySubjectId },
+                            now,
                             token))
                         throw new RefusedCommitException<AcceptMemberInviteResult>(AlreadyMember);
 
-                    if (!await invites.TryClaimUseAsync(invite.Id, token))
-                        throw new RefusedCommitException<AcceptMemberInviteResult>(Exhausted);
+                    var claim = await invites.TryClaimUseAsync(invite.Id, now, token);
+                    if (claim != MemberInviteClaim.Claimed)
+                        throw new RefusedCommitException<AcceptMemberInviteResult>(
+                            claim == MemberInviteClaim.Exhausted ? Exhausted : Revoked);
 
                     await unit.Context.SaveChangesAsync(token);
+                    revoked = [.. revoked, .. await TeamReasonWrites.SyncOwnerChangeAsync(
+                        unit, _grantRevocation, invite.TenantId, acceptingSubjectId, now, token)];
                 });
             }
             catch (RefusedCommitException<AcceptMemberInviteResult> refused)
@@ -275,6 +306,7 @@ public class MemberInviteService : IMemberInviteService
             return refusal;
 
         _grantRevocation.EvictSessions(revoked);
+        await _teamStaff.RecountOwnerChangeAsync(invite.TenantId, acceptingSubjectId);
 
         var member = await _members.FindMemberAsync(invite.TenantId, acceptingSubjectId, CancellationToken.None)
             ?? throw new InvalidOperationException($"Subject {acceptingSubjectId} did not become a member of tenant {invite.TenantId}.");
@@ -293,7 +325,9 @@ public class MemberInviteService : IMemberInviteService
 
         var roles = await LoadRolesAsync(tenantId, invites.SelectMany(i => i.RoleIds).Distinct().ToList());
         var now = _time.GetUtcNow().UtcDateTime;
-        return invites.Select(i => MapToInfo(i, now, roles)).ToList();
+        var makersInForce = await _invites.GetMakersInForceAsync(tenantId, now, CancellationToken.None);
+
+        return invites.Select(i => MapToInfo(i, now, roles, makersInForce.Contains(i.CreatedBySubjectId))).ToList();
     }
 
     /// <inheritdoc />
@@ -326,7 +360,7 @@ public class MemberInviteService : IMemberInviteService
     }
 
     private static MemberInviteInfo MapToInfo(
-        MemberInviteRecord invite, DateTime now, IReadOnlyDictionary<Guid, TenantRoleRecord> roles)
+        MemberInviteRecord invite, DateTime now, IReadOnlyDictionary<Guid, TenantRoleRecord> roles, bool makerInForce)
     {
         // A deleted role grants nothing on acceptance, so it is not described either.
         var grantedRoles = invite.RoleIds
@@ -351,9 +385,9 @@ public class MemberInviteService : IMemberInviteService
             invite.ExpiresAt,
             invite.MaxUses,
             invite.UseCount,
-            invite.IsValidAt(now),
+            invite.IsValidAt(now) && makerInForce,
             invite.IsExpiredAt(now),
-            invite.IsRevoked,
+            invite.IsRevoked || !makerInForce,
             invite.CreatedAt,
             invite.Uses
                 .Select(u => new InviteUsageInfo(u.SubjectId, u.SubjectName, u.JoinedAt))

@@ -11,6 +11,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.DevOnly;
 using Nocturne.API.Services.Docs;
@@ -85,6 +86,9 @@ builder.WebHost.ConfigureKestrel(options =>
     options.Limits.MaxRequestBodySize = 100 * 1024 * 1024; // 100 MB
 });
 
+builder.Services.Configure<HostOptions>(options =>
+    options.ShutdownTimeout = TimeSpan.FromSeconds(ApplicationConstants.Shutdown.HostTimeoutSeconds));
+
 builder.AddServiceDefaults();
 builder.Services.AddRequestPathRedactor<CredentialPathRedactor>();
 
@@ -109,9 +113,7 @@ var postgreSqlOptions = PostgreSqlConfiguration.ResolveForEnvironment(
     builder.Configuration,
     builder.Environment.IsDevelopment());
 
-// Registered whether or not the pool is built, so the resolution above is observable from a test
-// host, which always runs as Testing and so never reaches the registration below.
-builder.Services.AddSingleton(postgreSqlOptions);
+builder.Services.AddPostgreSqlConfiguration(postgreSqlOptions);
 
 if (!isTesting)
 {
@@ -127,6 +129,11 @@ else
 
 builder.Services.AddDiscrepancyAnalysisRepository();
 builder.Services.AddAlertRepositories();
+builder.Services.AddV4Repositories();
+builder.Services.AddHealthRepositories();
+builder.Services.AddFoodRepositories();
+builder.Services.AddNotificationAndEventRepositories();
+builder.Services.AddAuditRepositories();
 
 builder.Services.AddDataProtection()
     // Never change this string. It is part of the root purpose for every payload, and TOTP secrets
@@ -396,6 +403,7 @@ app.UseWhen(
     branch => branch.UseCors());
 app.UseStaticFiles();
 app.UseNocturneForwardedHeaders(builder.Configuration);
+app.UseMiddleware<ClientAddressMiddleware>();
 
 // Response caching must run after UseForwardedHeaders so its cache key uses the per-tenant
 // Host (rewritten from X-Forwarded-Host) rather than the constant gateway destination host
@@ -636,7 +644,13 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
         // Apply the tenant-table storage parameters; see TenantTableStorageParameters for why.
         await DatabaseInitializationExtensions.ReconcileTenantTableStorageParametersAsync(migratorConnectionString, logger);
 
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migratorConnectionString, logger);
+        var startedAt = scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime;
+        var grantRevocation = scope.ServiceProvider.GetRequiredService<GrantRevocationService>();
+        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(
+            migratorConnectionString,
+            startedAt,
+            (unit, changes, token) => TeamReasonWrites.ApplyAsync(unit, changes, grantRevocation, startedAt, token),
+            logger);
 
         // Background job records left Pending/Running by a previous process are orphans —
         // the detached tasks died with it. Mark them Interrupted so polls report the truth.
@@ -654,6 +668,10 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
     // migrations (it depends on the widened share_token column) and before the server accepts
     // requests, so no request can read a column in the old format.
     await CredentialAtRestStartupTask.RunAsync(app.Services);
+
+    app.Lifetime.ApplicationStarted.Register(() => _ = app.Services
+        .GetRequiredService<Nocturne.API.Services.V4.RawMmolProfileNotifier>()
+        .NotifyAllAsync(app.Lifetime.ApplicationStopping));
 }
 else if (isNSwagGeneration)
 {

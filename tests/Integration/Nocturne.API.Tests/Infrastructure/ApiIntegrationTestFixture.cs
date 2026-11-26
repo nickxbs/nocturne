@@ -58,6 +58,21 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         public string? ServiceUrl => null;
     }
 
+    /// <summary>
+    /// The <see cref="IAccountLinkRoute"/> the API reads, which answers as its link delivery does
+    /// unless a test sets <see cref="Configured"/>. Only readers of the route see the override; the
+    /// delivery itself still sends nothing.
+    /// </summary>
+    public sealed class ControllableAccountLinkRoute : IAccountLinkRoute
+    {
+        internal IAccountLinkRoute? Delivery { get; set; }
+
+        /// <summary>The answer in place of the delivery's, or null for the delivery's own.</summary>
+        public bool? Configured { get; set; }
+
+        public bool IsConfigured => Configured ?? Delivery?.IsConfigured ?? false;
+    }
+
     /// <summary>The instance key the API runs with.</summary>
     public const string InstanceKey = "test-secret-for-integration-tests";
 
@@ -74,6 +89,8 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
     private TestDatabase? _database;
 
     public ControllableDemoModeService DemoModeService { get; } = new();
+
+    public ControllableAccountLinkRoute LinkRoute { get; } = new();
 
     /// <summary>
     /// The clock the API issues and validates JWTs on, and nothing else. A test shifts it to age a
@@ -177,7 +194,7 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
 
     /// <summary>
     /// Gives <paramref name="client"/> a client address of its own, signed with the instance key
-    /// as the web server signs the address it forwards (<c>ClientRateLimitKey</c>). Every request
+    /// as the web server signs the address it forwards (<c>ClientAddressResolver</c>). Every request
     /// otherwise arrives from loopback, one partition of the per-client rate limits, so the suite
     /// as a whole would exhaust a limit no single test comes near.
     /// </summary>
@@ -335,33 +352,23 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
             await cmd.ExecuteNonQueryAsync();
         }
 
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "DELETE FROM tenants WHERE id <> @id";
-            cmd.Parameters.AddWithValue("id", TenantId);
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync("DELETE FROM tenants WHERE id <> @id", ("id", TenantId));
 
         // Back to the seeded tenant as the seed left it: active, its owner and Public its only
         // members, the owner holding a passkey. Tests deactivate it, delete passkeys and add
         // members without one, and any of those leaves every later test facing the setup gate.
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                UPDATE tenants SET is_active = true WHERE id = @tenant;
-                DELETE FROM tenant_members m USING subjects s
-                WHERE m.subject_id = s.id AND m.tenant_id = @tenant
-                  AND m.subject_id <> @owner AND NOT s.is_system_subject;
-                INSERT INTO passkey_credentials (id, subject_id, credential_id, public_key, sign_count, transports, label, created_at)
-                SELECT @passkey, @owner, @credential, @credential, 0, '{}', 'integration fixture', now()
-                WHERE NOT EXISTS (SELECT 1 FROM passkey_credentials WHERE subject_id = @owner);
-                """;
-            cmd.Parameters.AddWithValue("tenant", TenantId);
-            cmd.Parameters.AddWithValue("owner", OwnerSubjectId);
-            cmd.Parameters.AddWithValue("passkey", Guid.CreateVersion7());
-            cmd.Parameters.AddWithValue("credential", Guid.NewGuid().ToByteArray());
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            """
+            UPDATE tenants SET is_active = true WHERE id = @tenant;
+            DELETE FROM tenant_members m USING subjects s
+            WHERE m.subject_id = s.id AND m.tenant_id = @tenant
+              AND m.subject_id <> @owner AND NOT s.is_system_subject;
+            INSERT INTO passkey_credentials (id, subject_id, credential_id, public_key, sign_count, transports, label, created_at)
+            SELECT @passkey, @owner, @credential, @credential, 0, '{}', 'integration fixture', now()
+            WHERE NOT EXISTS (SELECT 1 FROM passkey_credentials WHERE subject_id = @owner);
+            """,
+            ("tenant", TenantId), ("owner", OwnerSubjectId), ("passkey", Guid.CreateVersion7()),
+            ("credential", Guid.NewGuid().ToByteArray()));
 
         await ClearApiCachesAsync(Services, TenantId);
 
@@ -404,6 +411,7 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         "alert_condition_timers",
         "alert_condition_not_true",
         "alert_tracker_state",
+        "alert_evaluated_readings",
         "alert_rules",
         "dnd_windows",
         "tenant_alert_settings",
@@ -439,6 +447,7 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         "pump_snapshots",
         "uploader_snapshots",
         "device_status_extras",
+        "sensor_state_reports",
         // The devices those records are attributed to: a device one test registers would otherwise
         // show up in a later test's device reads and attributions.
         "patient_devices",
@@ -460,7 +469,8 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
     /// Teams, which belong to no tenant and outlive one: a team one test makes would be in the next
     /// test's list of the same subject's teams.
     /// </summary>
-    private static readonly string[] TeamTables = ["team_invites", "team_members", "teams"];
+    private static readonly string[] TeamTables =
+        ["team_site_declines", "team_site_staff", "team_tenant_access_roles", "team_tenant_access", "team_access_links", "team_invites", "team_members", "team_staff_invites", "teams"];
 
     /// <summary>The tables holding credentials, which the fixture restores its own into.</summary>
     private static readonly string[] CredentialTables =
@@ -487,6 +497,11 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
             builder.ConfigureTestServices(services =>
             {
                 services.AddSingleton<IDemoModeService>(DemoModeService);
+                services.Replace(ServiceDescriptor.Singleton<IAccountLinkRoute>(sp =>
+                {
+                    LinkRoute.Delivery = sp.GetRequiredService<IAccountLinkDelivery>();
+                    return LinkRoute;
+                }));
                 services.Replace(ServiceDescriptor.Scoped<IJwtService>(sp => new JwtService(
                     sp.GetRequiredService<IOptions<JwtOptions>>(),
                     sp.GetRequiredService<ILogger<JwtService>>(),

@@ -58,8 +58,8 @@ public class PlatformAccessController(
 
     /// <summary>
     /// Mint a platform-access grant for the given tenant slug and redirect the operator into the
-    /// tenant. Bounces through OIDC login if there is no session yet; 403s if the session is not a
-    /// platform admin.
+    /// tenant. Bounces through OIDC login if there is no session yet or its session has ended; 403s
+    /// if the session is not a platform admin.
     /// </summary>
     /// <param name="tenant">Target tenant slug.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -71,23 +71,22 @@ public class PlatformAccessController(
 
         var auth = HttpContext.GetAuthContext();
 
-        // No session yet → send the operator through nocturne OIDC login, returning here.
         if (auth is not { IsAuthenticated: true, SubjectId: not null })
-        {
-            var returnUrl = $"/api/auth/platform-access?tenant={Uri.EscapeDataString(tenant)}";
-            return Redirect($"/api/auth/oidc/login?returnUrl={Uri.EscapeDataString(returnUrl)}");
-        }
+            return SignInFirst(tenant);
 
         if (!auth.IsPlatformAdmin)
         {
             await authAudit.LogAsync(AuthAuditEventType.PlatformAdminTenantAccess, auth.SubjectId, success: false,
-                ipAddress: GetClientIp(), userAgent: GetUserAgent(),
+                ipAddress: HttpContext.GetClientAddress(), userAgent: GetUserAgent(),
                 errorMessage: "not_platform_admin",
                 detailsJson: JsonSerializer.Serialize(new { slug = tenant }));
             logger.LogWarning("Subject {SubjectId} attempted platform access to '{Slug}' without platform_admin",
                 auth.SubjectId, tenant);
             return Problem(detail: "Platform access requires a platform administrator session.", statusCode: StatusCodes.Status403Forbidden, title: "Forbidden");
         }
+
+        if (await HttpContext.IsCallerSubjectInactiveAsync(ct))
+            return SignInFirst(tenant);
 
         // The tenants table is not RLS-scoped, so this resolves any tenant by slug.
         var target = await tenants.FindBySlugAsync(tenant, ct);
@@ -129,7 +128,7 @@ public class PlatformAccessController(
         });
 
         await authAudit.LogAsync(AuthAuditEventType.PlatformAdminTenantAccess, auth.SubjectId, success: true,
-            ipAddress: GetClientIp(), userAgent: GetUserAgent(),
+            ipAddress: HttpContext.GetClientAddress(), userAgent: GetUserAgent(),
             detailsJson: JsonSerializer.Serialize(new { slug = target.Slug }),
             tenantId: target.Id);
 
@@ -141,7 +140,15 @@ public class PlatformAccessController(
             $"{Request.PublicScheme()}://{target.Slug}.{baseDomainOptions.Value.BaseDomain}/");
     }
 
-    private string? GetClientIp() => HttpContext.Connection.RemoteIpAddress?.ToString();
-
     private string? GetUserAgent() => Request.Headers.UserAgent.FirstOrDefault();
+
+    /// <summary>
+    /// Sends the operator through nocturne OIDC login, returning here. The answer to a caller with no
+    /// session, and to one whose session has ended.
+    /// </summary>
+    private RedirectResult SignInFirst(string tenant)
+    {
+        var returnUrl = $"/api/auth/platform-access?tenant={Uri.EscapeDataString(tenant)}";
+        return Redirect($"/api/auth/oidc/login?returnUrl={Uri.EscapeDataString(returnUrl)}");
+    }
 }

@@ -50,46 +50,23 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     private static NocturneDbContext Context(string connectionString, Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(connectionString, tenant);
 
     private sealed record Seeded(
-        Guid Tenant, Factory Factory, TenantMembershipRepository Members, Guid Owner, Guid OwnerRole, Guid ViewerRole,
+        Guid Tenant, SuppliedContextFactory Factory, TenantMembershipRepository Members, Guid Owner, Guid OwnerRole, Guid ViewerRole,
         Guid CaretakerRole);
 
     private async Task<Seeded> SeedTenantAsync(string slug, string? connectionString = null)
     {
         var app = connectionString ?? database.AppConnectionString;
         var tenant = Guid.NewGuid();
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(Migrator(app), $"""
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
             VALUES ('{tenant}', '{slug}-{tenant:N}', 'membership-reasons', true, now(), now());
-            """, Migrator(app));
+            """);
 
-        var factory = new Factory(t => Context(app, t), tenant);
+        var factory = new SuppliedContextFactory(() => Context(app, tenant));
         var members = new TenantMembershipRepository(factory, AccountLinkRoutes.Off);
         var owner = await new SubjectRepository(factory, AccountLinkRoutes.Off).CreateAsync(new NewSubject($"{slug}-owner"), Ct);
         await members.SeedRolesAsync(tenant, Ct);
@@ -114,26 +91,10 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         memberIds.Should().NotBeEmpty();
         foreach (var memberId in memberIds)
         {
-            (await MembershipReasons.MatchesAsync(db, memberId, Ct)).Should().BeTrue($"member {memberId} is the sum of its reasons");
+            (await MembershipReasons.MatchesAsync(db, memberId, Now, Ct)).Should().BeTrue($"member {memberId} is the sum of its reasons");
             (await db.TenantMemberReasons.Where(r => r.TenantMemberId == memberId).Select(r => r.Kind).ToListAsync())
                 .Should().Equal(MembershipReasonKind.Direct);
         }
-    }
-
-    private static async Task<long> CountAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return Convert.ToInt64(await cmd.ExecuteScalarAsync());
-    }
-
-    private static async Task ExecuteAsync(string sql, string connectionString)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
     }
 
     private string Migrator(string app) =>
@@ -146,11 +107,15 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
     {
         var s = await SeedTenantAsync("writes");
         var invite = Guid.CreateVersion7();
-        await ExecuteAsync($"""
-            SELECT set_config('app.current_tenant_id', '{s.Tenant}', false);
+        await using (var conn = await NpgsqlTestCommands.OpenAsync(database.MigratorConnectionString))
+        {
+            await conn.PinTenantAsync(s.Tenant);
+            await conn.ExecuteAsync($"""
             INSERT INTO member_invites (id, tenant_id, created_by_subject_id, token_hash, limit_to_24_hours, expires_at, use_count, created_at)
             VALUES ('{invite}', '{s.Tenant}', '{s.Owner}', '{invite:N}', false, now() + interval '1 day', 0, now());
-            """, database.MigratorConnectionString);
+            """);
+        }
+
         var subject = await NewSubjectAsync(s, "writes-member");
 
         (await s.Members.AddMemberAsync(new NewTenantMember(
@@ -170,26 +135,26 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         await s.Members.SetLimitTo24HoursAsync(s.Tenant, member, false, Now, Ct);
         await AssertEveryMemberMatchesAsync(s);
 
-        (await s.Members.SetAccessEndUnlessOwnerAsync(s.Tenant, member, null, Now, Ct)).Should().Be(OwnerGuardedChange.Changed);
+        (await OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(s.Factory, AccountLinkRoutes.Off, s.Tenant, member, null, Now, Ct)).Should().Be(OwnerGuardedChange.Changed);
         await AssertEveryMemberMatchesAsync(s);
 
         (await s.Members.ReplaceRolesAsync(s.Tenant, member, [s.ViewerRole], [s.OwnerRole], Now, Ct)).Should().BeTrue();
         await AssertEveryMemberMatchesAsync(s);
 
-        (await s.Members.ReplaceRolesUnlessLastOwnerAsync(s.Tenant, member, [s.OwnerRole], [s.ViewerRole], Now, Ct))
+        (await OwnerGuardedWrites.ReplaceRolesUnlessLastOwnerAsync(s.Factory, AccountLinkRoutes.Off, s.Tenant, member, [s.OwnerRole], [s.ViewerRole], Now, Ct))
             .Should().Be(OwnerGuardedChange.Changed);
         await AssertEveryMemberMatchesAsync(s);
         (await s.Members.GetMemberAsync(s.Tenant, member, Ct))!.Roles.Select(r => r.RoleId)
             .Should().BeEquivalentTo([s.CaretakerRole, s.ViewerRole]);
 
-        (await s.Members.DeleteRoleAsync(s.Tenant, s.CaretakerRole, Ct)).Should().BeTrue();
+        (await s.Members.DeleteRoleAsync(s.Tenant, s.CaretakerRole, Now, Ct)).Should().Be(RoleChangeOutcome.Changed);
         await AssertEveryMemberMatchesAsync(s);
-        (await CountAsync(database.MigratorConnectionString,
+        (await NpgsqlTestCommands.ScalarAsync<long>(database.MigratorConnectionString,
             $"SELECT count(*) FROM tenant_member_reason_roles WHERE tenant_role_id = '{s.CaretakerRole}'")).Should().Be(0);
 
-        (await s.Members.RemoveMemberUnlessLastOwnerAsync(s.Tenant, member, MembershipEndHow.Removed, Ct)).Should().Be(OwnerGuardedChange.Changed);
+        (await OwnerGuardedWrites.RemoveMemberUnlessLastOwnerAsync(s.Factory, AccountLinkRoutes.Off, s.Tenant, member, MembershipEndHow.Removed, Now, Ct)).Outcome.Should().Be(OwnerGuardedChange.Changed);
         await AssertEveryMemberMatchesAsync(s);
-        (await CountAsync(database.MigratorConnectionString,
+        (await NpgsqlTestCommands.ScalarAsync<long>(database.MigratorConnectionString,
             $"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{member}'")).Should().Be(0);
     }
 
@@ -207,7 +172,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
 
         await AssertEveryMemberMatchesAsync(a);
         await AssertEveryMemberMatchesAsync(b);
-        (await CountAsync(database.MigratorConnectionString,
+        (await NpgsqlTestCommands.ScalarAsync<long>(database.MigratorConnectionString,
             $"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id IN ('{memberIds[0]}', '{memberIds[1]}')"))
             .Should().Be(0);
     }
@@ -228,7 +193,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
             var members = new TenantMembershipRepository(unit, AccountLinkRoutes.Off);
             await unit.CommitAsync(async token =>
             {
-                (await members.RemoveMemberUnlessLastOwnerAsync(s.Tenant, ended, MembershipEndHow.Removed, token)).Should().Be(OwnerGuardedChange.Changed);
+                (await members.RemoveMemberUnlessLastOwnerAsync(s.Tenant, ended, MembershipEndHow.Removed, Now, token)).Outcome.Should().Be(OwnerGuardedChange.Changed);
                 await unit.Context.SaveChangesAsync(token);
                 (await members.AddMemberAsync(new NewTenantMember(s.Tenant, subject, [s.CaretakerRole], ["glucose.read"]) { How = MembershipJoinHow.Direct, By = null }, token))
                     .Should().BeTrue();
@@ -313,34 +278,41 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         await s.Members.AddMemberAsync(new NewTenantMember(s.Tenant, teamSubject, [s.ViewerRole]) { How = MembershipJoinHow.Direct, By = null }, Ct);
         var drift = await MemberIdAsync(s, driftSubject);
         var team = await MemberIdAsync(s, teamSubject);
-        await ExecuteAsync($"""
+        var (teamAccessSql, teamAccess) = TeamReasonSql.NewAccess(s.Tenant, "Clinic");
+        await NpgsqlTestCommands.ExecuteAsync(migrator, $"""
+            {teamAccessSql}
             UPDATE tenant_members SET direct_permissions = NULL, limit_to_24_hours = true WHERE id IN ('{drift}', '{team}');
             DELETE FROM tenant_member_roles WHERE tenant_member_id = '{drift}';
             INSERT INTO tenant_member_reasons (id, tenant_member_id, kind, source_id, limit_to_24_hours)
-            VALUES ('{Guid.CreateVersion7()}', '{team}', 'team', '{Guid.CreateVersion7()}', false);
-            """, migrator);
+            VALUES ('{Guid.CreateVersion7()}', '{team}', 'team', '{teamAccess}', false);
+            {TeamReasonSql.StaffOfMember(teamAccess, team, null, false, null)}
+            """);
         var rowsBefore = await RowsAsync(migrator);
-        var teamReasonsBefore = await CountAsync(migrator, $"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{team}'");
+        var teamReasonsBefore = await NpgsqlTestCommands.ScalarAsync<long>(
+            migrator, $"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{team}'");
 
         var logger = new RecordingLogger();
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, logger, Ct);
+        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, Now, TeamWrites.Apply(Now), logger, Ct);
 
-        (await RowsAsync(migrator)).Should().Equal(rowsBefore, "the row wins and is never written");
+        (await RowsAsync(migrator)).Where(r => !r.StartsWith(team.ToString())).Should().Equal(
+            rowsBefore.Where(r => !r.StartsWith(team.ToString())), "the row wins over a direct reason and is never written");
         await using var db = Context(app, s.Tenant);
         var bareReason = await db.TenantMemberReasons.Include(r => r.ReasonRoles).SingleAsync(r => r.TenantMemberId == bare);
         bareReason.DirectPermissions.Should().Equal("glucose.read");
         bareReason.ReasonRoles.Select(rr => rr.TenantRoleId).Should().Equal(s.ViewerRole);
-        (await MembershipReasons.MatchesAsync(db, bare, Ct)).Should().BeTrue();
+        (await MembershipReasons.MatchesAsync(db, bare, Now, Ct)).Should().BeTrue();
 
         var driftReason = await db.TenantMemberReasons.Include(r => r.ReasonRoles).SingleAsync(r => r.TenantMemberId == drift);
         driftReason.DirectPermissions.Should().BeNull();
         driftReason.LimitTo24Hours.Should().BeTrue();
         driftReason.ReasonRoles.Should().BeEmpty();
-        (await MembershipReasons.MatchesAsync(db, drift, Ct)).Should().BeTrue();
+        (await MembershipReasons.MatchesAsync(db, drift, Now, Ct)).Should().BeTrue();
 
-        (await CountAsync(migrator, $"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{team}'"))
+        (await NpgsqlTestCommands.ScalarAsync<long>(
+            migrator, $"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{team}'"))
             .Should().Be(teamReasonsBefore);
-        (await MembershipReasons.MatchesAsync(db, team, Ct)).Should().BeFalse("a member with a reason of another kind is left alone");
+        (await MembershipReasons.MatchesAsync(db, team, Now, Ct)).Should().BeTrue("a member with a reason of another kind is projected from its reasons");
+        (await db.TenantMembers.AsNoTracking().SingleAsync(m => m.Id == team)).LimitTo24Hours.Should().BeFalse();
 
         logger.Entries.Should().HaveCount(3);
         logger.Entries.Should().Contain(e => e.Level == LogLevel.Information && e.Message.Contains("Gave 1 memberships"));
@@ -353,7 +325,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
     {
         var (app, migrator) = await FreshDatabaseAsync("reasons_clean");
         var empty = new RecordingLogger();
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, empty, Ct);
+        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, Now, TeamWrites.Apply(Now), empty, Ct);
         empty.Entries.Should().BeEmpty("no table holds a row");
 
         var s = await SeedTenantAsync("clean", app);
@@ -361,7 +333,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         var reasonsBefore = await ReasonsAsync(migrator);
 
         var logger = new RecordingLogger();
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, logger, Ct);
+        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, Now, TeamWrites.Apply(Now), logger, Ct);
 
         logger.Entries.Should().BeEmpty();
         (await ReasonsAsync(migrator)).Should().Equal(reasonsBefore);
@@ -397,7 +369,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         var member = await MemberIdAsync(s, subject);
         var clinician = (await s.Members.FindRoleIdBySlugAsync(s.Tenant, RoleSeeds.Clinician, Ct))!.Value;
 
-        await ExecuteAsync(stale switch
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, stale switch
         {
             StaleWrite.LostRoleThenLimit or StaleWrite.LostRoleThenEnd =>
                 $"DELETE FROM tenant_member_roles WHERE tenant_member_id = '{member}' AND tenant_role_id = '{s.ViewerRole}'",
@@ -406,10 +378,10 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
             StaleWrite.GainedLimitThenPermissions =>
                 $"UPDATE tenant_members SET limit_to_24_hours = true WHERE id = '{member}'",
             _ => $"UPDATE tenant_members SET access_ends_at = '{rowEnd:O}' WHERE id = '{member}'",
-        }, database.MigratorConnectionString);
+        });
 
         await using (var before = await s.Factory.CreateForTenantAsync(s.Tenant))
-            (await MembershipReasons.MatchesAsync(before, member, Ct)).Should().BeFalse("the row has fallen out of step");
+            (await MembershipReasons.MatchesAsync(before, member, Now, Ct)).Should().BeFalse("the row has fallen out of step");
         var auditBefore = await AuditIdsAsync(s, subject);
 
         string[] expected;
@@ -420,7 +392,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
                 expected = [AuthAuditEventType.HistoryLimitChanged];
                 break;
             case StaleWrite.LostRoleThenEnd:
-                (await s.Members.SetAccessEndUnlessOwnerAsync(s.Tenant, member, Now.AddDays(10), Now, Ct)).Should().Be(OwnerGuardedChange.Changed);
+                (await OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(s.Factory, AccountLinkRoutes.Off, s.Tenant, member, Now.AddDays(10), Now, Ct)).Should().Be(OwnerGuardedChange.Changed);
                 expected = [AuthAuditEventType.AccessEndChanged];
                 break;
             case StaleWrite.LostPermissionThenRoles:
@@ -432,7 +404,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
                 expected = [AuthAuditEventType.RoleAssigned];
                 break;
             default:
-                (await s.Members.DeleteRoleAsync(s.Tenant, s.CaretakerRole, Ct)).Should().BeTrue();
+                (await s.Members.DeleteRoleAsync(s.Tenant, s.CaretakerRole, Now, Ct)).Should().Be(RoleChangeOutcome.Changed);
                 expected = [AuthAuditEventType.RoleRemoved];
                 break;
         }
@@ -442,7 +414,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         var links = await db.TenantMemberRoles.Where(mr => mr.TenantMemberId == member).Select(mr => mr.TenantRoleId).ToListAsync();
         var reason = await db.TenantMemberReasons.Include(r => r.ReasonRoles).AsNoTracking().SingleAsync(r => r.TenantMemberId == member);
         var reasonRoles = reason.ReasonRoles.Select(rr => rr.TenantRoleId).ToList();
-        (await MembershipReasons.MatchesAsync(db, member, Ct)).Should().BeTrue();
+        (await MembershipReasons.MatchesAsync(db, member, Now, Ct)).Should().BeTrue();
 
         switch (stale)
         {
@@ -475,7 +447,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         await SeedBareMemberAsync(s, await NewSubjectAsync(s, "malformed-member"), """{"not":"a list"}""", s.ViewerRole, migrator);
 
         var logger = new RecordingLogger();
-        var check = () => DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, logger, Ct);
+        var check = () => DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, Now, TeamWrites.Apply(Now), logger, Ct);
 
         await check.Should().NotThrowAsync();
         logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Error);
@@ -499,12 +471,12 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
     {
         var member = Guid.CreateVersion7();
         var permissions = permissionsJson == "NULL" ? "NULL" : $"'{permissionsJson}'::jsonb";
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(migrator ?? database.MigratorConnectionString, $"""
             INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, limit_to_24_hours, sys_created_at, sys_updated_at)
             VALUES ('{member}', '{seeded.Tenant}', '{subject}', {permissions}, false, now(), now());
             INSERT INTO tenant_member_roles (id, tenant_member_id, tenant_role_id, sys_created_at)
             VALUES ('{Guid.CreateVersion7()}', '{member}', '{roleId}', now());
-            """, migrator ?? database.MigratorConnectionString);
+            """);
         return member;
     }
 

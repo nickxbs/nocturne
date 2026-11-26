@@ -20,7 +20,9 @@ using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Identity;
+using Nocturne.API.Services.Migration;
 using Nocturne.API.Services.Realtime;
+using Nocturne.API.Tests.Migration;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Audit;
@@ -45,9 +47,9 @@ namespace Nocturne.API.Tests.Services.Identity;
 
 /// <summary>
 /// A device credential, held by the tenant's device subject, made by a member whose access ends
-/// stops on that date, on PostgreSQL under the runtime role and Row Level Security: both mints stamp
-/// it, both handlers and the hub sweep refuse it after the date, a shorter end date or the removal
-/// of such a member lowers it in the same commit, and only a later keep removes it.
+/// stops on that date, on PostgreSQL under the runtime role and Row Level Security: both mints and a
+/// Nightscout import stamp it, both handlers and the hub sweep refuse it after the date, a shorter end
+/// date or the removal of such a member lowers it in the same commit, and only a later keep removes it.
 /// </summary>
 [Trait("Category", "Integration")]
 public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPostgresTests.Database database)
@@ -70,33 +72,10 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
-    private sealed record Seeded(Guid Tenant, Guid Maker, Factory Contexts);
+    private sealed record Seeded(Guid Tenant, Guid Maker, SuppliedContextFactory Contexts);
 
     /// <summary>A tenant with its seed roles and a caretaker, the maker, whose membership ends at <paramref name="accessEndsAt"/>.</summary>
     private async Task<Seeded> SeedAsync(string slug, DateTime? accessEndsAt)
@@ -115,7 +94,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var contexts = new Factory(Context, tenant);
+        var contexts = new SuppliedContextFactory(() => Context(tenant));
         var members = new TenantMembershipRepository(contexts, AccountLinkRoutes.Off);
         await members.SeedRolesAsync(tenant, CancellationToken.None);
         var caretaker = (await members.FindRoleIdBySlugAsync(tenant, RoleSeeds.Caretaker, CancellationToken.None))!.Value;
@@ -128,6 +107,13 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
 
     private static CredentialMaker MakerOf(Seeded seeded, DateTime? accessEndsAt) => new(seeded.Maker, accessEndsAt);
 
+    /// <summary><paramref name="maker"/> saving as a caller who may change the site's settings, so a save adopts.</summary>
+    private static ConnectorSecretSaver SettingsHolder(CredentialMaker maker) =>
+        new(maker, ResolvedScopes(RoleSeeds.Admin), HistoryClamped: false);
+
+    private static IReadOnlySet<string> ResolvedScopes(string role) =>
+        MemberScopeResolver.Resolve(new HashSet<string>(RoleSeeds.Permissions[role]), AuthType.SessionCookie, new HashSet<string>());
+
     private static Mock<ISecretEncryptionService> Encryption()
     {
         var encryption = new Mock<ISecretEncryptionService>();
@@ -138,9 +124,9 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         return encryption;
     }
 
-    /// <summary>Saves <paramref name="secret"/> as the Nightscout connector's API secret, as <paramref name="maker"/>, at <paramref name="at"/>.</summary>
+    /// <summary>Saves <paramref name="secret"/> as the Nightscout connector's API secret, as <paramref name="saver"/>, at <paramref name="at"/>.</summary>
     private async Task<ConnectorSecretsSaveResult> SaveSecretAsync(
-        Seeded seeded, string secret, CredentialMaker maker, DateTimeOffset at)
+        Seeded seeded, string secret, ConnectorSecretSaver saver, DateTimeOffset at)
     {
         var service = new ConnectorConfigurationService(
             new ConnectorConfigurationRepository(seeded.Contexts),
@@ -156,13 +142,13 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
             NullLogger<ConnectorConfigurationService>.Instance);
 
         return await service.SaveSecretsAsync(
-            "Nightscout", new Dictionary<string, string> { ["ApiSecret"] = secret }, modifiedBy: null, maker: maker);
+            "Nightscout", new Dictionary<string, string> { ["ApiSecret"] = secret }, modifiedBy: null, saver: saver);
     }
 
     /// <summary>Saves <paramref name="secret"/> as <paramref name="maker"/> at <see cref="Now"/> and returns the grant it adopted.</summary>
     private async Task<Guid> AdoptSecretAsync(Seeded seeded, string secret, CredentialMaker maker)
     {
-        (await SaveSecretAsync(seeded, secret, maker, Now)).SecretAlreadyInUse.Should().BeFalse();
+        (await SaveSecretAsync(seeded, secret, SettingsHolder(maker), Now)).SecretAlreadyInUse.Should().BeFalse();
         return (await SecretGrantsAsync(seeded, secret)).Last();
     }
 
@@ -191,7 +177,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
             Mock.Of<ISubjectService>(),
             roles.Object,
             new DirectGrantService(
-                seeded.Contexts, Mock.Of<IAuthAuditService>(), Revocation(Sessions()), NullLogger<DirectGrantService>.Instance),
+                seeded.Contexts, Mock.Of<IAuthAuditService>(), Revocation(Sessions()), TimeProvider.System, NullLogger<DirectGrantService>.Instance),
             new OAuthGrantRepository(seeded.Contexts),
             Mock.Of<IJwtService>(),
             new SubjectRepository(seeded.Contexts, AccountLinkRoutes.Off),
@@ -359,7 +345,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         new GrantRevocationService(sessions),
         new FakeTimeProvider(Now),
         Mock.Of<ILogger<TenantService>>(),
-        AccountLinkRoutes.Off);
+        AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     private async Task<Guid> MemberIdAsync(Seeded seeded) =>
         (await new TenantMembershipRepository(seeded.Contexts, AccountLinkRoutes.Off)
@@ -432,10 +418,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
     }
 
     private NocturneDbContext ContextRefusingGrantSaves(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor(), new RefuseGrantSaves())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, [new RefuseGrantSaves()]);
 
     [Fact]
     public async Task ADateChangeThatRollsBackCapsNothing()
@@ -444,7 +427,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         var token = (await MintTokenAsync(seeded, MakerOf(seeded, null))).Id;
 
         await FluentActions.Awaiting(() => SetEndAsync(
-                seeded, Now.UtcDateTime.AddDays(1), new Factory(ContextRefusingGrantSaves, seeded.Tenant)))
+                seeded, Now.UtcDateTime.AddDays(1), new SuppliedContextFactory(() => ContextRefusingGrantSaves(seeded.Tenant))))
             .Should().ThrowAsync<InvalidOperationException>().WithMessage("grant save refused");
 
         (await GrantAsync(seeded, token)).ExpiresAt.Should().BeNull();
@@ -505,7 +488,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         var (minted, token) = await MintTokenAsync(seeded, MakerOf(seeded, end));
 
         (await new DirectGrantService(
-                    seeded.Contexts, Mock.Of<IAuthAuditService>(), Revocation(Sessions()), NullLogger<DirectGrantService>.Instance)
+                    seeded.Contexts, Mock.Of<IAuthAuditService>(), Revocation(Sessions()), TimeProvider.System, NullLogger<DirectGrantService>.Instance)
                 .KeepDeviceCredentialAsync(minted))
             .Should().BeTrue();
 
@@ -535,7 +518,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
     }
 
     private DirectGrantService DirectGrants(Seeded seeded) =>
-        new(seeded.Contexts, Mock.Of<IAuthAuditService>(), Revocation(Sessions()), NullLogger<DirectGrantService>.Instance);
+        new(seeded.Contexts, Mock.Of<IAuthAuditService>(), Revocation(Sessions()), TimeProvider.System, NullLogger<DirectGrantService>.Instance);
 
     [Fact]
     public async Task AKeptCredentialStaysKeptThroughEveryLaterChangeToItsMaker()
@@ -623,7 +606,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
             .AddSingleton(revocations.Object)
             .AddSingleton<IOAuthGrantService>(new OAuthGrantService(
                 seeded.Contexts, new OAuthGrantRepository(seeded.Contexts), Mock.Of<IOAuthClientService>(), Sessions(),
-                Revocation(Sessions()), clock, NullLogger<OAuthGrantService>.Instance))
+                Revocation(Sessions()), new GrantConsentService(NullLogger<GrantConsentService>.Instance), clock, NullLogger<OAuthGrantService>.Instance))
             .AddScoped<IJwtCredentialValidator, JwtCredentialValidator>()
             .AddSingleton<ILogger<JwtCredentialValidator>>(NullLogger<JwtCredentialValidator>.Instance)
             .BuildServiceProvider();
@@ -718,7 +701,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         var context = Presenting(seeded, seeded.Maker, key);
         new RequestMembership(
                 seeded.Maker, seeded.Tenant,
-                new MembershipFacts(Guid.NewGuid(), new TenantMemberAccess(new HashSet<string> { Scope.FullAccess }, false, Now.UtcDateTime.AddDays(3)), null))
+                new MembershipFacts(Guid.NewGuid(), new TenantMemberAccess(new HashSet<string> { Scope.FullAccess }, false, Now.UtcDateTime.AddDays(3)), new TenantMemberAccess(new HashSet<string> { Scope.FullAccess }, false, Now.UtcDateTime.AddDays(3)), null))
             .StoreOn(context);
 
         (await context.CredentialMakerAsync(CancellationToken.None)).Should().Be(new CredentialMaker(seeded.Maker, keyExpires));
@@ -732,7 +715,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         var first = await AdoptSecretAsync(seeded, secret, MakerOf(seeded, Now.UtcDateTime.AddHours(1)));
         var extended = Now.UtcDateTime.AddDays(5);
 
-        var result = await SaveSecretAsync(seeded, secret, MakerOf(seeded, extended), Now.AddHours(2));
+        var result = await SaveSecretAsync(seeded, secret, SettingsHolder(MakerOf(seeded, extended)), Now.AddHours(2));
 
         result.SecretAlreadyInUse.Should().BeFalse();
         var grants = await SecretGrantsAsync(seeded, secret);
@@ -750,7 +733,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         var owner = await new SubjectRepository(seeded.Contexts, AccountLinkRoutes.Off)
             .CreateAsync(new NewSubject("readopt-owner"), CancellationToken.None);
 
-        (await SaveSecretAsync(seeded, secret, new CredentialMaker(owner, null), Now.AddHours(2)))
+        (await SaveSecretAsync(seeded, secret, SettingsHolder(new CredentialMaker(owner, null)), Now.AddHours(2)))
             .SecretAlreadyInUse.Should().BeFalse();
 
         var latest = await GrantAsync(seeded, (await SecretGrantsAsync(seeded, secret)).Last());
@@ -766,10 +749,242 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         var secret = $"secret-{Guid.NewGuid():N}";
         await AdoptSecretAsync(seeded, secret, MakerOf(seeded, stops));
 
-        var result = await SaveSecretAsync(seeded, secret, MakerOf(seeded, Now.UtcDateTime.AddDays(5)), Now.AddMinutes(30));
+        var result = await SaveSecretAsync(seeded, secret, SettingsHolder(MakerOf(seeded, Now.UtcDateTime.AddDays(5))), Now.AddMinutes(30));
 
         result.SecretAlreadyInUse.Should().BeTrue();
         result.SecretInUseStopsAt.Should().Be(stops);
         (await SecretGrantsAsync(seeded, secret)).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task ACaretakerSavingAnApiSecretMakesNoCredential()
+    {
+        var seeded = await SeedAsync("caretaker-save", null);
+        var secret = $"secret-{Guid.NewGuid():N}";
+
+        var result = await SaveSecretAsync(
+            seeded, secret, new ConnectorSecretSaver(MakerOf(seeded, null), ResolvedScopes(RoleSeeds.Caretaker), HistoryClamped: false), Now);
+
+        result.NotAdopted.Should().BeTrue();
+        result.SecretAlreadyInUse.Should().BeFalse();
+        (await SecretGrantsAsync(seeded, secret)).Should().BeEmpty();
+        (await SecretAuthenticatesAsync(seeded, secret, Now.AddMinutes(1))).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ACaretakerSavingOverAnAdoptedSecretLeavesThatCredentialExactlyAsItWas()
+    {
+        var seeded = await SeedAsync("caretaker-over", null);
+        var ownersSecret = $"secret-{Guid.NewGuid():N}";
+        var adopted = await AdoptSecretAsync(seeded, ownersSecret, MakerOf(seeded, null));
+        var before = await GrantRowAsync(seeded, adopted);
+        var caretakersSecret = $"secret-{Guid.NewGuid():N}";
+
+        var result = await SaveSecretAsync(
+            seeded, caretakersSecret,
+            new ConnectorSecretSaver(MakerOf(seeded, null), ResolvedScopes(RoleSeeds.Caretaker), HistoryClamped: false), Now.AddHours(1));
+
+        result.NotAdopted.Should().BeTrue();
+        (await GrantRowAsync(seeded, adopted)).Should().Be(before);
+        (await SecretGrantsAsync(seeded, caretakersSecret)).Should().BeEmpty();
+        (await SecretAuthenticatesAsync(seeded, ownersSecret, Now.AddHours(2))).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ASettingsHolderWhoseReadsAreLimitedTo24HoursMakesNoCredential()
+    {
+        var seeded = await SeedAsync("clamped-save", null);
+        var secret = $"secret-{Guid.NewGuid():N}";
+
+        var result = await SaveSecretAsync(
+            seeded, secret, new ConnectorSecretSaver(MakerOf(seeded, null), ResolvedScopes(RoleSeeds.Admin), HistoryClamped: true), Now);
+
+        result.NotAdopted.Should().BeTrue();
+        (await SecretGrantsAsync(seeded, secret)).Should().BeEmpty();
+    }
+
+    private const string ImportedToken = "camp-uploader-0123456789abcdef";
+
+    /// <summary>A Nightscout site with one token, read-only, for an import to adopt; every other path answers 404.</summary>
+    private sealed class OneTokenSite : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var body = request.RequestUri!.AbsolutePath switch
+            {
+                "/api/v2/authorization/roles" => """[{ "name": "readable", "permissions": ["*:*:read"] }]""",
+                "/api/v2/authorization/subjects" => $$"""
+                    [{ "_id": "5f1a00000000000000000001", "name": "Camp uploader", "roles": ["readable"], "accessToken": "{{ImportedToken}}" }]
+                    """,
+                _ => null,
+            };
+            return Task.FromResult(body is null
+                ? new HttpResponseMessage(System.Net.HttpStatusCode.NotFound)
+                : new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json"),
+                });
+        }
+    }
+
+    private sealed record StartedImport(MigrationJobService Service, TenantContext Tenant, Guid JobId, ServiceProvider Provider);
+
+    /// <summary>Starts an import of <see cref="OneTokenSite"/>'s tokens into the tenant, started by <paramref name="starter"/>.</summary>
+    private async Task<StartedImport> StartImportAsync(Seeded seeded, CredentialMaker? starter)
+    {
+        var provider = MigrationJobHarness.BuildProvider(
+            new OneTokenSite(),
+            database: o => o.UseTenantInterceptor(database.AppConnectionString));
+        var service = MigrationJobHarness.CreateService(provider);
+        var tenant = new TenantContext(seeded.Tenant, "device", "Device", IsActive: true, IsDemo: false);
+        var job = await service.StartMigrationAsync(
+            new StartMigrationRequest
+            {
+                Mode = MigrationMode.Api,
+                NightscoutUrl = "https://example-nightscout.invalid",
+                NightscoutApiSecret = "synthetic-secret",
+                Collections = ["subjects"],
+            },
+            tenant,
+            starter);
+        return new StartedImport(service, tenant, job.Id, provider);
+    }
+
+    /// <summary>Runs the import from its record, as the job scheduler does, and returns the grant it adopted.</summary>
+    private async Task<OAuthGrantRecord> FinishImportAsync(Seeded seeded, StartedImport import)
+    {
+        await using (import.Provider)
+        {
+            await MigrationJobHarness.RunToEndAsync(import.Service, import.Tenant);
+            (await import.Service.GetStatusAsync(seeded.Tenant, import.JobId)).State.Should().Be(MigrationJobState.Completed);
+        }
+
+        await using var db = Context(seeded.Tenant);
+        var adopted = await db.OAuthGrants.AsNoTracking()
+            .Where(g => g.TokenHash == HashUtils.Sha256Hex(ImportedToken))
+            .Select(g => g.Id)
+            .SingleAsync();
+        return await GrantAsync(seeded, adopted);
+    }
+
+    private async Task<DateTime?> ImportEndAsync(Seeded seeded, Guid jobId)
+    {
+        await using var db = Context(seeded.Tenant);
+        return await db.MigrationRuns.AsNoTracking().Where(r => r.Id == jobId).Select(r => r.StarterAccessEndsAt).SingleAsync();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AnImportedTokenIsStampedWithTheStarterAndStopsWhenTheirAccessEnds(bool starterAccessEnds)
+    {
+        DateTime? end = starterAccessEnds ? Now.UtcDateTime.AddDays(3) : null;
+        var seeded = await SeedAsync("import", end);
+
+        var grant = await FinishImportAsync(seeded, await StartImportAsync(seeded, MakerOf(seeded, end)));
+
+        grant.SubjectId.Should().Be(await DeviceSubjectAsync(seeded));
+        grant.CreatedBySubjectId.Should().Be(seeded.Maker);
+        grant.ExpiresAt.Should().Be(end);
+    }
+
+    [Fact]
+    public async Task AnImportNobodyStartedAdoptsTokensWithNoMakerAndNoExpiry()
+    {
+        var seeded = await SeedAsync("import-system", accessEndsAt: null);
+
+        var grant = await FinishImportAsync(seeded, await StartImportAsync(seeded, starter: null));
+
+        grant.CreatedBySubjectId.Should().BeNull();
+        grant.ExpiresAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task AResumedImportStampsTheEndReadAtStartNotALaterOne()
+    {
+        var end = Now.UtcDateTime.AddDays(3);
+        var seeded = await SeedAsync("import-resume", end);
+        var import = await StartImportAsync(seeded, MakerOf(seeded, end));
+
+        (await SetEndAsync(seeded, Now.UtcDateTime.AddDays(30))).Should().Be(OwnerGuardedChange.Changed);
+
+        (await FinishImportAsync(seeded, import)).ExpiresAt.Should().Be(end, "a later end raises nothing the starter made");
+    }
+
+    [Fact]
+    public async Task AnEndLoweredWhileTheImportRunsReachesTheTokensItAdoptsAfter()
+    {
+        var seeded = await SeedAsync("import-lowered", Now.UtcDateTime.AddDays(10));
+        var import = await StartImportAsync(seeded, MakerOf(seeded, Now.UtcDateTime.AddDays(10)));
+        var lowered = Now.UtcDateTime.AddDays(2);
+
+        (await SetEndAsync(seeded, lowered)).Should().Be(OwnerGuardedChange.Changed);
+
+        (await ImportEndAsync(seeded, import.JobId)).Should().Be(lowered);
+        (await FinishImportAsync(seeded, import)).ExpiresAt.Should().Be(lowered);
+    }
+
+    [Fact]
+    public async Task RemovingTheStarterWhileTheImportRunsStopsTheTokensItAdoptsAfter()
+    {
+        var seeded = await SeedAsync("import-removed", Now.UtcDateTime.AddDays(10));
+        var import = await StartImportAsync(seeded, MakerOf(seeded, Now.UtcDateTime.AddDays(10)));
+
+        await RemoveAsync(seeded);
+
+        (await FinishImportAsync(seeded, import)).ExpiresAt.Should().Be(Now.UtcDateTime);
+    }
+
+    [Fact]
+    public async Task ACapLeavesTheImportsAnotherMemberStartedAndTheStartersImportsInAnotherTenant()
+    {
+        var end = Now.UtcDateTime.AddDays(10);
+        var seeded = await SeedAsync("import-scope", end);
+        var elsewhere = await SeedAsync("import-scope-elsewhere", accessEndsAt: null);
+        var other = await new SubjectRepository(seeded.Contexts, AccountLinkRoutes.Off)
+            .CreateAsync(new NewSubject("import-scope-other"), CancellationToken.None);
+        var theirs = await StartImportAsync(seeded, new CredentialMaker(other, end));
+        var startersElsewhere = await StartImportAsync(elsewhere, MakerOf(seeded, end));
+        await using var theirsProvider = theirs.Provider;
+        await using var elsewhereProvider = startersElsewhere.Provider;
+
+        (await SetEndAsync(seeded, Now.UtcDateTime.AddDays(2))).Should().Be(OwnerGuardedChange.Changed);
+
+        (await ImportEndAsync(seeded, theirs.JobId)).Should().Be(end);
+        (await ImportEndAsync(elsewhere, startersElsewhere.JobId)).Should().Be(end);
+    }
+
+    [Fact]
+    public async Task ACapAfterTheImportLowersTheTokensItAdoptedAndLeavesTheEndedRun()
+    {
+        var seeded = await SeedAsync("import-capped", Now.UtcDateTime.AddDays(10));
+        var import = await StartImportAsync(seeded, MakerOf(seeded, Now.UtcDateTime.AddDays(10)));
+        var grant = await FinishImportAsync(seeded, import);
+        var lowered = Now.UtcDateTime.AddDays(2);
+
+        await SetEndAsync(seeded, lowered);
+
+        (await GrantAsync(seeded, grant.Id)).ExpiresAt.Should().Be(lowered);
+        (await ImportEndAsync(seeded, import.JobId)).Should().Be(Now.UtcDateTime.AddDays(10), "an ended run adopts nothing more");
+        (await DeviceCredentialAuditAsync(seeded)).Should().ContainSingle(r =>
+            r.EventType == AuthAuditEventType.DeviceCredentialCapped && r.Target == seeded.Maker);
+    }
+
+    /// <summary>The stored row of grant <paramref name="id"/>, every column, as PostgreSQL writes it.</summary>
+    private async Task<string> GrantRowAsync(Seeded seeded, Guid id)
+    {
+        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT set_config('app.current_tenant_id', @tenant, false);
+            SELECT row_to_json(g)::text FROM oauth_grants g WHERE g.id = @id;
+            """;
+        cmd.Parameters.Add(new NpgsqlParameter("@tenant", seeded.Tenant.ToString()));
+        cmd.Parameters.Add(new NpgsqlParameter("@id", id));
+        await using var reader = await cmd.ExecuteReaderAsync();
+        await reader.NextResultAsync();
+        (await reader.ReadAsync()).Should().BeTrue();
+        return reader.GetString(0);
     }
 }

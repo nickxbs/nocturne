@@ -138,14 +138,14 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
 
         await using (var conn = await _fx.OpenMigratorConnectionAsync())
         {
-            await ExecAsync(conn, $"""
+            await NpgsqlTestCommands.ExecuteAsync(conn, $"""
                 CREATE TABLE IF NOT EXISTS {ProbeTable} (
                     id uuid PRIMARY KEY,
                     tenant_id uuid NOT NULL,
                     created_at timestamptz NOT NULL)
                 """);
-            await ExecAsync(conn, $"TRUNCATE {ProbeTable}");
-            await ExecAsync(conn, $"GRANT SELECT, INSERT, UPDATE, DELETE ON {ProbeTable} TO nocturne_app");
+            await NpgsqlTestCommands.ExecuteAsync(conn, $"TRUNCATE {ProbeTable}");
+            await NpgsqlTestCommands.ExecuteAsync(conn, $"GRANT SELECT, INSERT, UPDATE, DELETE ON {ProbeTable} TO nocturne_app");
 
             foreach (var owner in new[] { tenant, neighbour })
             {
@@ -174,7 +174,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
         finally
         {
             await using var conn = await _fx.OpenMigratorConnectionAsync();
-            await ExecAsync(conn, $"DROP TABLE IF EXISTS {ProbeTable}");
+            await NpgsqlTestCommands.ExecuteAsync(conn, $"DROP TABLE IF EXISTS {ProbeTable}");
         }
     }
 
@@ -219,12 +219,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
     {
         if (extra is null)
         {
-            var services = new ServiceCollection();
-            services.AddLogging();
-            services.AddHttpContextAccessor();
-            services.AddPostgreSqlInfrastructure(_fx.AppConnectionString, configuration: null);
-
-            var provider = services.BuildServiceProvider();
+            var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
             _owned.Add(provider);
             return provider.GetRequiredService<INocturneDbContextFactory>();
         }
@@ -232,11 +227,8 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
         var dataSource = new NpgsqlDataSourceBuilder(_fx.AppConnectionString).Build();
         _owned.Add(dataSource);
 
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(dataSource)
-            .AddInterceptors(new TenantConnectionInterceptor(), extra)
-            .Options;
-        return new PlainContextFactory(options);
+        var options = TestContexts.Options(dataSource, [extra]);
+        return new SuppliedContextFactory(() => new NocturneDbContext(options));
     }
 
     public async ValueTask DisposeAsync()
@@ -306,13 +298,6 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
         await cmd.ExecuteScalarAsync();
     }
 
-    private static async Task ExecAsync(NpgsqlConnection conn, string sql)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        await cmd.ExecuteNonQueryAsync();
-    }
-
     private async Task<long> ProbeCountAsync(Guid tenant)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
@@ -328,13 +313,6 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
         p.ParameterName = name;
         p.Value = value;
         cmd.Parameters.Add(p);
-    }
-
-    private sealed class PlainContextFactory(DbContextOptions<NocturneDbContext> options)
-        : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(new NocturneDbContext(options));
     }
 
     private sealed class CapturingInterceptor : DbCommandInterceptor

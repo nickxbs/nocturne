@@ -15,24 +15,16 @@ public interface IOAuthGrantService
     /// </summary>
     /// <param name="subjectId">The subject (user) ID who is granting access</param>
     /// <param name="scopes">The scopes being granted</param>
-    /// <param name="grantType">The type of grant (app or follower)</param>
-    /// <param name="label">Optional user-friendly label for the grant</param>
     /// <param name="limitTo24Hours">
     /// Whether tokens minted from the grant may read only the last 24 hours. The latest consent
-    /// sets it, as it does the label.
+    /// sets it.
     /// </param>
-    /// <param name="approvedByDeviceCode">
-    /// Whether a device-code approval is creating or updating the grant. Once set it stays set, and
-    /// the grant's client is no longer reported as verified.
-    /// </param>
-    Task<OAuthGrantInfo> CreateOrUpdateGrantAsync(
+    /// <returns>The grant as written; null when the subject holds no membership of the tenant, so nothing was written.</returns>
+    Task<OAuthGrantInfo?> CreateOrUpdateGrantAsync(
         Guid clientEntityId,
         Guid subjectId,
         IEnumerable<string> scopes,
-        string grantType = OAuthGrantTypes.App,
-        string? label = null,
         bool limitTo24Hours = false,
-        bool approvedByDeviceCode = false,
         CancellationToken ct = default
     );
 
@@ -89,17 +81,29 @@ public interface IOAuthGrantService
     );
 
     /// <summary>
-    /// Update grant label and/or scopes. Returns null if grant not found or not owned.
+    /// Update grant label and/or scopes. Returns null if the grant is not found, is not owned, or is
+    /// revoked, as <see cref="GetGrantForSubjectAsync"/> does.
     /// </summary>
     /// <param name="ownerSubjectId">The owner subject ID (for authorization check)</param>
+    /// <param name="bounds">What bounds new scopes, by the kind of grant.</param>
+    /// <exception cref="GrantCeilingViolationException">New scopes exceed <paramref name="bounds"/>.</exception>
     Task<OAuthGrantInfo?> UpdateGrantAsync(
         Guid grantId,
         Guid ownerSubjectId,
+        GrantScopeBounds bounds,
         string? label = null,
         IEnumerable<string>? scopes = null,
         CancellationToken ct = default
     );
 }
+
+/// <summary>
+/// What bounds the new scopes of a grant its owner edits. An app grant is the owner's own credential,
+/// bounded by <paramref name="OwnCredential"/>, everything the owner holds. A guest link gives another
+/// person access, so it is also bounded by <paramref name="GivenToOthers"/>, what the owner may give
+/// anyone else; null when they may give nothing, which refuses new scopes on a guest link.
+/// </summary>
+public sealed record GrantScopeBounds(IReadOnlySet<string> OwnCredential, IReadOnlySet<string>? GivenToOthers);
 
 public class OAuthGrantInfo
 {

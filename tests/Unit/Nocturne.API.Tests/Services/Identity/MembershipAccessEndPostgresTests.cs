@@ -13,9 +13,13 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Chat;
 using Nocturne.API.Services.Identity;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
@@ -58,36 +62,13 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private static GrantRevocationService Revocation() =>
         new(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())));
 
-    private sealed record Seeded(Guid Tenant, Guid Guest, Guid CaretakerRole, Factory Contexts);
+    private sealed record Seeded(Guid Tenant, Guid Guest, Guid CaretakerRole, SuppliedContextFactory Contexts);
 
     /// <summary>A tenant with its seed roles and a caretaker whose membership ends at <paramref name="accessEndsAt"/>.</summary>
     private async Task<Seeded> SeedAsync(string slug, DateTime? accessEndsAt)
@@ -106,7 +87,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var contexts = new Factory(Context, tenant);
+        var contexts = new SuppliedContextFactory(() => Context(tenant));
         var members = new TenantMembershipRepository(contexts, AccountLinkRoutes.Off);
         await members.SeedRolesAsync(tenant, CancellationToken.None);
         var caretaker = (await members.FindRoleIdBySlugAsync(tenant, RoleSeeds.Caretaker, CancellationToken.None))!.Value;
@@ -179,7 +160,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         var clock = new FakeTimeProvider(Now);
         var seeded = await SeedAsync("chat", Now.UtcDateTime.AddMinutes(1));
         var other = await SeedAsync("chat-other", accessEndsAt: null);
-        var platform = new Factory(Context, Guid.Empty);
+        var platform = new SuppliedContextFactory(() => Context(Guid.Empty));
         var directory = new ChatIdentityDirectoryService(platform, new TenantMembershipRepository(platform, AccountLinkRoutes.Off), clock, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
         var platformUser = $"discord-{Guid.NewGuid():N}";
         await directory.CreateLinkAsync("discord", platformUser, seeded.Tenant, seeded.Guest, "ending", "Ending", CancellationToken.None);
@@ -197,9 +178,9 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         (await directory.GetByTenantAsync(seeded.Tenant, CancellationToken.None))
             .Should().ContainSingle("the link is kept for the settings list, so a later end restores it");
 
-        (await new TenantMembershipRepository(seeded.Contexts, AccountLinkRoutes.Off).SetAccessEndUnlessOwnerAsync(
-            seeded.Tenant, (await MembershipRowsAsync(seeded)).Single().Id, Now.UtcDateTime.AddDays(7), clock.GetUtcNow().UtcDateTime,
-            CancellationToken.None)).Should().Be(OwnerGuardedChange.Changed);
+        (await OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(
+            seeded.Contexts, AccountLinkRoutes.Off, seeded.Tenant, (await MembershipRowsAsync(seeded)).Single().Id,
+            Now.UtcDateTime.AddDays(7), clock.GetUtcNow().UtcDateTime, CancellationToken.None)).Should().Be(OwnerGuardedChange.Changed);
         (await directory.GetCandidatesAsync("discord", platformUser, CancellationToken.None))
             .Select(l => l.Label).Should().BeEquivalentTo(["ending", "staying"]);
     }
@@ -214,7 +195,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         var grant = await new OAuthGrantRepository(seeded.Contexts).CreateAsync(
             new NewOAuthGrant(null, seeded.Guest, OAuthGrantTypes.Direct, [Scope.GlucoseRead], "uploader", Guid.NewGuid().ToString("N"), null, null, false),
             CancellationToken.None);
-        var platform = new Factory(Context, Guid.Empty);
+        var platform = new SuppliedContextFactory(() => Context(Guid.Empty));
         var link = await new ChatIdentityDirectoryService(
                 platform, new TenantMembershipRepository(platform, AccountLinkRoutes.Off), new FakeTimeProvider(Now),
                 Mock.Of<ILogger<ChatIdentityDirectoryService>>())
@@ -259,10 +240,10 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         var invites = new MemberInviteRepository(state.Seeded.Contexts);
         var inviteId = await invites.CreateAsync(
             new NewMemberInvite(
-                tenant, state.Seeded.Guest, HashUtils.Sha256Hex(token), [state.Seeded.CaretakerRole], null, null, false,
-                Now.UtcDateTime.AddDays(7), 1, Now.UtcDateTime, null),
+                tenant, await NewOwnerAsync(state.Seeded, "exhausted-owner"), HashUtils.Sha256Hex(token),
+                [state.Seeded.CaretakerRole], null, null, false, Now.UtcDateTime.AddDays(7), 1, Now.UtcDateTime, null),
             CancellationToken.None);
-        (await invites.TryClaimUseAsync(inviteId, CancellationToken.None)).Should().BeTrue();
+        (await invites.TryClaimUseAsync(inviteId, Now.UtcDateTime, CancellationToken.None)).Should().Be(MemberInviteClaim.Claimed);
         var service = new MemberInviteService(
             new TenantMembershipRepository(state.Seeded.Contexts, AccountLinkRoutes.Off),
             new StaleInviteReads(state.Seeded.Contexts),
@@ -274,7 +255,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
             new FakeTimeProvider(Now),
             NullLogger<MemberInviteService>.Instance,
             AccountLinkRoutes.Off,
-            Revocation());
+            Revocation(), InertTeamStaff.Announcer());
 
         var result = await service.AcceptInviteAsync(token, state.Seeded.Guest, tenant);
 
@@ -315,7 +296,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
             new FakeTimeProvider(Now),
             NullLogger<MembershipRequestService>.Instance,
             AccountLinkRoutes.Off,
-            Revocation());
+            Revocation(), InertTeamStaff.Announcer());
 
         var result = await service.ApproveRequestAsync(
             requestId, tenant, [state.Seeded.CaretakerRole], Guid.NewGuid(), [Scope.FullAccess], accessEndsAt: null);
@@ -340,12 +321,23 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         new GrantRevocationService(sessions),
         new FakeTimeProvider(Now),
         Mock.Of<ILogger<TenantService>>(),
-        AccountLinkRoutes.Off);
+        AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     private static GuestSessionCacheService Sessions() => new(new MemoryCache(new MemoryCacheOptions()));
 
     private Task<Guid> NewSubjectAsync(Seeded seeded, string name) =>
         new SubjectRepository(seeded.Contexts, AccountLinkRoutes.Off).CreateAsync(new NewSubject(name), CancellationToken.None);
+
+    /// <summary>An owner of the tenant, whose membership never ends: a maker whose invites stay acceptable.</summary>
+    private async Task<Guid> NewOwnerAsync(Seeded seeded, string name)
+    {
+        var owner = await NewSubjectAsync(seeded, name);
+        var members = new TenantMembershipRepository(seeded.Contexts, AccountLinkRoutes.Off);
+        var ownerRole = (await members.FindRoleIdBySlugAsync(seeded.Tenant, RoleSeeds.Owner, CancellationToken.None))!.Value;
+        (await members.AddMemberAsync(new NewTenantMember(seeded.Tenant, owner, [ownerRole]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None))
+            .Should().BeTrue();
+        return owner;
+    }
 
     private async Task<Guid> GuestLinkAsync(
         Seeded seeded, Guid createdBy, Guid dataOwner, DateTime expiresAt, GuestSessionCacheService? sessions = null)
@@ -402,6 +394,46 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         details.RootElement.GetProperty("expires_at").GetDateTime().ToUniversalTime().Should().Be(end);
         details.RootElement.GetProperty("kind").GetString().Should().Be("tenant");
     }
+
+    [Fact]
+    public async Task SettingAnEndDateCapsAGuestLinkAndAnAlertChannelTheMemberMade()
+    {
+        var seeded = await SeedAsync("cap-both", accessEndsAt: null);
+        var owner = await NewSubjectAsync(seeded, "cap-both-owner");
+        var link = await GuestLinkAsync(seeded, seeded.Guest, owner, Now.UtcDateTime.AddHours(48));
+        var rule = await SaveRuleWithChannelAsync(seeded, addedBy: seeded.Guest);
+        var end = Now.UtcDateTime.AddDays(1);
+
+        (await SetEndAsync(seeded, Sessions(), end)).Should().Be(OwnerGuardedChange.Changed);
+
+        (await LinkAsync(seeded, link)).ExpiresAt.Should().Be(end);
+        (await ChannelStopAsync(seeded, rule)).Should().Be(end);
+        (await MembershipRowsAsync(seeded)).Single().AccessEndsAt.Should().Be(end);
+    }
+
+    private async Task<Guid> SaveRuleWithChannelAsync(Seeded seeded, Guid addedBy)
+    {
+        List<AlertRuleChannelWrite> channels;
+        await using (var db = Context(seeded.Tenant))
+        {
+            channels = await new AlertRuleChannelWriter(Mock.Of<ISecretEncryptionService>()).ToWritesAsync(
+                [new CreateAlertRuleChannelRequest { ChannelType = ChannelType.DiscordChannel, Destination = "123456789012345678" }],
+                addedBy, null, db, CancellationToken.None);
+        }
+
+        return await new AlertRuleRepository(seeded.Contexts, new FakeTimeProvider(Now)).CreateAsync(
+            new NewAlertRule(
+                new AlertRuleWrite(
+                    "Urgent low", null, AlertConditionType.Threshold, """{"direction":"below","value":55}""",
+                    RuleScopeClass.Low, AlertRuleSeverity.Critical, IsEnabled: true, SortOrder: 0,
+                    AllowThroughDnd: true, AutoResolveEnabled: false, AutoResolveParams: null, ClientConfiguration: "{}"),
+                channels),
+            CancellationToken.None);
+    }
+
+    private async Task<DateTime?> ChannelStopAsync(Seeded seeded, Guid ruleId) =>
+        (await new AlertRuleRepository(seeded.Contexts, new FakeTimeProvider(Now)).GetChannelsAsync([ruleId], CancellationToken.None))[ruleId]
+        .Single().StopsAt;
 
     [Fact]
     public async Task ShorteningTheEndDateCapsTheLinksAgain()
@@ -521,10 +553,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
     }
 
     private NocturneDbContext ContextRefusingGrantSaves(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor(), new RefuseGrantSaves())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, [new RefuseGrantSaves()]);
 
     [Fact]
     public async Task ASetMemberAccessEndThatFailsAfterTheCapIsStagedChangesNothingAndEvictsNothing()
@@ -535,7 +564,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         var expiresAt = Now.UtcDateTime.AddHours(48);
         var link = await GuestLinkAsync(seeded, seeded.Guest, owner, expiresAt, sessions);
         var memberId = (await MembershipRowsAsync(seeded)).Single().Id;
-        var failing = new Factory(ContextRefusingGrantSaves, seeded.Tenant);
+        var failing = new SuppliedContextFactory(() => ContextRefusingGrantSaves(seeded.Tenant));
 
         await FluentActions.Awaiting(() => Service(failing, sessions).SetMemberAccessEndAsync(
                 seeded.Tenant, memberId, Now.UtcDateTime.AddHours(1), Now.UtcDateTime))
@@ -566,7 +595,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
             new FakeTimeProvider(Now),
             NullLogger<MemberInviteService>.Instance,
             AccountLinkRoutes.Off,
-            new GrantRevocationService(sessions));
+            new GrantRevocationService(sessions), InertTeamStaff.Announcer());
 
     private async Task<(string Token, Guid Link)> InviteAndLinkOfEndedMemberAsync(
         Seeded seeded, Guid dataOwner, GuestSessionCacheService sessions, bool claimLastUse)
@@ -576,11 +605,11 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         var invites = new MemberInviteRepository(seeded.Contexts);
         var inviteId = await invites.CreateAsync(
             new NewMemberInvite(
-                seeded.Tenant, seeded.Guest, HashUtils.Sha256Hex(token), [seeded.CaretakerRole], null, null, false,
-                Now.UtcDateTime.AddDays(7), 1, Now.UtcDateTime, null),
+                seeded.Tenant, await NewOwnerAsync(seeded, $"owner-{Guid.NewGuid():N}"), HashUtils.Sha256Hex(token),
+                [seeded.CaretakerRole], null, null, false, Now.UtcDateTime.AddDays(7), 1, Now.UtcDateTime, null),
             CancellationToken.None);
         if (claimLastUse)
-            (await invites.TryClaimUseAsync(inviteId, CancellationToken.None)).Should().BeTrue();
+            (await invites.TryClaimUseAsync(inviteId, Now.UtcDateTime, CancellationToken.None)).Should().Be(MemberInviteClaim.Claimed);
         return (token, link);
     }
 

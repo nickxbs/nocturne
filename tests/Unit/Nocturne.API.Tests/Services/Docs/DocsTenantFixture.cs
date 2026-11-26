@@ -116,7 +116,10 @@ internal sealed class DocsTenantFixture : IDisposable
         return context;
     }
 
-    public ScalarAuthProvider BuildProvider(IMemoryCache? cache = null)
+    public ScalarAuthProvider BuildProvider(
+        IMemoryCache? cache = null,
+        ITenantRepository? tenants = null,
+        IOAuthClientRepository? clients = null)
     {
         var dbFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
         dbFactory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
@@ -124,16 +127,18 @@ internal sealed class DocsTenantFixture : IDisposable
 
         var demoTenantService = new DemoTenantService(
             dbFactory.Object.AsNocturneFactory(), new TenantRepository(dbFactory.Object.AsNocturneFactory()), new TenantMembershipRepository(dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off), new SubjectRepository(dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
+            Mock.Of<ISubjectDeletion>(),
             new EfFirstPartyTokenRepository(dbFactory.Object.AsNocturneFactory()),
             new Mock<ITenantService>().Object,
             TestPublicAccessCache.Create(),
             Mock.Of<ITenantCache>(),
             TimeProvider.System,
-            new Mock<ILogger<DemoTenantService>>().Object, AccountLinkRoutes.Off);
+            new Mock<ILogger<DemoTenantService>>().Object, AccountLinkRoutes.Off,
+            new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))));
 
         return new ScalarAuthProvider(
-            new OAuthClientRepository(dbFactory.Object.AsNocturneFactory()),
-            new TenantRepository(dbFactory.Object.AsNocturneFactory()),
+            clients ?? new OAuthClientRepository(dbFactory.Object.AsNocturneFactory()),
+            tenants ?? new TenantRepository(dbFactory.Object.AsNocturneFactory()),
             demoTenantService,
             SessionService.Object,
             new RedirectUriValidator(),

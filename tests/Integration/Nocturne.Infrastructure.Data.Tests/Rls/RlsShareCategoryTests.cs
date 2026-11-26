@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Security;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 
@@ -331,11 +332,54 @@ public class RlsShareCategoryTests
         (await ProfileActivationNamesAsync(conn, tenant)).Should().HaveCount(3);
     }
 
+    [Fact]
+    public async Task SensorStateReports_AreIsolatedPerTenant()
+    {
+        var tenant = Guid.NewGuid();
+        var other = Guid.NewGuid();
+        await SeedSensorStateReportsAsync(tenant);
+        await SeedSensorStateReportsAsync(other);
+
+        await using var conn = await _fx.OpenAppConnectionAsync();
+        await SetShareContextAsync(conn, tenant, isShare: false, visibleCategories: string.Empty);
+
+        (await CountAsync(conn, "sensor_state_reports", other)).Should().Be(0, "one tenant never reads another's sensor state");
+        (await CountAsync(conn, "sensor_state_reports", tenant)).Should().Be(2);
+    }
+
+    [Theory]
+    [InlineData("devices.read", false, 1)]
+    [InlineData("devices.read", true, 2)]
+    [InlineData("glucose.read,treatments.read,stepcount.read", true, 0)]
+    public async Task Share_SeesSensorStateReportsOnlyWithDevicesRead_ClampedTo24Hours(
+        string visibleCategories, bool fullHistory, long expected)
+    {
+        var tenant = Guid.NewGuid();
+        await SeedSensorStateReportsAsync(tenant);
+
+        await using var conn = await _fx.OpenAppConnectionAsync();
+        await SetShareContextAsync(conn, tenant, isShare: true, visibleCategories: visibleCategories, fullHistory: fullHistory);
+
+        (await CountAsync(conn, "sensor_state_reports", tenant)).Should().Be(expected);
+    }
+
+    private async Task SeedSensorStateReportsAsync(Guid tenantId)
+    {
+        await using var conn = await _fx.OpenMigratorConnectionAsync();
+        await InsertTenantAsync(conn, tenantId);
+        await conn.PinTenantAsync(tenantId);
+        await ExecuteAsync(conn,
+            "INSERT INTO sensor_state_reports (id, tenant_id, timestamp, state, reported_field, reported_value, data_source, device) VALUES " +
+            "(gen_random_uuid(), @tid, now() - interval '5 minutes', 'WarmingUp', 'cgm.sensorState', 'WARM_UP', 'carelink-connector', 'CareLink MiniMed 780G'), " +
+            "(gen_random_uuid(), @tid, now() - interval '3 days', 'Ok', 'cgm.sensorState', 'NO_ERROR_MESSAGE', 'carelink-connector', 'CareLink MiniMed 780G')",
+            tenantId);
+    }
+
     private async Task SeedProfileActivationsAsync(Guid tenantId)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
         await InsertTenantAsync(conn, tenantId);
-        await SetCurrentTenantAsync(conn, tenantId);
+        await conn.PinTenantAsync(tenantId);
         await ExecuteAsync(conn,
             "INSERT INTO profile_activations (id, tenant_id, start_timestamp, end_timestamp, phase, origin, base_profile_name, percentage, timeshift_ms, snapshot_is_customized) VALUES " +
             "(gen_random_uuid(), @tid, now() - interval '3 days', NULL, 'Requested', 'User', 'running-since-3-days', 100, 0, false), " +
@@ -360,7 +404,7 @@ public class RlsShareCategoryTests
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
         await InsertTenantAsync(conn, tenantId);
-        await SetCurrentTenantAsync(conn, tenantId);
+        await conn.PinTenantAsync(tenantId);
         await ExecuteAsync(conn,
             "INSERT INTO state_spans (id, tenant_id, category, state, start_timestamp, end_timestamp, created_at, updated_at) VALUES " +
             "(gen_random_uuid(), @tid, 'Profile', 'running-since-3-days', now() - interval '3 days', NULL, now(), now()), " +
@@ -494,7 +538,7 @@ public class RlsShareCategoryTests
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
         await InsertTenantAsync(conn, tenantId);
-        await SetCurrentTenantAsync(conn, tenantId);
+        await conn.PinTenantAsync(tenantId);
 
         await ExecuteAsync(conn,
             $"INSERT INTO {GovernedTable} (id, tenant_id, timestamp, metric, source, sys_created_at, sys_updated_at) " +
@@ -510,7 +554,7 @@ public class RlsShareCategoryTests
     private async Task SeedOldGovernedRowAsync(Guid tenantId)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await SetCurrentTenantAsync(conn, tenantId);
+        await conn.PinTenantAsync(tenantId);
         await ExecuteAsync(conn,
             $"INSERT INTO {GovernedTable} (id, tenant_id, timestamp, metric, source, sys_created_at, sys_updated_at) " +
             "VALUES (gen_random_uuid(), @tid, now() - interval '30 hours', 0, 0, now(), now())", tenantId);
@@ -519,7 +563,7 @@ public class RlsShareCategoryTests
     private async Task SeedOldBolusAsync(Guid tenantId)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await SetCurrentTenantAsync(conn, tenantId);
+        await conn.PinTenantAsync(tenantId);
         await ExecuteAsync(conn,
             $"INSERT INTO {TreatmentTable} (id, tenant_id, timestamp, insulin, automatic, bolus_kind, sys_created_at, sys_updated_at) " +
             "VALUES (gen_random_uuid(), @tid, now() - interval '30 hours', 1.0, false, 'Manual', now(), now())", tenantId);
@@ -537,21 +581,8 @@ public class RlsShareCategoryTests
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private static async Task ExecuteAsync(NpgsqlConnection conn, string sql, Guid tenantId)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        AddParam(cmd, "@tid", tenantId);
-        await cmd.ExecuteNonQueryAsync();
-    }
-
-    private static async Task SetCurrentTenantAsync(NpgsqlConnection conn, Guid tenantId)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false)";
-        AddParam(cmd, "@tid", tenantId.ToString());
-        await cmd.ExecuteScalarAsync();
-    }
+    private static Task ExecuteAsync(NpgsqlConnection conn, string sql, Guid tenantId) =>
+        conn.ExecuteAsync(sql, ("tid", tenantId));
 
     /// <param name="historyClamped">The <c>app.history_clamped</c> value, or null to leave it unset.</param>
     private static async Task SetShareContextAsync(
@@ -574,13 +605,8 @@ public class RlsShareCategoryTests
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private static async Task<long> CountAsync(NpgsqlConnection conn, string table, Guid tenantId)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT COUNT(*) FROM {table} WHERE tenant_id = @tid";
-        AddParam(cmd, "@tid", tenantId);
-        return Convert.ToInt64(await cmd.ExecuteScalarAsync());
-    }
+    private static Task<long> CountAsync(NpgsqlConnection conn, string table, Guid tenantId) =>
+        conn.ScalarAsync<long>($"SELECT COUNT(*) FROM {table} WHERE tenant_id = @tid", ("tid", tenantId));
 
     private static void AddParam(NpgsqlCommand cmd, string name, object value)
     {

@@ -580,7 +580,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
     {
         _inviteService.Setup(s => s.GetInviteByTokenAsync("tok", _tenantId)).ReturnsAsync(Invite());
         _tenantMemberService
-            .Setup(s => s.IsMemberAsync(_callerSubjectId, _tenantId, It.IsAny<CancellationToken>()))
+            .Setup(s => s.IsDirectMemberAsync(_callerSubjectId, _tenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(alreadyMember);
 
         var controller = BuildController();
@@ -858,7 +858,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         new RequestMembership(
                 _callerSubjectId,
                 _tenantId,
-                new MembershipFacts(Guid.CreateVersion7(), new TenantMemberAccess(new HashSet<string> { Scope.MembersInvite }, false, callerAccessEndsAt), null))
+                new MembershipFacts(Guid.CreateVersion7(), new TenantMemberAccess(new HashSet<string> { Scope.MembersInvite }, false, callerAccessEndsAt), new TenantMemberAccess(new HashSet<string> { Scope.MembersInvite }, false, callerAccessEndsAt), null))
             .StoreOn(controller.HttpContext);
         var invite = ClinicianInvite(Guid.CreateVersion7());
         invite.AccessEndsAt = requested;

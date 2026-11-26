@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Services.Identity;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -32,7 +33,7 @@ public class MemberListRecoveryEmailTests
         SubjectUsername: null, SubjectIsActive: true, IsSystemSubject: system, IsDemoSubject: demo,
         IsPlatformAdmin: false, HasConfirmedEmail: confirmed, Roles: [], DirectPermissions: null, Label: null,
         Username: null, LimitTo24Hours: false, LastUsedAt: null, CreatedFromInviteId: null, SysCreatedAt: DateTime.UtcNow,
-        AccessEndsAt: null);
+        AccessEndsAt: null, Reasons: []);
 
     private static TenantService Service(bool deliveryConfigured, params TenantMemberRecord[] members)
     {
@@ -58,7 +59,7 @@ public class MemberListRecoveryEmailTests
             grantRevocation: null!,
             TimeProvider.System,
             NullLogger<TenantService>.Instance,
-            AccountLinkRoutes.Of(deliveryConfigured));
+            AccountLinkRoutes.Of(deliveryConfigured), InertTeamStaff.Announcer());
     }
 
     private static async Task<Dictionary<string, bool?>> FlagsAsync(TenantService service) =>
@@ -120,7 +121,7 @@ public class MemberListRecoveryEmailTests
             TenantId, "home", "Home", true, DateTime.UtcNow,
             flags.Select((flag, i) => new TenantMemberDto(
                 Guid.CreateVersion7(), Guid.CreateVersion7(), $"m{i}", false, [], null, null, false, null, DateTime.UtcNow,
-                false, null, false, flag)).ToList());
+                false, null, false, flag, true, [], false)).ToList());
         var service = new Mock<ITenantService>();
         service.Setup(s => s.GetByIdAsync(TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(detail);
         return service.Object;

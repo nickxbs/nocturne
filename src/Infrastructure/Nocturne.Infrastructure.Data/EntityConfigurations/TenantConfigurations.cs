@@ -29,6 +29,16 @@ internal sealed class TenantEntityConfiguration : IEntityTypeConfiguration<Tenan
         entity
             .HasIndex(t => t.LastReadingAt)
             .HasDatabaseName("ix_tenants_last_reading_at");
+
+        entity
+            .HasOne<SubjectEntity>()
+            .WithMany()
+            .HasForeignKey(t => t.SetupOwnerSubjectId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        entity
+            .HasIndex(t => t.SetupOwnerSubjectId)
+            .HasDatabaseName("ix_tenants_setup_owner_subject_id");
     }
 }
 
@@ -39,6 +49,11 @@ internal sealed class TenantMemberEntityConfiguration : IEntityTypeConfiguration
         entity
             .HasIndex(tm => tm.SubjectId)
             .HasDatabaseName("ix_tenant_members_subject_id");
+
+        entity
+            .HasIndex(tm => tm.NextReasonLapseAt)
+            .HasDatabaseName("ix_tenant_members_next_reason_lapse_at")
+            .HasFilter("next_reason_lapse_at IS NOT NULL");
 
         entity
             .HasOne(tm => tm.Tenant)
@@ -93,9 +108,22 @@ internal sealed class TenantMemberReasonEntityConfiguration : IEntityTypeConfigu
     {
         entity
             .HasOne(e => e.TenantMember)
-            .WithMany()
+            .WithMany(m => m.Reasons)
             .HasForeignKey(e => e.TenantMemberId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // No action, so deleting a team's access that a reason still names fails: whatever stops the
+        // access must take its reasons away first. ClientNoAction keeps EF from nulling a tracked
+        // reason's source to let the delete through.
+        entity
+            .HasOne(e => e.TeamAccess)
+            .WithMany()
+            .HasForeignKey(e => e.SourceId)
+            .OnDelete(DeleteBehavior.ClientNoAction);
+
+        entity.ToTable(t => t.HasCheckConstraint(
+            "ck_tenant_member_reasons_team_source",
+            $"(kind = '{MembershipReasonKind.Team}') = (source_id IS NOT NULL)"));
 
         entity
             .HasOne(e => e.CreatedFromInvite)

@@ -50,10 +50,12 @@ public class EmailConfirmationController(
         var auth = HttpContext.GetAuthContext();
         if (auth?.SubjectId is not { } subjectId || HttpContext.GetTenantContext() is not { } tenant)
             return Problem(detail: "Authentication required", statusCode: StatusCodes.Status401Unauthorized, title: "Unauthorized");
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
 
         var sent = await links.SendEmailConfirmationAsync(
             tenant, subjectId, AuthAuditActor.From(auth),
-            HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers.UserAgent.ToString(), ct);
+            HttpContext.GetClientAddress(), Request.Headers.UserAgent.ToString(), ct);
 
         return sent switch
         {
@@ -105,7 +107,7 @@ public class EmailConfirmationController(
                         is not EmailConfirmation.Confirmed)
                         throw new AddressLeftException();
                 },
-                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                HttpContext.GetClientAddress(),
                 Request.Headers.UserAgent.ToString(),
                 ct);
             return redeemed is null ? InvalidLink() : NoContent();

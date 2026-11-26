@@ -129,7 +129,14 @@ public abstract record SubjectChange
 {
     private SubjectChange() { }
 
-    public sealed record Changed : SubjectChange;
+    public sealed record Changed : SubjectChange
+    {
+        /// <summary>
+        /// The notices a deletion removed from people other than the deleted subject, whose open apps
+        /// still list them. Empty for any other change.
+        /// </summary>
+        public IReadOnlyList<RemovedNotice> RemovedNotices { get; init; } = [];
+    }
 
     public sealed record NotFound : SubjectChange;
 
@@ -137,6 +144,15 @@ public abstract record SubjectChange
 
     public sealed record LastManagerOf(IReadOnlyList<LastManagerTeam> ManagedTeams) : SubjectChange;
 }
+
+/// <summary>A notice <paramref name="UserId"/> held on <paramref name="TenantId"/>, which a deletion removed.</summary>
+public sealed record RemovedNotice(Guid TenantId, string UserId, InAppNotificationDto Notice);
+
+/// <summary>
+/// What deleting a subject found, with the tenants a delete that removes even a last owner's
+/// memberships left without an owner who can sign in.
+/// </summary>
+public sealed record SubjectDeletionOutcome(SubjectChange Change, IReadOnlyList<LastOwnerTenant> TenantsLeftWithoutOwner);
 
 /// <summary>What keeps a subject's credentials valid between requests.</summary>
 public sealed record SubjectSignInState(bool IsActive, bool IsPlatformAdmin)
@@ -154,10 +170,8 @@ public enum RoleAssignment
 }
 
 /// <summary>
-/// Names the subject an anonymous enrolment is for. The options and complete steps of a flow
-/// share one match, so the subject the options step reuses or creates is the one the complete
-/// step re-resolves; the challenge token is not trusted for it, and an invite token is not a key
-/// for it because one invite can be accepted by several people.
+/// What an anonymous enrolment's options step creates: the kind of subject, under the name the
+/// caller typed. The complete step checks the subject its challenge was issued for against it.
 /// </summary>
 public abstract record EnrolmentMatch
 {

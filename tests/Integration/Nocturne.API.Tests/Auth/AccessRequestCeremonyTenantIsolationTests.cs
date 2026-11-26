@@ -13,6 +13,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -25,8 +26,8 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// tenant's owner is told of it, sees it and can decide it.
 /// </summary>
 /// <remarks>
-/// The ceremony runs through the API's own services in a scope resolved to tenant A, as a request
-/// on A's host is. Only the WebAuthn verification is stubbed: it stores a credential through the
+/// The ceremony runs through the API's own services in a scope resolved to one tenant, as a request
+/// on that tenant's host is. Only the WebAuthn verification is stubbed: it stores a credential through the
 /// real repository, as the real one does once the attestation checks out.
 /// </remarks>
 [Collection(ApiIntegrationShards.One)]
@@ -49,14 +50,13 @@ public class AccessRequestCeremonyTenantIsolationTests : ApiIntegrationTestBase
         await base.InitializeAsync();
         _baseDomain = AuthTestHelpers.GetBaseDomain(ApiClient);
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         (_ownerA, _ownerAToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, Fixture.TenantId, "Owner A");
 
         _slugB = $"tenant-b-{Guid.NewGuid():N}"[..20];
         _tenantB = await AuthTestHelpers.SeedTenantAsync(Fixture, _slugB, "Tenant B");
         (_, _ownerBToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantB, "Owner B");
-        await SetTenantAsync(conn, _tenantB);
+        await conn.PinTenantAsync(_tenantB);
         _roleB = await AuthTestHelpers.GetTenantRoleIdAsync(conn, _tenantB, RoleSeeds.Viewer);
     }
 
@@ -67,8 +67,7 @@ public class AccessRequestCeremonyTenantIsolationTests : ApiIntegrationTestBase
 
         var requesterId = await RunTheCeremonyOnTenantAAsync(displayName, "I am the school nurse");
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         using var ownerA = AuthTestHelpers.CreateTenantBearerClient(Fixture, ApiIntegrationTestFixture.TenantSlug, _baseDomain, _ownerAToken);
         var listedForA = await ownerA.GetFromJsonAsync<List<MembershipRequestDto>>("/api/v4/membership-requests");
@@ -95,26 +94,79 @@ public class AccessRequestCeremonyTenantIsolationTests : ApiIntegrationTestBase
         (await MembershipsOfAsync(conn, requesterId)).Should().Be(0);
     }
 
-    /// <summary>Runs the options and complete steps on tenant A's host; returns the requester.</summary>
-    private async Task<Guid> RunTheCeremonyOnTenantAAsync(string displayName, string message)
+    [Fact]
+    public async Task ANamePendingOnTenantA_RefusesThatNameOnA_AndNotOnB()
+    {
+        var displayName = $"Visitor {Guid.NewGuid():N}"[..20];
+        await RunTheCeremonyOnTenantAAsync(displayName, "I am the school nurse");
+
+        (await AccessRequestOptionsOnAsync(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, displayName))
+            .Result.Should().BeOfType<ConflictObjectResult>("the request is pending on this tenant");
+        (await AccessRequestOptionsOnAsync(_tenantB, _slugB, displayName))
+            .Result.Should().BeOfType<OkObjectResult>("the request was filed on another tenant");
+    }
+
+    [Fact]
+    public async Task ANamePendingOnTenantA_RefusesThatNameOnA_WhenTheRequestRunsOnAShareHost()
+    {
+        var displayName = $"Visitor {Guid.NewGuid():N}"[..20];
+        await RunTheCeremonyOnTenantAAsync(displayName, "I am the school nurse");
+
+        (await AccessRequestOptionsOnAsync(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, displayName, isShare: true))
+            .Result.Should().BeOfType<ConflictObjectResult>(
+                "a share host reads as a share, which is hidden the tenant's membership requests, and the name is still pending");
+    }
+
+    private Task<Guid> RunTheCeremonyOnTenantAAsync(string displayName, string message) =>
+        RunTheCeremonyAsync(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, displayName, message);
+
+    private async Task<ActionResult<PasskeyOptionsResponse>> AccessRequestOptionsOnAsync(
+        Guid tenantId, string slug, string displayName, bool isShare = false)
     {
         using var scope = Fixture.Services.CreateScope();
         var services = scope.ServiceProvider;
-        services.GetRequiredService<ITenantAccessor>().SetTenant(
-            new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false));
+        services.GetRequiredService<ITenantAccessor>().SetTenant(new TenantContext(tenantId, slug, "Integration", true, false));
+        if (isShare)
+        {
+            services.GetRequiredService<ICategoryReadContext>().MarkShare();
+        }
+
+        var webAuthn = new Mock<IPasskeyService>();
+        webAuthn.Setup(p => p.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.AccessRequest))
+            .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "challenge-token"));
+        return await ControllerOn(services, webAuthn.Object, slug)
+            .AccessRequestOptions(new AccessRequestOptionsRequest { DisplayName = displayName });
+    }
+
+    private PasskeyController ControllerOn(IServiceProvider services, IPasskeyService webAuthn, string slug)
+    {
+        var controller = ActivatorUtilities.CreateInstance<PasskeyController>(services, webAuthn);
+        var http = new DefaultHttpContext { RequestServices = services };
+        http.Request.Host = new HostString($"{slug}.{_baseDomain}");
+        controller.ControllerContext = new ControllerContext { HttpContext = http };
+        return controller;
+    }
+
+    /// <summary>Runs the options and complete steps on a tenant's host; returns the requester.</summary>
+    private async Task<Guid> RunTheCeremonyAsync(Guid tenantId, string slug, string displayName, string message)
+    {
+        using var scope = Fixture.Services.CreateScope();
+        var services = scope.ServiceProvider;
+        services.GetRequiredService<ITenantAccessor>().SetTenant(new TenantContext(tenantId, slug, "Integration", true, false));
 
         var credentials = services.GetRequiredService<IPasskeyCredentialRepository>();
         Guid? enrolling = null;
         var webAuthn = new Mock<IPasskeyService>();
-        webAuthn.Setup(p => p.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()))
-            .ReturnsAsync((Guid subjectId, string _) =>
+        webAuthn.Setup(p => p.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.AccessRequest))
+            .ReturnsAsync((Guid subjectId, string _, PasskeyRegistrationFlow _) =>
             {
                 enrolling = subjectId;
                 return new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "challenge-token");
             });
+        webAuthn.Setup(p => p.FindRegistrationChallengeSubject("challenge-token", PasskeyRegistrationFlow.AccessRequest)).Returns(() => enrolling);
         webAuthn.Setup(p => p.CompleteRegistrationAsync(
-                It.IsAny<string>(), "challenge-token", It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()))
-            .Returns(async (string _, string _, Guid _, Guid expectedSubjectId, string? _) =>
+                It.IsAny<string>(), "challenge-token", PasskeyRegistrationFlow.AccessRequest, It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()))
+            .Returns(async (string _, string _, PasskeyRegistrationFlow _, Guid _, Guid expectedSubjectId, string? _) =>
             {
                 expectedSubjectId.Should().Be(enrolling!.Value);
                 var credentialId = await credentials.CreateAsync(
@@ -125,10 +177,7 @@ public class AccessRequestCeremonyTenantIsolationTests : ApiIntegrationTestBase
                 return new PasskeyCredentialResult(credentialId, expectedSubjectId);
             });
 
-        var controller = ActivatorUtilities.CreateInstance<PasskeyController>(services, webAuthn.Object);
-        var http = new DefaultHttpContext { RequestServices = services };
-        http.Request.Host = new HostString($"{ApiIntegrationTestFixture.TenantSlug}.{_baseDomain}");
-        controller.ControllerContext = new ControllerContext { HttpContext = http };
+        var controller = ControllerOn(services, webAuthn.Object, slug);
 
         (await controller.AccessRequestOptions(new AccessRequestOptionsRequest { DisplayName = displayName, Message = message }))
             .Result.Should().BeOfType<OkObjectResult>();
@@ -146,44 +195,27 @@ public class AccessRequestCeremonyTenantIsolationTests : ApiIntegrationTestBase
         return enrolling!.Value;
     }
 
-    private static async Task SetTenantAsync(NpgsqlConnection conn, Guid tenantId)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tenant, false);";
-        cmd.Parameters.AddWithValue("tenant", tenantId.ToString());
-        await cmd.ExecuteNonQueryAsync();
-    }
-
     private static async Task<long> RequestsVisibleUnderAsync(NpgsqlConnection conn, Guid tenantId, Guid requestId)
     {
-        await SetTenantAsync(conn, tenantId);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM membership_requests WHERE id = @id AND tenant_id = @tenant;";
-        cmd.Parameters.AddWithValue("id", requestId);
-        cmd.Parameters.AddWithValue("tenant", tenantId);
-        return (long)(await cmd.ExecuteScalarAsync())!;
+        await conn.PinTenantAsync(tenantId);
+        return await conn.ScalarAsync<long>("SELECT count(*) FROM membership_requests WHERE id = @id AND tenant_id = @tenant;", ("id", requestId), ("tenant", tenantId));
     }
 
     private static async Task<long> RequestNotificationsAsync(NpgsqlConnection conn, Guid tenantId, Guid? recipient, Guid requestId)
     {
-        await SetTenantAsync(conn, tenantId);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await conn.PinTenantAsync(tenantId);
+        return await conn.ScalarAsync<long>(
+            """
             SELECT count(*) FROM in_app_notifications
-            WHERE tenant_id = @tenant AND type = 'membership.requested' AND source_id = @source AND (@recipient IS NULL OR user_id = @recipient);
-            """;
-        cmd.Parameters.AddWithValue("tenant", tenantId);
-        cmd.Parameters.AddWithValue("source", requestId.ToString());
-        cmd.Parameters.Add(new NpgsqlParameter("recipient", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)recipient?.ToString() ?? DBNull.Value });
-        return (long)(await cmd.ExecuteScalarAsync())!;
+            WHERE tenant_id = @tenant AND type = 'membership.requested' AND source_id = @source
+              AND (@recipient::text IS NULL OR user_id = @recipient::text);
+            """,
+            ("tenant", tenantId), ("source", requestId.ToString()), ("recipient", (object?)recipient?.ToString() ?? DBNull.Value));
     }
 
     private static async Task<long> CredentialsOfAsync(NpgsqlConnection conn, Guid subjectId)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM passkey_credentials WHERE subject_id = @subject;";
-        cmd.Parameters.AddWithValue("subject", subjectId);
-        return (long)(await cmd.ExecuteScalarAsync())!;
+        return await conn.ScalarAsync<long>("SELECT count(*) FROM passkey_credentials WHERE subject_id = @subject;", ("subject", subjectId));
     }
 
     private async Task<long> MembershipsOfAsync(NpgsqlConnection conn, Guid subjectId)
@@ -191,12 +223,10 @@ public class AccessRequestCeremonyTenantIsolationTests : ApiIntegrationTestBase
         long total = 0;
         foreach (var tenantId in new[] { Fixture.TenantId, _tenantB })
         {
-            await SetTenantAsync(conn, tenantId);
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT count(*) FROM tenant_members WHERE tenant_id = @tenant AND subject_id = @subject;";
-            cmd.Parameters.AddWithValue("tenant", tenantId);
-            cmd.Parameters.AddWithValue("subject", subjectId);
-            total += (long)(await cmd.ExecuteScalarAsync())!;
+            await conn.PinTenantAsync(tenantId);
+            total += await conn.ScalarAsync<long>(
+                "SELECT count(*) FROM tenant_members WHERE tenant_id = @tenant AND subject_id = @subject;",
+                ("tenant", tenantId), ("subject", subjectId));
         }
 
         return total;

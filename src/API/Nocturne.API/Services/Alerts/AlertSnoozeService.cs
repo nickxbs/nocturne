@@ -8,6 +8,7 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -63,20 +64,13 @@ internal sealed class AlertSnoozeService(
         // mid-snooze; the resume dispatch creates fresh rows.
         await repository.ExpirePendingDeliveriesAsync([instanceId], ct);
 
-        try
+        await broadcastService.BroadcastAlertEventAsync("alert_snoozed", new
         {
-            await broadcastService.BroadcastAlertEventAsync("alert_snoozed", new
-            {
-                tenantId,
-                excursionId = instance.AlertExcursionId,
-                instanceId,
-                snoozedUntil = until,
-            });
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast alert_snoozed for instance {InstanceId}", instanceId);
-        }
+            tenantId,
+            excursionId = instance.AlertExcursionId,
+            instanceId,
+            snoozedUntil = until,
+        });
 
         await alarmRelay.ClearIfQuietAsync([instance.AlertExcursionId], ct);
 
@@ -112,6 +106,7 @@ internal sealed class AlertSnoozeService(
             || excursion.HysteresisStartedAt is not null
             || excursion.AcknowledgedAt is not null
             || !ruleEntity.IsEnabled
+            || !AlertRuleMapper.IsReadable(ruleEntity)
             || AlertSnooze.IsSnoozed(instance.SnoozedUntil, now))
         {
             return false;
@@ -133,11 +128,7 @@ internal sealed class AlertSnoozeService(
             LastReadingAt = latest?.Timestamp,
         };
 
-        var rule = new AlertRuleSnapshot(
-            ruleEntity.Id, tenantId, ruleEntity.Name, ruleEntity.ConditionType,
-            ruleEntity.ConditionParams, ruleEntity.Severity, ruleEntity.ClientConfiguration,
-            ruleEntity.SortOrder, ruleEntity.AutoResolveEnabled, ruleEntity.AutoResolveParams,
-            ruleEntity.AllowThroughDnd, ruleEntity.ScopeClass);
+        var rule = AlertRuleMapper.ToSnapshot(ruleEntity);
 
         // The enricher is only consulted for the active DND scopes. If it fails the alert is
         // delivered: missing a still-standing alert is the worse error.
@@ -146,7 +137,7 @@ internal sealed class AlertSnoozeService(
         {
             context = await contextEnricher.EnrichAsync(baseContext, [rule], ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogError(ex,
                 "Failed to enrich context for snooze resume of instance {InstanceId}; delivering without DND check",

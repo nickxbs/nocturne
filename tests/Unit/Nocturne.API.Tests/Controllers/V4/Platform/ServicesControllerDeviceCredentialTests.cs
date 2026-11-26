@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.V4.Platform;
+using Nocturne.API.Extensions;
 using Nocturne.API.Middleware;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Connectors;
@@ -45,7 +46,7 @@ public class ServicesControllerDeviceCredentialTests
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)scopes.ToHashSet();
         new RequestMembership(
                 Caller, Tenant,
-                new MembershipFacts(Guid.CreateVersion7(), new TenantMemberAccess(scopes.ToHashSet(), false, callerAccessEndsAt), null))
+                new MembershipFacts(Guid.CreateVersion7(), new TenantMemberAccess(scopes.ToHashSet(), false, callerAccessEndsAt), new TenantMemberAccess(scopes.ToHashSet(), false, callerAccessEndsAt), null))
             .StoreOn(httpContext);
 
         var dataSources = new Mock<IDataSourceService>();
@@ -111,11 +112,73 @@ public class ServicesControllerDeviceCredentialTests
     [InlineData("dexcom", true, false)]
     public void TheConnectorSaysWhenASavedSecretWouldStop(string connector, bool callerAccessEnds, bool stops)
     {
-        var result = Controller(callerAccessEnds ? CallerEnd : null, Scope.ConnectorsReadWrite)
-            .GetConnectorCapabilities(connector);
+        var capabilities = Capabilities(Controller(callerAccessEnds ? CallerEnd : null, Scope.TenantSettings), connector);
 
-        var capabilities = result.Result.Should().BeOfType<OkObjectResult>().Which.Value
-            .Should().BeOfType<ConnectorCapabilities>().Subject;
         capabilities.SavedSecretStopsAt.Should().Be(stops ? CallerEnd : null);
+        capabilities.SavedSecretMakesNoCredential.Should().BeFalse();
     }
+
+    [Theory]
+    [InlineData("nightscout", true)]
+    [InlineData("dexcom", false)]
+    public void ACallerWhoOnlySetsUpDataSourcesIsToldASavedSecretMakesNoCredential(string connector, bool makesNone)
+    {
+        var capabilities = Capabilities(Controller(CallerEnd, Scope.ConnectorsReadWrite), connector);
+
+        capabilities.SavedSecretMakesNoCredential.Should().Be(makesNone);
+        capabilities.SavedSecretStopsAt.Should().BeNull("a caller who makes no credential has none to stop");
+    }
+
+    public static TheoryData<GrantCeiling?> CeilingsThatMayNotKeep => new()
+    {
+        new GrantCeiling(new HashSet<string> { Scope.MembersManage }, CallerEnd, false),
+        new GrantCeiling(new HashSet<string> { Scope.DevicesRead }, null, false),
+        null,
+    };
+
+    [Theory]
+    [MemberData(nameof(CeilingsThatMayNotKeep))]
+    public async Task AMixedOrTeamOnlyMemberMayKeepOnlyWhatTheDirectReasonAllows(GrantCeiling? ceiling)
+    {
+        _connections
+            .Setup(c => c.GetConnectionsAsync(Caller, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectionsOverview());
+        var controller = Controller(null, Scope.MembersManage, Scope.DevicesRead);
+        controller.HttpContext.SetGrantCeiling(ceiling);
+
+        await controller.GetConnections();
+
+        _connections.Verify(c => c.GetConnectionsAsync(Caller, false, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    public static TheoryData<GrantCeiling?> CeilingsThatMayNotAdopt => new()
+    {
+        new GrantCeiling(new HashSet<string> { Scope.TenantSettings }, null, true),
+        new GrantCeiling(new HashSet<string> { Scope.ConnectorsReadWrite }, null, false),
+        null,
+    };
+
+    [Theory]
+    [MemberData(nameof(CeilingsThatMayNotAdopt))]
+    public void AMixedOrTeamOnlyMemberIsToldASavedSecretMakesNoCredentialUnlessTheDirectReasonMayMakeOne(GrantCeiling? ceiling)
+    {
+        var controller = Controller(null, Scope.TenantSettings);
+        controller.HttpContext.SetGrantCeiling(ceiling);
+
+        Capabilities(controller, "nightscout").SavedSecretMakesNoCredential.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ASavedSecretStopsWithTheSumNotTheDirectReason()
+    {
+        var controller = Controller(CallerEnd, Scope.TenantSettings);
+        controller.HttpContext.SetGrantCeiling(new GrantCeiling(new HashSet<string> { Scope.TenantSettings }, null, false));
+
+        Capabilities(controller, "nightscout").SavedSecretStopsAt.Should().Be(CallerEnd);
+    }
+
+    private static ConnectorCapabilities Capabilities(ServicesController controller, string connector) =>
+        controller.GetConnectorCapabilities(connector)
+            .Result.Should().BeOfType<OkObjectResult>().Which.Value
+            .Should().BeOfType<ConnectorCapabilities>().Subject;
 }

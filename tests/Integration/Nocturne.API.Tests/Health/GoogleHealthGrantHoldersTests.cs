@@ -1,4 +1,3 @@
-using Nocturne.Tests.Shared.Infrastructure;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -33,6 +32,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 
@@ -109,7 +109,7 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
         {
             await using var scope = TenantJobScope.Open(real, new TenantContext(tenant, "", "", true, false), "test:google-health");
             await scope.ServiceProvider.GetRequiredService<IConnectorConfigurationService>()
-                .SaveSecretsAsync("GoogleHealth", stored, modifiedBy: null, maker: null);
+                .SaveSecretsAsync("GoogleHealth", stored, modifiedBy: null, saver: null);
         }
         await using (var db = SuperuserContext())
             Assert.DoesNotContain("encrypted-account", await db.ConnectorConfigurations.IgnoreQueryFilters()
@@ -188,8 +188,8 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
                 secrets.GetValueOrDefault(tenant) ?? [], StringComparer.OrdinalIgnoreCase));
         configurations.Setup(value => value.SaveSecretsAsync(
                 "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(),
-                It.IsAny<Nocturne.Core.Models.Authorization.CredentialMaker?>(), It.IsAny<CancellationToken>()))
-            .Callback<string, Dictionary<string, string>, string?, Nocturne.Core.Models.Authorization.CredentialMaker?, CancellationToken>(
+                It.IsAny<Nocturne.Core.Contracts.Connectors.ConnectorSecretSaver?>(), It.IsAny<CancellationToken>()))
+            .Callback<string, Dictionary<string, string>, string?, Nocturne.Core.Contracts.Connectors.ConnectorSecretSaver?, CancellationToken>(
                 (_, values, _, _, _) => secrets[tenant] = new(values, StringComparer.OrdinalIgnoreCase))
             .ReturnsAsync(new Nocturne.Core.Contracts.Connectors.ConnectorSecretsSaveResult());
         configurations.Setup(value => value.SaveRuntimeSecretsAsync(
@@ -233,7 +233,7 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(fixture.Database.AppConnectionString));
         services.AddDbContextFactory<NocturneDbContext>((provider, options) => options
-            .UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()).AddInterceptors(new TenantConnectionInterceptor()));
+            .UseTenantInterceptor(provider.GetRequiredService<NpgsqlDataSource>()));
         services.AddDataServices();
         services.AddSingleton(AccountLinkRoutes.Off);
         return services;

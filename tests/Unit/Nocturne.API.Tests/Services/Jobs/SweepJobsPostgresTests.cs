@@ -195,13 +195,17 @@ public sealed class SweepJobsPostgresTests(SweepJobsPostgresTests.Database datab
         await scheduler.EnrolAsync(default);
         clock.Advance(AlertSweepJob.Interval);
 
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (sweep.Runs.Count < 6)
-        {
-            DateTime.UtcNow.Should().BeBefore(deadline, "the sweeps must not wait for the stuck connectors");
-            await scheduler.PollAsync(default);
-            await Task.Delay(20);
-        }
+        await Eventually.UntilAsync(
+            "every sweep to run without waiting for the stuck connectors",
+            async () =>
+            {
+                if (sweep.Runs.Count >= 6)
+                    return true;
+
+                await scheduler.PollAsync(default);
+                return false;
+            },
+            step: TimeSpan.FromMilliseconds(20));
 
         (first.Started + second.Started).Should().Be(8, "every connector together holds the group's cap");
         gate.SetResult();
@@ -245,8 +249,7 @@ public sealed class SweepJobsPostgresTests(SweepJobsPostgresTests.Database datab
         services.AddMetrics();
         services.AddLogging();
         services.AddDbContextFactory<NocturneDbContext>(o => o
-            .UseNpgsql(_app)
-            .AddInterceptors(new TenantConnectionInterceptor()));
+            .UseTenantInterceptor(_app));
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddDataServices();
@@ -290,8 +293,8 @@ public sealed class SweepJobsPostgresTests(SweepJobsPostgresTests.Database datab
     {
         await using var conn = new NpgsqlConnection(_migrator);
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand($"SELECT set_config('app.current_tenant_id', '{tenant}', false); {sql}", conn);
-        await cmd.ExecuteNonQueryAsync();
+        await conn.PinTenantAsync(tenant);
+        await conn.ExecuteAsync(sql);
     }
 
     private async Task<bool> ReconcileCursorExistsAsync(Guid tenant)

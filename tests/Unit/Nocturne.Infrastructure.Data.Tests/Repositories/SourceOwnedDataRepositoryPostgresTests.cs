@@ -13,8 +13,8 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Repositories.V4;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 using Npgsql;
 using Xunit;
 
@@ -47,30 +47,10 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    /// <summary>A scope that reads as <paramref name="scope"/>.</summary>
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     private NocturneDbContext Context(Guid tenant) => Context(tenant, []);
 
     private NocturneDbContext Context(Guid tenant, params IInterceptor[] interceptors) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors([new TenantConnectionInterceptor(), .. interceptors])
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, interceptors);
 
     /// <summary>The queries a context runs, with their parameters.</summary>
     private sealed class QueryCapture : DbCommandInterceptor
@@ -86,7 +66,7 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
         }
     }
 
-    private SourceOwnedDataRepository Repository(Guid scope) => new(new Factory(Context, scope), new UserAuditContext());
+    private SourceOwnedDataRepository Repository(Guid scope) => new(new SuppliedContextFactory(() => Context(scope)), new UserAuditContext());
 
     private async Task<Guid> InsertTenantAsync()
     {
@@ -282,7 +262,7 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
 
     /// <summary>The correlation ids of the statuses the v1 and v3 devicestatus reads serve.</summary>
     private async Task<IReadOnlyList<Guid>> ServedStatusesAsync(Guid tenant) =>
-        [.. (await new DeviceStatusGroupRepository(new Factory(Context, tenant), NullLogger<DeviceStatusGroupRepository>.Instance)
+        [.. (await new DeviceStatusGroupRepository(new SuppliedContextFactory(() => Context(tenant)), NullLogger<DeviceStatusGroupRepository>.Instance)
                 .GetAsync(from: null, to: null, device: null, limit: 100, offset: 0, descending: true))
             .Select(g => g.Extras!.CorrelationId)];
 
@@ -324,6 +304,60 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
             .Should().Be(1);
     }
 
+    /// <summary>
+    /// A purge deletes the source's sensor state reports and announces <see cref="SensorStateReport"/>,
+    /// which states the sensor's state to alerts; a purge of another source leaves them. A report is a
+    /// row of its status's source as a snapshot is, so a status it alone names has its extras deleted
+    /// too. The extras are not announced, since nothing reads them as a record type.
+    /// </summary>
+    [Fact]
+    public async Task APurgeDeletesTheSourcesSensorStateReportsAndAnnouncesThem()
+    {
+        var tenant = await InsertTenantAsync();
+        var snapshotted = await SeedStatusAsync(tenant, Source, Source, Source);
+        var reportOnly = await SeedStatusAsync(tenant);
+        await using (var db = Context(tenant))
+        {
+            foreach (var correlationId in new[] { snapshotted, reportOnly })
+            {
+                db.SensorStateReports.Add(new SensorStateReportEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    TenantId = tenant,
+                    CorrelationId = correlationId,
+                    DataSource = Source,
+                    Device = "CareLink MiniMed 780G",
+                    Timestamp = DateTime.UtcNow,
+                    State = nameof(Nocturne.Core.Models.Alerts.SensorState.WarmingUp),
+                    ReportedField = SensorStateReport.CareLinkField,
+                    ReportedValue = "WARM_UP",
+                });
+            }
+
+            await db.SaveChangesAsync();
+        }
+        var changes = new RecordingRecordChanges();
+        var repository = new SourceOwnedDataRepository(new SuppliedContextFactory(() => Context(tenant)), new UserAuditContext(), changes);
+
+        await repository.SoftDeleteAsync(RecordSelector.ForSource(OtherSource), CancellationToken.None);
+        var untouched = changes.Changes.Select(c => c.RecordType).ToList();
+        await using (var db = Context(tenant))
+            (await db.SensorStateReports.CountAsync()).Should().Be(2);
+        await repository.SoftDeleteAsync(RecordSelector.ForSource(Source), CancellationToken.None);
+
+        untouched.Should().NotContain(typeof(SensorStateReport));
+        var announced = changes.Changes.Select(c => c.RecordType).ToList();
+        announced.Should().Contain(typeof(SensorStateReport));
+        announced.Should().NotContain(typeof(DeviceStatusExtras));
+        await using (var db = Context(tenant))
+        {
+            (await db.SensorStateReports.CountAsync()).Should().Be(0);
+            var extras = await db.DeviceStatusExtras.IgnoreQueryFilters().ToDictionaryAsync(e => e.CorrelationId);
+            extras[snapshotted].DeletedAt.Should().NotBeNull();
+            extras[reportOnly].DeletedAt.Should().NotBeNull("the status's report is a row of the source");
+        }
+    }
+
     [Fact]
     public async Task AfterTheReleaseAPurgedStatusIsStoredAgainWithItsExtras()
     {
@@ -331,7 +365,7 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
         var purged = await SeedStatusAsync(tenant, Source, Source, Source);
         await Repository(tenant).SoftDeleteAsync(RecordSelector.ForSource(Source), CancellationToken.None);
         var extrasRepository = new DeviceStatusExtrasRepository(
-            new Factory(Context, tenant), new UserAuditContext(), NullLogger<DeviceStatusExtrasRepository>.Instance);
+            new SuppliedContextFactory(() => Context(tenant)), new UserAuditContext(), NullLogger<DeviceStatusExtrasRepository>.Instance);
         var resent = new DeviceStatusExtras
         {
             CorrelationId = purged,
@@ -500,7 +534,7 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
     {
         var capture = new QueryCapture();
         var repository = new SourceOwnedDataRepository(
-            new Factory(t => Context(t, capture), tenant), new UserAuditContext());
+            new SuppliedContextFactory(() => Context(tenant, capture)), new UserAuditContext());
 
         foreach (var source in sources)
         {

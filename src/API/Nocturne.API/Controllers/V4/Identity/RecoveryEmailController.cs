@@ -82,6 +82,8 @@ public class RecoveryEmailController(
         if (OwnAccountCaller.SubjectId(HttpContext) is not { } subjectId
             || HttpContext.GetTenantContext() is not { } tenant)
             return Forbid();
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
         if (!linkRoute.IsConfigured)
             return Unavailable();
 
@@ -99,7 +101,7 @@ public class RecoveryEmailController(
 
         var sent = await links.SendEmailConfirmationAsync(
             tenant, subjectId, AuthAuditActor.From(HttpContext.GetAuthContext()!),
-            HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers.UserAgent.ToString(), ct);
+            HttpContext.GetClientAddress(), Request.Headers.UserAgent.ToString(), ct);
 
         return sent switch
         {

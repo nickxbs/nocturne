@@ -17,10 +17,12 @@ use crate::context::SensorContext;
 use crate::engine::{EngineState, Rule};
 use crate::enums::WireEnum;
 use crate::eval::clock::{local, tenant_zone, time_of_day_zone};
+use crate::eval::determination::determination_expiry;
 use crate::eval::elapsed::{ClockLeaf, Elapsed, clock_leaf, first_true_between};
 use crate::eval::glucose::freshness_expiry;
 use crate::excursion::{TrackerStateKind, hysteresis_window};
-use crate::leaf_identity::nodes_with_paths;
+use crate::facts::{ContextFact, leaf_reads};
+use crate::leaf_identity::{collect_leaves, nodes_with_paths};
 use crate::model::{Node, Payload};
 use crate::paths::AUTO_RESOLVE_ROOT;
 use crate::sustained::TimerStore;
@@ -34,12 +36,19 @@ pub const RESOLUTION: TimeDelta = TimeDelta::nanoseconds(100);
 /// repeat this one's root and leaves with no transition, or `None` when none
 /// can. A lower bound on the 100 ns tick grid: nothing observable changes at
 /// a tick before it.
+///
+/// `evaluated_open` is whether this evaluation found the excursion open. A
+/// body with a clear margin whose excursion this evaluation closed reads its
+/// margined leaves against the plain limit on the next one, which can answer
+/// false where this one read true, so that one is due at once. After an
+/// opening the next reads at least as true (§3), so nothing is due for it.
 pub(crate) fn next_change_at(
     rule: &Rule,
     body: &Node,
     ctx: &SensorContext,
     now: DateTime<Utc>,
     state: &EngineState,
+    evaluated_open: bool,
 ) -> Option<DateTime<Utc>> {
     let mut scan = Scan {
         now,
@@ -57,6 +66,9 @@ pub(crate) fn next_change_at(
         scan.tree(&tree, AUTO_RESOLVE_ROOT);
     }
     let due_now = now.checked_add_signed(TimeDelta::nanoseconds(1));
+    if evaluated_open && !state.tracker.excursion_open(rule.id) && takes_margin(body) {
+        scan.candidate(due_now);
+    }
     if let Some(tracker) = state.tracker.state(rule.id) {
         match tracker.state {
             TrackerStateKind::Hysteresis => {
@@ -83,6 +95,12 @@ pub(crate) fn next_change_at(
     scan.earliest
         .and_then(|at| on_tick(at, now))
         .filter(|&at| at <= LATEST_HOST_INSTANT)
+}
+
+fn takes_margin(body: &Node) -> bool {
+    collect_leaves(body)
+        .into_iter()
+        .any(|leaf| leaf.payload().margined().is_some_and(|m| m.widens()))
 }
 
 /// The last instant a host can hold, .NET's `DateTime.MaxValue` (the last
@@ -142,13 +160,22 @@ impl Scan<'_> {
                 }
                 Payload::DayOfWeek(_) => self.calendar(tenant_zone(self.ctx), &[NaiveTime::MIN]),
                 payload => {
-                    if let Some(e) =
-                        clock_leaf(payload, self.ctx, self.enabled_at).and_then(ClockLeaf::elapsed)
+                    if let Some(e) = clock_leaf(payload, self.ctx, self.enabled_at, self.now)
+                        .and_then(ClockLeaf::elapsed)
                     {
                         self.elapsed(e);
                     }
-                    if let Some(e) = freshness_expiry(payload, self.ctx, self.glucose_freshness) {
+                    if let Some(e) =
+                        freshness_expiry(payload, self.ctx, self.glucose_freshness, self.now)
+                    {
                         self.elapsed(e);
+                    }
+                    if let Some(e) = determination_expiry(payload, self.ctx, self.glucose_freshness)
+                    {
+                        self.elapsed(e);
+                    }
+                    if leaf_reads(payload).contains(&ContextFact::SensorState) {
+                        self.candidate(self.ctx.sensor_state_lapses(self.now));
                     }
                 }
             }

@@ -18,6 +18,7 @@ using Nocturne.Core.Models.Widget;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -330,7 +331,7 @@ public class TenantOverviewService : ITenantOverviewService
             // AlertRuleSeverity orders Critical=0 < Warning < Info, so Min is most severe.
             highestSeverity = activeExcursions
                 .Where(e => e.AlertRule is not null)
-                .Select(e => (AlertRuleSeverity?)e.AlertRule!.Severity)
+                .Select(e => (AlertRuleSeverity?)AlertRuleMapper.Readable(e.AlertRule!.Severity))
                 .Min();
 
             trackers = TrackerStatusCondenser.Condense(
@@ -344,9 +345,9 @@ public class TenantOverviewService : ITenantOverviewService
             var onBoard = await services.GetRequiredService<IIobCobReader>()
                 .ReadTotalAsync(new DateTimeOffset(nowUtc).ToUnixTimeMilliseconds(), live: true, ct);
             therapy = new TenantOverviewTherapy(
-                onBoard.HasIob ? ScaledRounding.Round(onBoard.Iob.Iob, 2) : 0,
+                onBoard.HasIob ? OnBoardRounding.Iob(onBoard.Iob.Iob) : 0,
                 onBoard.HasIob,
-                onBoard.HasCob ? Math.Round(onBoard.Cob!.Cob) : 0,
+                onBoard.HasCob ? OnBoardRounding.Cob(onBoard.Cob!.Cob) : 0,
                 onBoard.HasCob);
         }
 

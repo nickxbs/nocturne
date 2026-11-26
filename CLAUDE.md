@@ -174,6 +174,20 @@ The NSwag client, OpenAPI document and Zod schemas land in `src/Web/packages/api
 
 Domain models use **mills-first** timestamps. `Entry.Mills` (Unix milliseconds) is the source of truth; `Entry.Date` and `Entry.DateString` are computed properties.
 
+### Sign-in and sessions
+
+Every sign-in a person makes (passkey, OIDC, TOTP code, invite, creation link, first-run setup)
+completes through `SignInCompletion` (`Services/Auth/SignInCompletion.cs`): admission, the
+second-factor gate, the session, last-login and the `Login` audit row, in that order.
+`ApplySignInAsync` turns its outcome into cookies. `SessionIssueAllowlistTests` pins who else
+may call `IssueSessionAsync` (login handoff, the demo member, the dev-only controllers), who names
+the `Login` code the handoff redeems, who holds the `refresh_tokens` store or writes a row, and who
+mints an access token. `SignInCompletionAllowlistTests` pins who writes last-login, the `Login` row,
+a step-up token or the session cookies, and who builds the attempt, the admissions and the
+second-factor proof the module takes on trust. When one fires, send the new path through
+`SignInCompletion` and allowlist it with its reason: the proof it holds, or why it is not a
+person's sign-in.
+
 ## Database
 
 - **PostgreSQL** via Entity Framework Core: a squashed baseline plus every migration since the last release (see [Migration baseline](#migration-baseline))
@@ -224,6 +238,18 @@ Then delete the tests that seed before a squashed migration, and the guard
 allowlist entries that name one. A branch holding a migration dated before the
 baseline must regenerate it, or it sorts ahead of the baseline on a fresh database.
 
+### Array filters under auto-prepare
+
+The runtime pool auto-prepares, so a statement run ten times on one connection may get a generic
+plan, which treats an array as a parameter: `= ANY(@ids)` is then searched end to end for every row
+tested (PostgreSQL hashes only an array it was given as a value), and `unnest(@ids)` is estimated at
+ten rows. On tables without statistics, as after a first large import or a restore, both shapes run
+tens to hundreds of times longer from that tenth run, and a lock that joins its array can pass the
+statement timeout. A transaction that filters by an id list as long as the data (a source's rows, a
+chunk of them, the groups they lead) calls `ArrayFilterPlans.PlanForEachArrayAsync` first, which plans
+the rest of that transaction for its values (`SET LOCAL plan_cache_mode`). The soft delete, the restore
+and the flag repair do. A filter by a handful of values needs nothing: no plan hashes fewer than nine.
+
 ### Unique indexes over existing data
 
 Migrations run on API startup, so a `CREATE UNIQUE INDEX` (or `unique: true`
@@ -250,7 +276,8 @@ Know what it actually checks before trusting it:
   unrelated table — clears every index in that migration. It runs no SQL and
   proves nothing about correctness.
 - **Only the house idiom is recognised**: `row_number() OVER (PARTITION BY …)`
-  plus a soft delete or a delete. A correct cleanup written another way is a false
+  plus a soft delete or a delete (for `oauth_grants` only, `UPDATE oauth_grants … SET
+  revoked_at` is its soft delete). A correct cleanup written another way is a false
   red. Widen the migration to the idiom, not the guard to the migration.
 - **Shapes it cannot see**, which review has to catch: `CREATE TABLE IF NOT
   EXISTS` naming a table that already exists, which spoofs the new-table

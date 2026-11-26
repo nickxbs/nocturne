@@ -21,6 +21,7 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Authorization;
@@ -224,7 +225,8 @@ public class AlertRulesController : ControllerBase
 
         // No cycle detection on create: the new id is server-generated, so the proposed tree
         // cannot reference an id it doesn't yet know. Cycles can only be introduced via PUT.
-        await using var db = await _contextFactory.CreateAsync(ct);
+        await using var unit = await DbUnitOfWork.OpenAsync(_contextFactory, ct);
+        var db = unit.Context;
 
         if (await ResolveAndValidateChannelsAsync(request.Channels, AlertRuleChannelWriter.NoStoredRecipients, db, ct) is { } badChannel)
             return badChannel;
@@ -236,7 +238,7 @@ public class AlertRulesController : ControllerBase
         var conditionParamsJson = trees.ConditionParams;
         var channels = await ToWritesAsync(request.Channels ?? [], db, ct);
 
-        var ruleId = await _rules.CreateAsync(
+        var ruleId = await new AlertRuleRepository(unit, _time).CreateAsync(
             new NewAlertRule(
                 new AlertRuleWrite(
                     request.Name,
@@ -255,6 +257,7 @@ public class AlertRulesController : ControllerBase
                     GlucoseFreshnessMinutes: request.GlucoseFreshnessMinutes),
                 channels),
             ct);
+        await _rearm.SaveAndClearAsync(unit, ruleId, ct);
 
         return CreatedAtAction(nameof(GetRule), new { id = ruleId }, await ReadBackAsync(ruleId, ct));
     }
@@ -303,7 +306,10 @@ public class AlertRulesController : ControllerBase
         var glucoseFreshnessMinutes = request.ClearGlucoseFreshness
             ? null
             : request.GlucoseFreshnessMinutes ?? rule.Rule.GlucoseFreshnessMinutes;
-        var conditionsChanged = rule.IsEnabled != request.IsEnabled
+        // A rule shown with a stand-in is not evaluated, so the save that stores a member makes it
+        // evaluable whatever it changes.
+        var conditionsChanged = rule.Unreadable != AlertRuleUnreadableValues.None
+            || rule.IsEnabled != request.IsEnabled
             || rule.Rule.ConditionType != request.ConditionType
             || !sameBody
             || rule.Rule.GlucoseFreshnessMinutes != glucoseFreshnessMinutes
@@ -315,7 +321,7 @@ public class AlertRulesController : ControllerBase
             SmartSnoozeConfig.StoredConditions(trees.ClientConfiguration));
         var wasEnabled = rule.IsEnabled;
 
-        var rules = new AlertRuleRepository(unit);
+        var rules = new AlertRuleRepository(unit, _time);
         var write = new AlertRuleWrite(
             request.Name,
             request.Description,
@@ -407,7 +413,7 @@ public class AlertRulesController : ControllerBase
         await using var unit = await DbUnitOfWork.OpenAsync(_contextFactory, ct);
         var db = unit.Context;
 
-        if (await new AlertRuleRepository(unit).ToggleEnabledAsync(id, ct) is not { } wasEnabled)
+        if (await new AlertRuleRepository(unit, _time).ToggleEnabledAsync(id, ct) is not { } wasEnabled)
             return NotFound();
 
         await _rearm.SaveAndClearAsync(unit, id, ct);
@@ -456,12 +462,14 @@ public class AlertRulesController : ControllerBase
     /// <summary>
     /// Fire a saved rule through its real channel list as a test. Writes a
     /// <c>is_test=true</c> instance + delivery rows so the user can verify their channels
-    /// without polluting the active-alerts surface.
+    /// without polluting the active-alerts surface. The answer lists the channels it did not send
+    /// because they do not deliver, with their state, by position in the rule's channels in
+    /// <c>sortOrder</c> order.
     /// </summary>
     [HttpPost("{id:guid}/test-fire")]
     [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand]
-    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(TestFireResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> TestFire(Guid id, CancellationToken ct)
     {
@@ -469,8 +477,8 @@ public class AlertRulesController : ControllerBase
         var rule = await _alerts.GetRuleAsync(id, ct);
         if (rule is null) return NotFound();
 
-        await _deliveryService.TestFireAsync(id, rule.Channels, AlertPayloads.Test(rule.Rule.ConditionType, rule.Rule.Name, rule.Rule.Severity, tenantId, DateTime.UtcNow), ct);
-        return Accepted();
+        var fired = await _deliveryService.TestFireAsync(id, rule.Channels, AlertPayloads.Test(rule.Rule.ConditionType, rule.Rule.Name, rule.Rule.Severity, tenantId, _time.GetUtcNow().UtcDateTime), ct);
+        return Accepted(new TestFireResponse { NotSent = [.. fired.NotSent] });
     }
 
     /// <summary>
@@ -481,7 +489,7 @@ public class AlertRulesController : ControllerBase
     [HttpPost("test-fire-dry-run")]
     [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand]
-    [ProducesResponseType(typeof(TestFireDryRunResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(TestFireResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> TestFireDryRun(
         [FromBody] TestFireDryRunRequest request, CancellationToken ct)
@@ -510,10 +518,10 @@ public class AlertRulesController : ControllerBase
                 c.DestinationLabel, i, AlertRuleChannelWriter.SerializeMetadata(c.Metadata), _channels.EncryptSecret(c.Secret)))
             .ToList();
 
-        var payload = AlertPayloads.Test(AlertConditionType.Composite, request.Name, request.Severity, tenantId, DateTime.UtcNow);
+        var payload = AlertPayloads.Test(AlertConditionType.Composite, request.Name, request.Severity, tenantId, _time.GetUtcNow().UtcDateTime);
 
         var notSent = await _deliveryService.TestFireDryRunAsync(channels, payload, ct);
-        return Accepted(new TestFireDryRunResponse { NotSent = [.. notSent ?? []] });
+        return Accepted(new TestFireResponse { NotSent = [.. notSent ?? []] });
     }
 
     #region Helpers
@@ -693,7 +701,7 @@ public class AlertRulesController : ControllerBase
         AllowThroughDnd = record.Rule.AllowThroughDnd,
         ScopeClass = record.Rule.ScopeClass,
         ManagedBy = record.ManagedBy,
-        ReviewReason = record.ReviewReason,
+        ReviewReason = AlertRuleMapper.ShownReviewReason(record),
         ConditionIssues = [.. conditionIssues ?? []],
         AutoResolveEnabled = record.Rule.AutoResolveEnabled,
         AutoResolveParams = record.Rule.AutoResolveParams is null
@@ -952,10 +960,10 @@ public record TestFireDryRunRequest(
     AlertRuleSeverity Severity,
     List<CreateAlertRuleChannelRequest> Channels);
 
-/// <summary>What a dry-run test fire found.</summary>
-public class TestFireDryRunResponse
+/// <summary>What a test fire found.</summary>
+public class TestFireResponse
 {
-    /// <summary>The request's channels that were not sent because they do not deliver.</summary>
+    /// <summary>The channels that were not sent because they do not deliver.</summary>
     public List<AlertChannelNotSent> NotSent { get; set; } = [];
 }
 

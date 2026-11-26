@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -22,7 +23,9 @@ public class AccessRequestService(
     IInAppNotificationService notificationService,
     TimeProvider time,
     ILogger<AccessRequestService> logger,
-    IAccountLinkRoute linkRoute) : IAccessRequestService
+    IAccountLinkRoute linkRoute,
+    GrantRevocationService grantRevocation,
+    TeamStaffAnnouncer teamStaff) : IAccessRequestService
 {
     /// <inheritdoc />
     public async Task<ApproveAccessRequestResult> ApproveAsync(
@@ -59,17 +62,20 @@ public class AccessRequestService(
                 return new ApproveAccessRequestResult(ApproveAccessRequestOutcome.NotFound);
 
             var tenantMembers = new TenantMembershipRepository(unit, linkRoute);
-            if (!await tenantMembers.AddMemberAsync(
-                    new NewTenantMember(
-                        tenant, subjectId, roleIds, directPermissions, LimitTo24Hours: limitTo24Hours)
-                        { How = MembershipJoinHow.Request, By = decidedBySubjectId },
-                    ct))
-                return new ApproveAccessRequestResult(ApproveAccessRequestOutcome.AlreadyMember);
-
+            IReadOnlyList<OAuthGrantRecord> lost = [];
             try
             {
-                await unit.CommitAsync(async token =>
+                var added = await unit.CommitAsync(async token =>
                 {
+                    await TenantMembershipRepository.LockOwnerChangeAsync(unit, tenant, subjectId, token);
+                    if (!await tenantMembers.AddDirectMemberAsync(
+                            new NewTenantMember(
+                                tenant, subjectId, roleIds, directPermissions, LimitTo24Hours: limitTo24Hours)
+                                { How = MembershipJoinHow.Request, By = decidedBySubjectId },
+                            time.GetUtcNow().UtcDateTime,
+                            token))
+                        return false;
+
                     if (await tenantMembers.FindLatestRequestAsync(tenant, subjectId, token) is { Status: MembershipRequestRecord.Pending } request)
                     {
                         await tenantMembers.DecideRequestAsync(
@@ -79,7 +85,14 @@ public class AccessRequestService(
                     }
 
                     await unit.Context.SaveChangesAsync(token);
-                }, ct);
+                    lost = await TeamReasonWrites.SyncOwnerChangeAsync(
+                        unit, grantRevocation, tenant, subjectId, time.GetUtcNow().UtcDateTime, token);
+                    return true;
+                }, ct: ct);
+                if (!added)
+                    return new ApproveAccessRequestResult(ApproveAccessRequestOutcome.AlreadyMember);
+                grantRevocation.EvictSessions(lost);
+                await teamStaff.RecountOwnerChangeAsync(tenant, subjectId);
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -97,7 +110,7 @@ public class AccessRequestService(
         {
             await notificationService.ArchiveBySourceAsync(
                 ownerId.ToString(),
-                "passkey.anonymous_login_request",
+                NotificationSubjectNaming.AnonymousLoginRequest,
                 subjectId.ToString(),
                 NotificationArchiveReason.Completed,
                 ct);

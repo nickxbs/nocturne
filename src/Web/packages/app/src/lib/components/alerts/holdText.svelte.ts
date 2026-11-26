@@ -2,24 +2,31 @@ import type { AlertHold } from "@nocturne/api-client";
 import { formatDateTimeCompact } from "#lib/utils/formatting.js";
 
 /** The facts the engine names a held rule's missing data by. */
-type KnownFact =
-  | "glucose"
-  | "predictions"
-  | "insulin"
-  | "carbs"
-  | "pump"
-  | "aps"
-  | "uploader"
-  | "transmitter"
-  | "state_spans"
-  | "device_ages"
-  | "trackers"
-  | "sleep"
-  | "active_alerts"
-  | "do_not_disturb"
-  | "time_zone";
+export const KNOWN_FACTS = [
+  "glucose",
+  "predictions",
+  "insulin",
+  "carbs",
+  "pump",
+  "aps",
+  "uploader",
+  "transmitter",
+  "state_spans",
+  "device_ages",
+  "trackers",
+  "sleep",
+  "active_alerts",
+  "do_not_disturb",
+  "time_zone",
+  "sensor_state",
+  "aps_determination",
+  "target_range",
+] as const;
 
-type KnownReason = "absent" | "stale" | "ahead_of_clock" | "unrecognised" | "inexact";
+export const KNOWN_REASONS = ["absent", "stale", "ahead_of_clock", "unrecognised", "inexact", "sensor_not_ok"] as const;
+
+type KnownFact = (typeof KNOWN_FACTS)[number];
+type KnownReason = (typeof KNOWN_REASONS)[number];
 
 function factName(fact: KnownFact): string {
   switch (fact) {
@@ -53,6 +60,12 @@ function factName(fact: KnownFact): string {
       return "Do Not Disturb data";
     case "time_zone":
       return "Time zone";
+    case "sensor_state":
+      return "Sensor state";
+    case "aps_determination":
+      return "Loop result";
+    case "target_range":
+      return "Target range";
     default: {
       const unhandled: never = fact;
       return unhandled;
@@ -72,6 +85,8 @@ function reasonText(reason: KnownReason): string {
       return "has a value that Nocturne does not know";
     case "inexact":
       return "not exact";
+    case "sensor_not_ok":
+      return "not OK, so Nocturne does not use the glucose value";
     default: {
       const unhandled: never = reason;
       return unhandled;
@@ -79,34 +94,8 @@ function reasonText(reason: KnownReason): string {
   }
 }
 
-const KNOWN_FACTS: ReadonlySet<string> = new Set<KnownFact>([
-  "glucose",
-  "predictions",
-  "insulin",
-  "carbs",
-  "pump",
-  "aps",
-  "uploader",
-  "transmitter",
-  "state_spans",
-  "device_ages",
-  "trackers",
-  "sleep",
-  "active_alerts",
-  "do_not_disturb",
-  "time_zone",
-]);
-
-const KNOWN_REASONS: ReadonlySet<string> = new Set<KnownReason>([
-  "absent",
-  "stale",
-  "ahead_of_clock",
-  "unrecognised",
-  "inexact",
-]);
-
-const isKnownFact = (fact: string): fact is KnownFact => KNOWN_FACTS.has(fact);
-const isKnownReason = (reason: string): reason is KnownReason => KNOWN_REASONS.has(reason);
+const isKnownFact = (fact: string): fact is KnownFact => KNOWN_FACTS.some((known) => known === fact);
+const isKnownReason = (reason: string): reason is KnownReason => KNOWN_REASONS.some((known) => known === reason);
 
 /** A fact by name; one this build does not know, as the API sent it. */
 export function heldFactName(fact: string | undefined): string {
@@ -125,18 +114,18 @@ export function holdFactLines(hold: AlertHold): string[] {
   return (hold.facts ?? []).map((f) => `${heldFactName(f.fact)}: ${heldReason(f.reason)}`);
 }
 
-/** "Waiting for data since …". */
+/** "Waiting for usable data since …". */
 export function holdSinceText(hold: AlertHold): string {
   return hold.since
-    ? `Waiting for data since ${formatDateTimeCompact(hold.since)}.`
-    : "Waiting for data.";
+    ? `Waiting for usable data since ${formatDateTimeCompact(hold.since)}.`
+    : "Waiting for usable data.";
 }
 
 export function heldOpenText(): string {
-  return "This alert stays open while its data is missing. It closes after 24 hours of missing data.";
+  return "This alert stays open while it has no usable data. It closes after 24 hours with no usable data.";
 }
 
 /** The words for why a closed alert closed, where the reason needs them; null otherwise. */
 export function resolutionReasonText(reason: string | undefined): string | null {
-  return reason === "hold-bound" ? "Closed because its data was missing for 24 hours." : null;
+  return reason === "hold-bound" ? "Closed because it had no usable data for 24 hours." : null;
 }

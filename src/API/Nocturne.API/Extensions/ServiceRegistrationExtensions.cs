@@ -59,6 +59,7 @@ using Nocturne.API.Services.V4;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Nightscout;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.CoachMarks;
@@ -124,8 +125,8 @@ public static class ServiceRegistrationExtensions
     /// <summary>
     /// The rate-limiting policies partitioned on the calling client, with the ceiling and window
     /// each applies. Held as one table so all of them resolve their partition through
-    /// <see cref="ClientRateLimitKey"/> and the trust decision behind a forwarded address is taken
-    /// in exactly one place.
+    /// <see cref="ClientRateLimitKey"/>, whose address is the one <see cref="ClientAddressResolver"/>
+    /// settles.
     /// </summary>
     internal static readonly (string Policy, int PermitLimit, TimeSpan Window)[] ClientAddressPolicies =
     [
@@ -281,7 +282,7 @@ public static class ServiceRegistrationExtensions
     /// <summary>
     /// Partition key for the translation-drafts limiter: the hashed credential
     /// the request presents. Not the IP — <c>UseForwardedHeaders</c> takes
-    /// <c>RemoteIpAddress</c> from X-Forwarded-For with no trusted-proxy list,
+    /// the remote address from X-Forwarded-For with no trusted-proxy list,
     /// so the sibling per-IP policies are the wrong model to copy here.
     /// Hashing keeps no token as a dictionary key. Requests with no credential
     /// share one fixed bucket, so an anonymous flood cannot evict an editor's.
@@ -546,6 +547,7 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<DelegatedConnectorSyncLimiter>();
         services.AddSingleton<GuestActivationLimiter>();
         services.AddSingleton<TeamCreationLimiter>();
+        services.AddSingleton<TeamRenameLimiter>();
 
         return services;
     }
@@ -589,10 +591,12 @@ public static class ServiceRegistrationExtensions
         services.AddOperatorWebhookClient(OperatorWebhook.SlugValidationClient);
         services.AddOperatorWebhookClient(OperatorWebhook.UsernameValidationClient);
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+        services.AddScoped<CallerSessionLiveness>();
         services.AddSingleton<IRotationSuccessorCache, RotationSuccessorCache>();
-        services.AddScoped<IFirstPartyTokenRepository, EfFirstPartyTokenRepository>();
         services.AddScoped<ISubjectService, SubjectService>();
+        services.AddScoped<ISubjectDeletion, SubjectDeletion>();
         services.AddScoped<ISessionService, SessionService>();
+        services.AddScoped<SignInCompletion>();
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IOidcProviderService, OidcProviderService>();
         services.AddScoped<IOidcAuthService, OidcAuthService>();
@@ -614,12 +618,15 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IOAuthTokenRevocationCache, OAuthTokenRevocationCache>();
         services.AddScheduledJob<OAuthCodeCleanupJob>();
         services.AddScheduledJob<OAuthStepUpTokenCleanupJob>();
+        services.AddScheduledJob<SpentPasskeyChallengeCleanupJob>();
         services.AddScheduledJob<TrustedDeviceCleanupJob>();
+        services.AddScheduledJob<MembershipLapseJob>();
 
         services.AddHostedService<AuthorizationSeedService>();
 
         services.AddSingleton<GuestSessionCacheService>();
         services.AddScoped<GrantRevocationService>();
+        services.AddScoped<GrantConsentService>();
         services.AddSingleton<PublicAccessCacheService>();
         services.AddSingleton<ShareTokenCacheService>();
         // Same instance behind the seam, so the cache is shared rather than duplicated.
@@ -647,7 +654,9 @@ public static class ServiceRegistrationExtensions
             : configuredBaseDomain;
         var rpId = baseDomain.Split(':')[0]; // hostname without port
         var origin = $"https://{baseDomain}";
-        services.AddFido2(options =>
+        // Options only: PasskeyService builds each ceremony's relying party from them through
+        // IOptionsFactory, so no Fido2Configuration instance is shared between ceremonies.
+        services.Configure<Fido2Configuration>(options =>
         {
             options.RPID = rpId;
             options.RPName = "Nocturne";
@@ -689,6 +698,10 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITenantOwnerResolver, TenantOwnerResolver>();
         services.AddScoped<ITenantMemberService, TenantMemberService>();
         services.AddScoped<ITenantRoleService, TenantRoleService>();
+        services.AddScoped<TeamAccessService>();
+        services.AddScoped<SiteNotices>();
+        services.AddScoped<TeamRenameAnnouncer>();
+        services.AddScoped<TeamStaffAnnouncer>();
         services.AddScoped<ITenantService, TenantService>();
         services.AddScoped<IUnitsAndTimezoneService, UnitsAndTimezoneService>();
         services.AddScoped<ITenantOverviewService, TenantOverviewService>();
@@ -729,6 +742,7 @@ public static class ServiceRegistrationExtensions
             ConnectCallback = new PinnedConnector(OutboundAddressPolicy.NotLinkLocal).ConnectAsync,
         });
 
+        services.AddSingleton<ClientAddressResolver>();
         services.AddApiRateLimiting(configuration);
 
         return services;
@@ -771,10 +785,6 @@ public static class ServiceRegistrationExtensions
         // Core domain services
         services.AddScoped<ITreatmentService, TreatmentService>();
         services.AddScoped<ITreatmentStore, TreatmentReadService>();
-        services.AddScoped<Nocturne.Core.Contracts.Uploads.IRejectedUploadStore, Nocturne.Infrastructure.Data.Repositories.RejectedUploadRepository>();
-        services.AddScoped<Nocturne.Core.Contracts.Audit.IAuditLogReader, Nocturne.Infrastructure.Data.Repositories.AuditLogReader>();
-        services.AddScoped<Nocturne.Core.Contracts.Multitenancy.IMemberHistoryReader, Nocturne.Infrastructure.Data.Repositories.MemberHistoryReader>();
-        services.AddScoped<Nocturne.Core.Contracts.Audit.IAuditConfigStore, Nocturne.Infrastructure.Data.Repositories.AuditConfigRepository>();
         services.AddScoped<Nocturne.Core.Contracts.Uploads.IRejectedUploadRecorder, Nocturne.API.Services.Uploads.RejectedUploadRecorder>();
         services.AddScoped<ITreatmentCache, TreatmentCacheAdapter>();
         services.AddScoped<SignalRTreatmentEventSink>();
@@ -868,7 +878,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IConnectorFoodEntryService, ConnectorFoodEntryService>();
         services.AddScoped<ITreatmentFoodService, TreatmentFoodService>();
         services.AddScoped<IUserFoodFavoriteService, UserFoodFavoriteService>();
-        services.AddScoped<IConnectorFoodEntryRepository, ConnectorFoodEntryRepository>();
+        services.AddScoped<IMealMatchLinker, MealMatchLinker>();
         services.AddScoped<IMealMatchingService, MealMatchingService>();
         services.AddScoped<IMealReadService, MealReadService>();
 
@@ -956,50 +966,11 @@ public static class ServiceRegistrationExtensions
     }
 
     /// <summary>
-    /// V4 repositories, snapshot repositories, profile repositories,
-    /// patient record repositories, AID detection, and decomposition pipeline.
+    /// Glucose processing, AID detection and the decomposition pipeline. Infrastructure registers
+    /// the V4 repositories.
     /// </summary>
     public static IServiceCollection AddV4Infrastructure(this IServiceCollection services)
     {
-        // V4 Repositories
-        services.AddScoped<ISensorGlucoseRepository, SensorGlucoseRepository>();
-        services.AddScoped<IMeterGlucoseRepository, MeterGlucoseRepository>();
-        services.AddScoped<ICalibrationRepository, CalibrationRepository>();
-        services.AddScoped<IBolusRepository, BolusRepository>();
-        services.AddScoped<IBasalInjectionRepository, BasalInjectionRepository>();
-        services.AddScoped<ITempBasalRepository, TempBasalRepository>();
-        services.AddScoped<IProfileActivationRepository, ProfileActivationRepository>();
-        services.AddScoped<ICarbIntakeRepository, CarbIntakeRepository>();
-        services.AddScoped<IBGCheckRepository, BGCheckRepository>();
-        services.AddScoped<INoteRepository, NoteRepository>();
-        services.AddScoped<IDeviceEventRepository, DeviceEventRepository>();
-        services.AddScoped<IBolusCalculationRepository, BolusCalculationRepository>();
-        services.AddScoped<IDecomposedTreatmentKeys, DecomposedTreatmentKeys>();
-        services.AddScoped<IDeviceRepository, DeviceRepository>();
-
-        // Manually-entered lab results (outside the V4 sync/dedup family)
-        services.AddScoped<ILabHbA1cResultRepository, LabHbA1cResultRepository>();
-        services.AddScoped<IReportSpecRepository, ReportSpecRepository>();
-
-        // V4 Snapshot Repositories
-        services.AddScoped<IApsSnapshotRepository, ApsSnapshotRepository>();
-        services.AddScoped<IPumpSnapshotRepository, PumpSnapshotRepository>();
-        services.AddScoped<IUploaderSnapshotRepository, UploaderSnapshotRepository>();
-        services.AddScoped<IDeviceStatusExtrasRepository, DeviceStatusExtrasRepository>();
-        services.AddScoped<IDeviceStatusGroupRepository, DeviceStatusGroupRepository>();
-
-        // V4 Profile Repositories
-        services.AddScoped<ITherapySettingsRepository, TherapySettingsRepository>();
-        services.AddScoped<IBasalScheduleRepository, BasalScheduleRepository>();
-        services.AddScoped<ICarbRatioScheduleRepository, CarbRatioScheduleRepository>();
-        services.AddScoped<ISensitivityScheduleRepository, SensitivityScheduleRepository>();
-        services.AddScoped<ITargetRangeScheduleRepository, TargetRangeScheduleRepository>();
-
-        // V4 Patient Record Repositories
-        services.AddScoped<IPatientRecordRepository, PatientRecordRepository>();
-        services.AddScoped<IPatientDeviceRepository, PatientDeviceRepository>();
-        services.AddScoped<IPatientInsulinRepository, PatientInsulinRepository>();
-
         // Glucose processing
         services.AddScoped<IGlucoseProcessingConfigProvider, GlucoseProcessingConfigProvider>();
         services.AddScoped<IGlucoseProcessingResolver, GlucoseProcessingResolver>();
@@ -1020,11 +991,14 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ILoopClosedLoopStamper, LoopClosedLoopStamper>();
         services.AddScheduledJob<ProfileVersionsMovedJob>();
         services.AddScoped<ITreatmentDecomposer, TreatmentDecomposer>();
+        services.AddScheduledJob<RetireInvalidTreatmentsJob>();
         services.AddScoped<IDeviceStatusDecomposer, DeviceStatusDecomposer>();
         services.AddScheduledJob<ApsSnapshotCurvesJob>();
         services.AddScheduledJob<TempBasalOriginCorroborationJob>();
         services.AddScoped<IActivityDecomposer, ActivityDecomposer>();
         services.AddScoped<IProfileDecomposer, ProfileDecomposer>();
+        services.AddScoped<IRawMmolProfileDetector, RawMmolProfileDetector>();
+        services.AddSingleton<RawMmolProfileNotifier>();
 
         return services;
     }
@@ -1086,7 +1060,6 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IOpenApsService, OpenApsService>();
 
         // In-app notifications
-        services.AddScoped<IInAppNotificationRepository, InAppNotificationRepository>();
         services.AddScoped<IInAppNotificationService, InAppNotificationService>();
         services.AddScheduledJob<NotificationResolutionJob>();
         services.AddScheduledJob<NotificationCleanupJob>();
@@ -1117,7 +1090,6 @@ public static class ServiceRegistrationExtensions
     )
     {
         // Compression low detection
-        services.AddScoped<ICompressionLowRepository, CompressionLowRepository>();
         services.AddScoped<ICompressionLowNightWindowResolver, CompressionLowNightWindowResolver>();
         services.AddScoped<ICompressionLowService, CompressionLowService>();
         services.AddSingleton<CompressionLowDetectionService>();
@@ -1131,7 +1103,7 @@ public static class ServiceRegistrationExtensions
         // redirects are off outright rather than followed by a guard — a target answering 307 with
         // http://169.254.169.254/ or an internal service name would otherwise be fetched from
         // inside the deployment network.
-        services.AddHttpClient(WebhookRequestSender.HttpClientName)
+        services.AddAlertDeliveryClient(WebhookRequestSender.HttpClientName)
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
             {
                 AllowAutoRedirect = false,
@@ -1186,7 +1158,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<Nocturne.API.Services.Alerts.Providers.HomeAssistantProvider>();
         services.AddSingleton<Nocturne.API.Hubs.HomeAssistantConnections>();
         services.AddScoped<Nocturne.API.Services.Alerts.Providers.DeviceActionProvider>();
-        services.AddHttpClient("ChatBot");
+        services.AddAlertDeliveryClient(Nocturne.API.Services.Alerts.Providers.ChatBotProvider.HttpClientName);
 
         // Chat identity
         services.AddScoped<Nocturne.API.Services.Chat.ChatIdentityService>();
@@ -1243,7 +1215,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IConnectionService, ConnectionService>();
         services.AddSingleton<ISecretEncryptionService, SecretEncryptionService>();
         services.AddScoped<IConnectorConfigurationService, ConnectorConfigurationService>();
-        services.AddScoped<IConnectorSyncCursorStore, ConnectorSyncCursorStore>();
+        services.AddScoped<IConnectorStateStore, ConnectorStateStore>();
         services.AddScoped<PlatformSettingsService>();
         services.AddScoped<IConnectorSyncService, ConnectorSyncService>();
         services.AddScoped<IConnectorCursorResetService, ConnectorCursorResetService>();
@@ -1344,10 +1316,11 @@ public static class ServiceRegistrationExtensions
 
         // The Nightscout to migrate from is a tenant-admin-supplied URL, the same shape as a
         // connector base URL, so it takes the connector client. That also puts redirects under the
-        // guard, which drops the tenant's api-secret when a hop crosses origin — .NET's own redirect
+        // guard, which drops the tenant's api-secret when a hop crosses origin. .NET's own redirect
         // handling strips Authorization but not api-secret.
         services.AddHttpClient(Nocturne.API.Services.Migration.MigrationJobService.HttpClientName)
-            .ConfigureConnectorClient(baseUrl: null, userAgent: "Nocturne-Migration/1.0");
+            .ConfigureConnectorClient(baseUrl: null, userAgent: "Nocturne-Migration/1.0")
+            .KeepNightscoutPathOutOfTelemetry();
 
         return services;
     }

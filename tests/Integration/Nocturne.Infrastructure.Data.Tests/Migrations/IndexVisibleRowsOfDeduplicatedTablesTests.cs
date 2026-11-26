@@ -30,15 +30,15 @@ public class IndexVisibleRowsOfDeduplicatedTablesFixture : IAsyncLifetime
         await MigrateToAsync(null);
         AfterUp = await ListIndexesAsync();
 
-        await ExecuteAsync(_database.SuperuserConnectionString, """
+        await NpgsqlTestCommands.ExecuteAsync(_database.SuperuserConnectionString, """
             UPDATE pg_index SET indisvalid = false
             WHERE indexrelid = 'public.ix_notes_tenant_visible_timestamp_id'::regclass
             """);
-        await ExecuteAsync(_database.MigratorConnectionString, """
+        await NpgsqlTestCommands.ExecuteAsync(_database.MigratorConnectionString, """
             CREATE INDEX ix_boluses_tenant_timestamp_id ON boluses (tenant_id, "timestamp" DESC, id DESC)
             WHERE deleted_at IS NULL
             """);
-        await ExecuteAsync(_database.MigratorConnectionString,
+        await NpgsqlTestCommands.ExecuteAsync(_database.MigratorConnectionString,
             $"DELETE FROM \"__EFMigrationsHistory\" WHERE \"MigrationId\" = '{Migration}'");
         await MigrateToAsync(null);
         AfterRestart = await ListIndexesAsync();
@@ -53,10 +53,7 @@ public class IndexVisibleRowsOfDeduplicatedTablesFixture : IAsyncLifetime
 
     private async Task MigrateToAsync(string? target)
     {
-        await using var context = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_database.MigratorConnectionString, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options);
+        await using var context = new NocturneDbContext(TestContexts.MigrationsOptions(_database.MigratorConnectionString));
         await context.GetService<IMigrator>().MigrateAsync(target);
     }
 
@@ -76,14 +73,6 @@ public class IndexVisibleRowsOfDeduplicatedTablesFixture : IAsyncLifetime
             indexes[reader.GetString(0)] = reader.GetString(1);
         return indexes;
     }
-
-    private static async Task ExecuteAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
-    }
 }
 
 [Trait("Category", "Integration")]
@@ -96,6 +85,9 @@ public class IndexVisibleRowsOfDeduplicatedTablesTests(IndexVisibleRowsOfDedupli
     private static readonly string[] Untouched =
         ["meter_glucose", "calibrations", "aps_snapshots", "pump_snapshots", "uploader_snapshots"];
 
+    /// <summary>Tables with the same index that a later migration creates, so going down drops them.</summary>
+    private static readonly string[] CreatedLater = ["sensor_state_reports"];
+
     private static Dictionary<string, string> Expected()
     {
         var expected = Deduplicated.ToDictionary(
@@ -106,7 +98,7 @@ public class IndexVisibleRowsOfDeduplicatedTablesTests(IndexVisibleRowsOfDedupli
         expected["ix_state_spans_tenant_visible_start_id"] =
             "CREATE INDEX ix_state_spans_tenant_visible_start_id ON public.state_spans USING btree "
             + "(tenant_id, start_timestamp DESC, id DESC) WHERE ((deleted_at IS NULL) AND (NOT is_duplicate))";
-        foreach (var table in Untouched)
+        foreach (var table in Untouched.Concat(CreatedLater))
             expected[$"ix_{table}_tenant_timestamp_id"] =
                 $"CREATE INDEX ix_{table}_tenant_timestamp_id ON public.{table} USING btree "
                 + "(tenant_id, \"timestamp\" DESC, id DESC) WHERE (deleted_at IS NULL)";

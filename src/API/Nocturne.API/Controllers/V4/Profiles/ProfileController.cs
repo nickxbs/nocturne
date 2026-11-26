@@ -4,6 +4,7 @@ using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Validators.V4;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models.Authorization;
@@ -51,6 +52,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     private readonly IProfileDeletionService _deletionService;
     private readonly ITempBasalRateReresolver _tempBasalRates;
     private readonly ILoopClosedLoopStamper _closedLoop;
+    private readonly IRawMmolProfileDetector _rawMmol;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ProfileController"/>.
@@ -64,6 +66,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// <param name="deletionService">Service for deleting a whole named therapy profile.</param>
     /// <param name="tempBasalRates">Re-resolves the percent temp basals a written basal schedule covers.</param>
     /// <param name="closedLoop">Restamps the Loop snapshots written therapy settings govern.</param>
+    /// <param name="rawMmol">Finds the schedules that still hold mmol/L values.</param>
     public ProfileController(
         ITherapySettingsRepository therapyRepo,
         IBasalScheduleRepository basalRepo,
@@ -73,7 +76,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         IProfileProjectionService projectionService,
         IProfileDeletionService deletionService,
         ITempBasalRateReresolver tempBasalRates,
-        ILoopClosedLoopStamper closedLoop
+        ILoopClosedLoopStamper closedLoop,
+        IRawMmolProfileDetector rawMmol
     )
     {
         _therapyRepo = therapyRepo;
@@ -85,6 +89,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
         _deletionService = deletionService;
         _tempBasalRates = tempBasalRates;
         _closedLoop = closedLoop;
+        _rawMmol = rawMmol;
     }
 
     #region Summary
@@ -320,6 +325,35 @@ public class ProfileController : ControllerBase, IWriteScopedController
 
     #endregion
 
+    #region Raw mmol Values
+
+    /// <summary>
+    /// Get the live target range and sensitivity schedules whose values still look like mmol/L stored
+    /// as mg/dL, which every reader takes as mg/dL until the owner corrects or dismisses them.
+    /// </summary>
+    [HttpGet("raw-mmol")]
+    [RequireScope(Scope.TherapyRead)]
+    [RemoteQuery]
+    // Never cached, as GetProfileSummary: an edit or a dismiss must clear the list at once.
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [ProducesResponseType(typeof(List<RawMmolSchedule>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<RawMmolSchedule>>> GetRawMmolSchedules(CancellationToken ct = default) =>
+        Ok((await _rawMmol.DetectAsync(ct)).ToList());
+
+    /// <summary>
+    /// Record that the ISF of a listed sensitivity schedule's store is already mg/dL/U, so it is not
+    /// listed again.
+    /// </summary>
+    [HttpPost("raw-mmol/sensitivity/{id:guid}/dismiss")]
+    [RequireDeclaredWriteScope]
+    [RemoteCommand(Invalidates = ["GetRawMmolSchedules"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> DismissRawMmolIsf(Guid id, CancellationToken ct = default) =>
+        await _rawMmol.DismissIsfAsync(id, ct) ? NoContent() : NotFound();
+
+    #endregion
+
     #region Legacy Profile Records
 
     /// <summary>
@@ -460,8 +494,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         var makeDefault = model.IsDefault;
         model.IsDefault = false;
         var created = await _therapyRepo.CreateAsync(model, WriteOrigin.Live, ct);
@@ -498,8 +532,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         var stored = await _therapyRepo.GetByIdAsync(id, ct);
         model.DocumentDefaultProfile = stored?.DocumentDefaultProfile;
         TherapySettings updated;
@@ -597,8 +631,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         var created = await _basalRepo.CreateAsync(model, WriteOrigin.Live, ct);
         await _tempBasalRates.AfterSchedulesWrittenAsync([(created.ProfileName, created.Timestamp)], ct);
         return CreatedAtAction(nameof(GetBasalScheduleById), new { id = created.Id }, created);
@@ -621,8 +655,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         var stored = await _basalRepo.GetByIdAsync(id, ct);
         BasalSchedule updated;
         try
@@ -717,8 +751,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         var created = await _carbRatioRepo.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(nameof(GetCarbRatioScheduleById), new { id = created.Id }, created);
     }
@@ -744,8 +778,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         try
         {
             var updated = await _carbRatioRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
@@ -828,8 +862,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         var created = await _sensitivityRepo.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(
             nameof(GetSensitivityScheduleById),
@@ -848,6 +882,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             "GetProfileSummary",
             "GetSensitivitySchedulesByName",
             "GetSensitivityScheduleById",
+            "GetRawMmolSchedules",
         ]
     )]
     [ProducesResponseType(typeof(SensitivitySchedule), StatusCodes.Status200OK)]
@@ -859,8 +894,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         try
         {
             var updated = await _sensitivityRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
@@ -946,8 +981,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         var created = await _targetRangeRepo.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(
             nameof(GetTargetRangeScheduleById),
@@ -966,6 +1001,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             "GetProfileSummary",
             "GetTargetRangeSchedulesByName",
             "GetTargetRangeScheduleById",
+            "GetRawMmolSchedules",
         ]
     )]
     [ProducesResponseType(typeof(TargetRangeSchedule), StatusCodes.Status200OK)]
@@ -977,8 +1013,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         try
         {
             var updated = await _targetRangeRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);

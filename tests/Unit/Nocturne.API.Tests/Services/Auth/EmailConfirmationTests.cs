@@ -9,6 +9,7 @@ using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -45,7 +46,7 @@ public class EmailConfirmationTests : IDisposable
         _tenant = new TenantContext(_tenantId, "alpha", "Alpha household", true, false);
         var jwt = new Mock<IJwtService>();
         jwt.Setup(j => j.GenerateRefreshToken()).Returns(() => Guid.NewGuid().ToString("N"));
-        _loginCodes = new LoginCodeService(jwt.Object, new Mock<IAuthAuditService>().Object);
+        _loginCodes = new LoginCodeService(jwt.Object, new Mock<IAuthAuditService>().Object, TimeProvider.System);
         _contexts = new SharedSqliteFactory(_db.Options).AsNocturneFactory(_tenantId);
 
         using var seed = _db.CreateContext(Guid.Empty);
@@ -55,12 +56,19 @@ public class EmailConfirmationTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    private EmailConfirmationController Controller(Guid? signedIn = null)
+    private EmailConfirmationController Controller(Guid? signedIn = null, string sessionId = LiveSession.Id)
     {
-        var http = new DefaultHttpContext();
+        var http = new DefaultHttpContext { RequestServices = TestRequestServices.Build(clamped: false) };
         http.SetTenantContext(_tenant);
         if (signedIn is { } subjectId)
-            http.Items["AuthContext"] = new AuthContext { IsAuthenticated = true, SubjectId = subjectId, TenantId = _tenantId };
+        {
+            http.Items["AuthContext"] = new AuthContext
+            {
+                IsAuthenticated = true, AuthType = AuthType.SessionCookie, SubjectId = subjectId, TenantId = _tenantId,
+                SessionId = sessionId,
+            };
+        }
+
         return new EmailConfirmationController(new SubjectRepository(_contexts, AccountLinkRoutes.Off), _contexts, _loginCodes)
         {
             ControllerContext = new ControllerContext { HttpContext = http },
@@ -118,6 +126,17 @@ public class EmailConfirmationTests : IDisposable
         message.Email.Should().Be(Address);
         message.Link.Should().StartWith("https://alpha.nocturne.example/auth/confirm-email?code=");
         message.ExpiresAt.Should().BeCloseTo(DateTime.UtcNow.AddHours(24), TimeSpan.FromMinutes(1));
+    }
+
+    [Fact]
+    public async Task Send_FromAnEndedSession_IsChallengedAndSendsNoLink()
+    {
+        var memberId = await SeedMemberAsync();
+
+        var result = await Controller(memberId, sessionId: "ended-session").Send(Links(), default);
+
+        result.Should().BeOfType<ChallengeResult>();
+        _delivery.Sent.Should().BeEmpty();
     }
 
     [Fact]

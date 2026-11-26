@@ -411,9 +411,9 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         }
         else if (devices is { Count: > 1 })
         {
-            // `= ANY($1)`. Custom-planned today, because nothing configures Npgsql auto-prepare;
-            // a generic plan cannot hash the array parameter and this shape has been measured at
-            // 19 s against 200 ms. Enabling auto-prepare has to account for this query.
+            // `= ANY($1)`, generic-planned once auto-prepare has run it ten times on a connection. The
+            // list is a chunk's devices, a handful, which a custom plan searches end to end as well
+            // (ArrayFilterPlans.HashedArrayLength).
             query = query.Where(e => e.Device != null && devices.Contains(e.Device));
         }
         return query.OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id);
@@ -638,12 +638,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     public async Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = ctx.SensorGlucose.AsQueryable();
-
-        if (from.HasValue)
-            query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            query = query.Where(e => e.Timestamp <= to.Value);
+        var query = ctx.SensorGlucose.InWindow(from, to);
 
         return await AuditedSoftDeleteAndBroadcastAsync(
             ctx, query, $"timestamp={from:O}..{to:O}", DuplicateDelete.PromoteSurvivor, origin, ct);
