@@ -5,6 +5,7 @@
  * read in the current locale (see `app-navigation.svelte.ts`).
  */
 import type { Component } from "svelte";
+import Activity from "@lucide/svelte/icons/activity";
 import Building from "@lucide/svelte/icons/building";
 import Building2 from "@lucide/svelte/icons/building-2";
 import MailPlus from "@lucide/svelte/icons/mail-plus";
@@ -116,6 +117,13 @@ function settingsGroups(): SettingsGroup[] {
           description: "Targets, basal rates, ratios, and treatment profiles.",
           href: "/settings/profile",
           icon: Syringe,
+          anyScope: ["therapy.read"],
+        },
+        {
+          title: "CGMSIM",
+          description: "Virtual patient profile, ISF, CR, and simulation parameters.",
+          href: "/cgmsim/parameters",
+          icon: Activity,
           anyScope: ["therapy.read"],
         },
         {

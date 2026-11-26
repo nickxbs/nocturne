@@ -42,6 +42,7 @@ describe("visibleSettingsGroups", () => {
     expect(groups.site).toEqual([
       "/settings/patient",
       "/settings/profile",
+      "/cgmsim/parameters",
       "/settings/connectors",
       "/settings/members",
     ]);
@@ -51,6 +52,7 @@ describe("visibleSettingsGroups", () => {
     expect(hrefs({ grantedScopes: ["therapy.readwrite"], isPlatformAdmin: false }).site).toEqual([
       "/settings/patient",
       "/settings/profile",
+      "/cgmsim/parameters",
       "/settings/connectors",
     ]);
   });
